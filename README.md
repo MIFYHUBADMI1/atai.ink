@@ -150,7 +150,7 @@ Atai accepts **mobile money** payments via:
 
 ## License
 
-This is proprietary software owned by **ATAI — Advanced Technologies and AI Enterprises**. All rights reserved. Unauthorized copying, distribution, modification, or use of this software is strictly prohibited. See the [Terms of Service](https://Atai.atai.ink/terms) for usage terms.
+This is proprietary software owned by **ATAI — Advanced Technologies and AI Enterprises**. All rights reserved. Unauthorized copying, distribution, modification, or use of this software is strictly prohibited. See the [Terms of Service](https://atai.ink/terms) for usage terms.
 
 ---
 
@@ -158,5 +158,6 @@ This is proprietary software owned by **ATAI — Advanced Technologies and AI En
 
 **ATAI — Advanced Technologies and AI Enterprises**
 
-- Website: [Atai.atai.ink](https://Atai.atai.ink)
-- Product: [Atai](https://Atai.atai.ink)
+- Website: [atai.ink](https://atai.ink)
+- Product: [Atai](https://atai.ink)
+- Developer portal: [atai.ink/developers](https://atai.ink/developers)

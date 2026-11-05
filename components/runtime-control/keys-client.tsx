@@ -42,7 +42,7 @@ export function RuntimeKeysClient({
   developerPortalUrl,
 }: {
   projectId: string
-  /** Optional link to the full developer portal (developers.atai.ink / /developers). */
+  /** Optional link to the full developer portal (/developers on the canonical origin). */
   developerPortalUrl?: string
 }) {
   const { data, error, isLoading, mutate } = useSWR<{

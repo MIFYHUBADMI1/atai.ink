@@ -9,9 +9,9 @@ import { getDeveloperPortalOrigin } from "@/lib/env"
 
 const PORTAL_ORIGIN = getDeveloperPortalOrigin()
 
-/** SEO: when the portal is served on developers.atai.ink, that host is the
- * canonical origin — browsers show the subdomain URL (host rewrites never
- * change the address bar) and search engines index the portal pages here. */
+/** SEO: the portal is indexed at one location — /developers on the canonical
+ * app origin. Only an explicitly configured staging host moves the origin, so
+ * nothing here can point search engines at a subdomain that no longer serves. */
 export const metadata: Metadata = {
   metadataBase: new URL(PORTAL_ORIGIN),
   title: {
@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   },
   description:
     "Manage Atai Runtime API keys, monitor usage and health, and test every endpoint live against your real API key in the playground — development and production.",
-  alternates: { canonical: "/" },
+  alternates: { canonical: "/developers" },
   openGraph: {
     type: "website",
     siteName: "Atai",
@@ -32,10 +32,9 @@ export const metadata: Metadata = {
 }
 
 /**
- * Developer portal (developers.atai.ink — rewritten into /developers by
- * proxy.ts; also reachable directly on the main host). Session-gated like
- * the rest of the app: the shared production cookie makes the subdomain
- * authenticated automatically.
+ * Developer portal — served at /developers on the canonical app origin.
+ * A staging host set via NEXT_PUBLIC_DEV_PORTAL_HOST is rewritten into this
+ * same subtree by proxy.ts; nothing is required in production.
  */
 export default async function DevelopersLayout({ children }: { children: ReactNode }) {
   const user = await getCurrentUser()

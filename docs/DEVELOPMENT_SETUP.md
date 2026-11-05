@@ -271,7 +271,7 @@ docs/                   ← 📚 This folder (you are here)
 
 ## Deploying to Production
 
-The app is already deployed at https://Atai.atai.ink via Vercel.
+The app is deployed at https://atai.ink via Vercel — that is the only public location; `app.atai.ink` and `mirrorsite.atai.ink` are retired.
 
 **Automatic deployment**: Every push to the `main` branch auto-deploys to Vercel.
 

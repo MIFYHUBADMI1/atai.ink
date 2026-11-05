@@ -23,20 +23,13 @@ import type { NextRequest } from "next/server"
 const SESSION_COOKIE = "Atai_session"
 
 /**
- * Developer portal subdomain (developers.atai.ink) — served by the SAME app
- * via a host-based rewrite into the /developers route subtree. One deployment,
- * one DB, one session cookie (widened to the shared domain in production —
- * see lib/auth/session.ts). On other hosts (atai.ink, localhost) /developers
- * is also reachable directly, so local dev needs no DNS or hosts-file edits.
- *
- * NEXT_PUBLIC_DEV_PORTAL_HOST overrides the host in non-production deploys
- * (e.g. developers.staging.atai.ink). It is read from the env object — edge
- * proxy cannot be async.
+ * Developer portal host rewrite — OPT-IN only. The portal's one public location
+ * is /developers on the canonical app origin, so production needs no subdomain
+ * and never invents one. `NEXT_PUBLIC_DEV_PORTAL_HOST` exists only to point a
+ * separate staging host into the same /developers subtree.
  */
 export function developerPortalHost(): string {
-  const override = process.env.NEXT_PUBLIC_DEV_PORTAL_HOST
-  if (override) return override.toLowerCase()
-  return process.env.NODE_ENV === "production" ? "developers.atai.ink" : ""
+  return process.env.NEXT_PUBLIC_DEV_PORTAL_HOST?.toLowerCase() ?? ""
 }
 
 function isDeveloperHost(hostname: string): boolean {

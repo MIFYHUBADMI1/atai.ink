@@ -358,7 +358,7 @@ All in `.env.local`:
 
 ```bash
 # App
-NEXT_PUBLIC_APP_URL         # Production URL: https://Atai.atai.ink
+NEXT_PUBLIC_APP_URL         # Production URL: https://atai.ink
 AUTH_SECRET                 # JWT signing secret (random, keep secret)
 
 # Database

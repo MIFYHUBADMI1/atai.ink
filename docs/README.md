@@ -133,7 +133,7 @@ Vercel (hosting) + Gmail SMTP (email) + ImageKit (CDN)
 ⚠️ **Dodo Payments** — NOT Stripe. Some old docs/comments may say Stripe. Ignore them.
 
 ### Production URL
-`https://Atai.atai.ink`
+`https://atai.ink` (single public origin — no subdomains)
 
 ### MongoDB Atlas
 Connection string is in `.env.local` → `MONGODB_URI`  

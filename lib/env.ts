@@ -130,23 +130,31 @@ export function getOAuthRedirectUri(provider: "google" | "github", configuredBas
 export const SITE_URL = getAppUrl()
 
 /**
- * Developer portal URL (developers.atai.ink in production — served by the same
- * app via the proxy.ts host rewrite; /developers on localhost/previews). Safe to
- * call from client components: only NEXT_PUBLIC_* vars and NODE_ENV are read.
+ * Developer portal URL. The portal lives at ONE public location: the `/developers`
+ * subtree of the canonical app origin. `NEXT_PUBLIC_DEV_PORTAL_HOST` is only an
+ * opt-in for a separate staging host — it has no production default, because a
+ * hardcoded subdomain would emit links and canonicals to hosts that don't exist.
+ * Safe to call from client components: only NEXT_PUBLIC_* vars and NODE_ENV are read.
  */
 export function getDeveloperPortalUrl(): string {
+  if (process.env.NEXT_PUBLIC_DEV_PORTAL_HOST) {
+    return `https://${process.env.NEXT_PUBLIC_DEV_PORTAL_HOST.toLowerCase()}`
+  }
   if (process.env.NODE_ENV === "production" && process.env.NEXT_PUBLIC_APP_URL) {
-    return `https://${process.env.NEXT_PUBLIC_DEV_PORTAL_HOST ?? "developers.atai.ink"}`
+    return `${process.env.NEXT_PUBLIC_APP_URL.replace(/\/+$/, "")}/developers`
   }
   return "/developers"
 }
 
 /** The developer portal's canonical origin (for SEO metadata / sitemap entries). */
 export function getDeveloperPortalOrigin(): string {
-  if (process.env.NODE_ENV === "production" && process.env.NEXT_PUBLIC_APP_URL) {
-    return `https://${process.env.NEXT_PUBLIC_DEV_PORTAL_HOST ?? "developers.atai.ink"}`
+  if (process.env.NEXT_PUBLIC_DEV_PORTAL_HOST) {
+    return `https://${process.env.NEXT_PUBLIC_DEV_PORTAL_HOST.toLowerCase()}`
   }
-  return `${getAppUrl()}/developers`
+  if (process.env.NODE_ENV === "production" && process.env.NEXT_PUBLIC_APP_URL) {
+    return process.env.NEXT_PUBLIC_APP_URL.replace(/\/+$/, "")
+  }
+  return getAppUrl()
 }
 
 export function isMongoConfigured(): boolean {
