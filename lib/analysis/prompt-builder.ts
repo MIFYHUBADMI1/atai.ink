@@ -277,8 +277,6 @@ export function buildInitialBuildPrompt(
   // quote is re-emitted into the prompt.
   const contradictions = findPlanContradictions(spec, preferences, founderIdea ? neutralizePlanText(founderIdea) : undefined)
 
-  const founderIdea = (originalIdea ?? "").trim()
-
   const openQuestions: string[] = []
   for (const source of [
     spec.description,
