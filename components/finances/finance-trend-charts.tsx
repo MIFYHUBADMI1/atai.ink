@@ -5,9 +5,13 @@
  *
  * Values arrive precomputed from lib/finances/* server-side (same honesty
  * rule as the rest of the dashboard: the browser never derives a total —
- * except the cumulative net line, which is a running sum over the same
- * server-provided daily points). Renders nothing until mounted so the
- * server pass stays clean and ResponsiveContainer measures real widths.
+ * except the cumulative earnings line, which is a running sum over the same
+ * server-provided daily points). Renders nothing until mounted so the server
+ * pass stays clean and ResponsiveContainer measures real widths.
+ *
+ * Units never share an axis: runtime spend is credits (left), money is
+ * currency of receipt (right). Credits have no single purchase price, so the
+ * two are compared visually, never subtracted into one number.
  */
 
 import { useEffect, useMemo, useState } from "react"
@@ -76,14 +80,14 @@ function TrendTooltip({
         Earnings <span className="font-medium text-emerald-600 dark:text-emerald-400">{money(get("earnings") as number)}</span>
       </p>
       <p className="text-muted-foreground">
-        API cost <span className="font-medium text-foreground">{fmt((get("costCredits") as number) ?? 0)} credits</span>
-        {get("providerCostUsd") != null ? (
-          <span className="text-muted-foreground"> · $${fmt(get("providerCostUsd") as number)} provider</span>
-        ) : null}
+        Earnings (cum.){" "}
+        <span className="font-medium text-violet-600 dark:text-violet-400">{money(get("earningsCum") as number)}</span>
       </p>
       <p className="text-muted-foreground">
-        Net (cum.){" "}
-        <span className="font-medium text-violet-600 dark:text-violet-400">{money(get("net") as number)}</span>
+        API cost <span className="font-medium text-foreground">{fmt((get("costCredits") as number) ?? 0)} credits</span>
+        {get("providerCostUsd") != null ? (
+          <span className="text-muted-foreground"> · ${fmt(get("providerCostUsd") as number)} provider (USD)</span>
+        ) : null}
       </p>
     </div>
   )
@@ -102,8 +106,8 @@ export function MoneyTrendChart({
   const data = useMemo(() => {
     let running = 0
     return points.map((p) => {
-      running += p.earnings - p.costCredits
-      return { ...p, label: shortDate(p.date), net: Math.round(running * 100) / 100 }
+      running += p.earnings
+      return { ...p, label: shortDate(p.date), earningsCum: Math.round(running * 100) / 100 }
     })
   }, [points])
 
@@ -129,6 +133,7 @@ export function MoneyTrendChart({
             axisLine={false}
             tickFormatter={(v: number) => fmt(v)}
             width={56}
+            label={{ value: "credits", position: "insideTopLeft", offset: 4, fontSize: 10, fill: "var(--muted-foreground)" }}
           />
           <YAxis
             yAxisId="right"
@@ -138,6 +143,13 @@ export function MoneyTrendChart({
             axisLine={false}
             tickFormatter={(v: number) => fmt(v)}
             width={56}
+            label={{
+              value: currency ? `${currency} (money)` : "money",
+              position: "insideTopRight",
+              offset: 4,
+              fontSize: 10,
+              fill: "var(--muted-foreground)",
+            }}
           />
           <Tooltip content={<TrendTooltip currency={currency} />} />
           <Legend
@@ -157,7 +169,7 @@ export function MoneyTrendChart({
             isAnimationActive={false}
           />
           <Bar
-            yAxisId="left"
+            yAxisId="right"
             dataKey="earnings"
             name={currency ? `Earnings (${currency})` : "Earnings"}
             fill={EARNINGS_COLOR}
@@ -169,8 +181,8 @@ export function MoneyTrendChart({
           <Area
             yAxisId="right"
             type="monotone"
-            dataKey="net"
-            name="Net (cumulative)"
+            dataKey="earningsCum"
+            name={currency ? `Earnings, cumulative (${currency})` : "Earnings, cumulative"}
             stroke={NET_COLOR}
             strokeWidth={2}
             fill={NET_COLOR}

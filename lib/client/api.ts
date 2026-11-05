@@ -428,25 +428,64 @@ export function useProjectStatus(projectId: string, isActive: boolean) {
   return { statusData: data, error, refresh: mutate }
 }
 
-// ─── usePortfolioSpend ───────────────────────────────────────────────────────
+// ─── usePortfolioOverview ──────────────────────────────────────────────────
 //
-// Portfolio spending trend for the home-dashboard mini card. The numbers are
-// computed server-side (never in the browser); 5 min poll is plenty for a
-// trend — none of this is per-request metering data the user acts on live.
+// Whole-portfolio finance overview for the home dashboard panel. Every number
+// is computed server-side (/api/finances/summary over lib/finances/*); the
+// browser only renders it. A 5 min poll is plenty for a trend — none of this
+// is per-request metering data the user acts on live.
 
-export interface PortfolioSpendTrend {
-  daily: Array<{ date: string; creditsCharged: number; earningsMinor: number }>
-  creditsTotal14d: number
-  creditsPrior14d: number
-  changePct: number | null
-  earningsTotal14d: number | null
-  netTotal14d: number | null
-  earningsCurrencies: string[]
+export interface PortfolioDailyPoint {
+  /** UTC date bucket, YYYY-MM-DD. */
+  date: string
+  creditsCharged: number
+  /** Attributed earnings that day, minor units. */
+  earningsMinor: number
+  /** USD the providers reported; null when nothing reported a cost. */
+  providerCostUsd: number | null
 }
 
-export function usePortfolioSpend(enabled = true) {
-  const { data, error, isLoading, mutate } = useSWR<PortfolioSpendTrend>(
-    enabled ? "/api/finances/summary" : null,
+export interface PortfolioBusinessRow {
+  projectId: string
+  projectName: string
+  requests: number
+  creditsCharged: number
+  /** null while that project's earnings feed has not reported "ok". */
+  earningsMinor: number | null
+  currency: string | null
+}
+
+export interface PortfolioOverview {
+  generatedAt: number
+  days: number
+  daily: PortfolioDailyPoint[]
+  totals: {
+    requests: number
+    succeeded: number
+    failed: number
+    creditsCharged: number
+    /** null = earnings feed unavailable, never a fabricated zero. */
+    earningsMinor: number | null
+    providerCostUsd: number | null
+    providerCostUnavailableCount: number
+    succeededPayments: number
+    pendingPayments: number
+    currencies: string[]
+  }
+  prior: { requests: number; creditsCharged: number; earningsMinor: number | null }
+  spendChangePct: number | null
+  earningsStatus: "ok" | "unavailable" | "error"
+  earningsNote: string | null
+  projectsCount: number
+  earningsSweepComplete: boolean
+  byProject: PortfolioBusinessRow[]
+}
+
+export type PortfolioRange = 14 | 30 | 90
+
+export function usePortfolioOverview(days: PortfolioRange = 30, enabled = true) {
+  const { data, error, isLoading, mutate } = useSWR<PortfolioOverview>(
+    enabled ? `/api/finances/summary?days=${days}` : null,
     jsonFetcher,
     {
       refreshInterval: 300_000,
@@ -456,5 +495,5 @@ export function usePortfolioSpend(enabled = true) {
       revalidateOnReconnect: false,
     },
   )
-  return { trend: data ?? null, error, isLoading, refresh: mutate }
+  return { overview: data ?? null, error, isLoading, refresh: mutate }
 }

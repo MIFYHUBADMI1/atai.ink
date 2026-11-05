@@ -7,6 +7,7 @@ import {
 } from "lucide-react"
 import type { ReactNode } from "react"
 import type { ProjectFinances } from "@/lib/finances/project-finances"
+import { netPosition } from "@/lib/finances/net-position"
 import { ShareBar } from "./finance-charts"
 import { BreakdownBarsChart, MoneyTrendChart } from "./finance-trend-charts"
 
@@ -69,10 +70,13 @@ export function KpiCard({
 export function ProjectFinancesView({ finances }: { finances: ProjectFinances }) {
   const { totals, window: win } = finances
 
-  // Net position: attributed earnings minus in-window credit spend — an API
-  // position, never double-counting non-API costs the platform bears.
-  const netMinor =
-    totals.earningsMinor !== null ? totals.earningsMinor : null
+  // Net position: money minus money. Credits are never subtracted from an
+  // earnings figure — they have no single cash value (see lib/finances/net-position).
+  const net = netPosition({
+    earningsMinor: totals.earningsMinor,
+    providerCostUsd: totals.providerCostUsd,
+    currencies: totals.currencies,
+  })
   const projection = finances.projection
   const arr = finances.arr
 
@@ -162,12 +166,13 @@ export function ProjectFinancesView({ finances }: { finances: ProjectFinances })
           icon={<TrendingUp aria-hidden />}
         />
         <KpiCard
-          label="Net (earnings − credits)"
-          value={netMinor === null ? "—" : money(netMinor, totals.currencies[0] ?? null)}
+          label="Net (earnings − provider cost, USD)"
+          value={net.minor === null ? "—" : money(net.minor, net.currency)}
           sub={
-            conversion !== null
+            net.reason ??
+            (conversion !== null
               ? `${Math.round(conversion * 100)}% checkout conversion (${totals.checkoutAttempts} attempts)`
-              : `${totals.checkoutAttempts} checkout attempt${totals.checkoutAttempts === 1 ? "" : "s"} · no completed payments yet`
+              : `${totals.checkoutAttempts} checkout attempt${totals.checkoutAttempts === 1 ? "" : "s"} · no completed payments yet`)
           }
           icon={<Info aria-hidden />}
         />
@@ -175,12 +180,12 @@ export function ProjectFinancesView({ finances }: { finances: ProjectFinances })
 
       {/* Daily chart */}
       <section className="rounded-xl border border-border bg-card p-4">
-        <h2 className="text-sm font-medium">Costs vs earnings — daily flow and cumulative net</h2>
+        <h2 className="text-sm font-medium">Costs vs earnings — daily flow and cumulative earnings</h2>
         <p className="mt-1 text-xs text-muted-foreground">
           UTC days · last {Math.min(60, finances.daily.length)} active days of the {win.days}-day
-          window. Bars compare runtime credit spend against attributed earnings; the line is the
-          running net position. Earnings are in {currency ?? "the payment currency"}; credits are a
-          separate unit (right axis: cumulative net in earnings units). Hover any day for details.
+          window. Credits and money keep their own axes: spend is bars on the left, earnings
+          bars and the cumulative line sit on the right in {currency ?? "the payment currency"} units.
+          Hover any day for details.
         </p>
         {trendPoints.length > 0 ? (
           <div className="mt-4">

@@ -9,6 +9,7 @@ import {
 import Link from "next/link"
 import type { ReactNode } from "react"
 import type { PlatformFinances } from "@/lib/finances/platform-finances"
+import { netPosition } from "@/lib/finances/net-position"
 import { KpiCard, compact, money, when } from "./project-finances-view"
 import { ShareBar } from "./finance-charts"
 import { BreakdownBarsChart, MoneyTrendChart } from "./finance-trend-charts"
@@ -25,7 +26,11 @@ import { BreakdownBarsChart, MoneyTrendChart } from "./finance-trend-charts"
 
 export function PlatformFinancesView({ finances }: { finances: PlatformFinances }) {
   const { totals, window: win } = finances
-  const netMinor = totals.earningsMinor !== null ? totals.earningsMinor : null
+  const net = netPosition({
+    earningsMinor: totals.earningsMinor,
+    providerCostUsd: totals.providerCostUsd,
+    currencies: totals.currencies,
+  })
 
   const trendPoints = finances.daily.slice(-60).map((d) => ({
     date: d.date,
@@ -117,20 +122,21 @@ export function PlatformFinancesView({ finances }: { finances: PlatformFinances 
           icon={<TrendingUp aria-hidden />}
         />
         <KpiCard
-          label="Net (earnings − credits)"
-          value={netMinor === null ? "—" : money(netMinor, totals.currencies[0] ?? null)}
-          sub={`Portfolio-wide rollup — per-project breakdown below`}
+          label="Net (earnings − provider cost, USD)"
+          value={net.minor === null ? "—" : money(net.minor, net.currency)}
+          sub={net.reason ?? "Money in, minus what the model providers charged"}
           icon={<Info aria-hidden />}
         />
       </section>
 
       {/* Daily chart — interactive recharts, same component as the project page */}
       <section className="rounded-xl border border-border bg-card p-4">
-        <h2 className="text-sm font-medium">Costs vs earnings — daily flow and cumulative net</h2>
+        <h2 className="text-sm font-medium">Costs vs earnings — daily flow and cumulative earnings</h2>
         <p className="mt-1 text-xs text-muted-foreground">
           UTC days · all projects combined · last {Math.min(60, finances.daily.length)} active days of the
-          {` ${win.days}-day`} window. Bars compare runtime credit spend against attributed earnings; the
-          line is the running net position in {currency ?? "payment"} units. Hover any day for details.
+          {` ${win.days}-day`} window. Credits and money keep their own axes — spend is bars on the left,
+          earnings bars and the cumulative line are on the right in {currency ?? "payment"} units. Hover any day
+          for details.
         </p>
         {trendPoints.length > 0 ? (
           <div className="mt-4">

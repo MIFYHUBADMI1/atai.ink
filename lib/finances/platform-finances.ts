@@ -330,12 +330,18 @@ async function mapWithConcurrency<T, R>(
 const NUMERIC_PROVIDER_TYPES: string[] = ["double", "int", "long", "decimal"]
 const EPOCH_DATE = new Date(0)
 
-async function aggregatePlatformExpenses(
+/**
+ * Raw per-day-per-project expense rows for a range. Kept separate from the
+ * collapse so one read can serve a reporting window AND the equal-length
+ * window before it (the dashboard's direction figure) without a second
+ * aggregation.
+ */
+async function aggregateExpenseRows(
   projectIds: string[],
   from: number,
   to: number,
-): Promise<CollapsedExpenses> {
-  if (projectIds.length === 0) return collapseExpenseRows([])
+): Promise<ExpenseDayProjectRow[]> {
+  if (projectIds.length === 0) return []
   await ensureRuntimeIndexes()
   const col = await runtimeUsageCol()
 
@@ -384,7 +390,15 @@ async function aggregatePlatformExpenses(
     ])
     .toArray()
 
-  return collapseExpenseRows(rows)
+  return rows
+}
+
+async function aggregatePlatformExpenses(
+  projectIds: string[],
+  from: number,
+  to: number,
+): Promise<CollapsedExpenses> {
+  return collapseExpenseRows(await aggregateExpenseRows(projectIds, from, to))
 }
 
 // ─── Assembly ───────────────────────────────────────────────────────────────
@@ -462,48 +476,117 @@ export async function getPlatformFinances(userId: string): Promise<PlatformFinan
 /** Keep the re-export surface explicit: the view builds on ProjectFinances types. */
 export type { ProjectFinances }
 
-// ─── Home-dashboard mini trend ─────────────────────────────────────────────
+// ─── Home-dashboard portfolio overview ────────────────────────────────────
 
-/** Days the dashboard mini-card trend covers. */
-export const SPEND_TREND_DAYS = 28
+/** Ranges the dashboard portfolio panel may ask for, in days. */
+export const PORTFOLIO_RANGES = [14, 30, 90] as const
+export type PortfolioRange = (typeof PORTFOLIO_RANGES)[number]
+export const DEFAULT_PORTFOLIO_RANGE: PortfolioRange = 30
 
-export interface SpendTrend {
-  /** UTC date buckets (oldest first), zero-filled — honest, gapless days. */
-  daily: Array<{ date: string; creditsCharged: number; earningsMinor: number }>
-  creditsTotal14d: number
-  creditsPrior14d: number
-  /** Percent change of the last 14 days vs the prior 14; null when the prior
-   * window saw zero spend (no honest percentage exists). */
-  changePct: number | null
-  /** Attributed earnings over the same last-14-days window, minor units;
-   * null when no project's earnings feed reported "ok" — unavailable ≠ 0. */
-  earningsTotal14d: number | null
-  netTotal14d: number | null
-  /** Currencies seen in the swept attributed earnings (for honest display). */
-  earningsCurrencies: string[]
+/** Whitelisted parse — anything unknown falls back to the default range. */
+export function resolvePortfolioRange(raw: string | null | undefined): PortfolioRange {
+  const days = Number(raw)
+  return (PORTFOLIO_RANGES as readonly number[]).includes(days)
+    ? (days as PortfolioRange)
+    : DEFAULT_PORTFOLIO_RANGE
+}
+
+export interface PortfolioDailyPoint {
+  /** UTC date bucket (YYYY-MM-DD). */
+  date: string
+  creditsCharged: number
+  /** Attributed earnings that day, minor units (0 when none succeeded). */
+  earningsMinor: number
+  /** USD the providers reported that day; null when nothing reported one. */
+  providerCostUsd: number | null
+}
+
+export interface PortfolioBusinessRow {
+  projectId: string
+  projectName: string
+  requests: number
+  creditsCharged: number
+  /** null while the project's earnings feed has never reported "ok". */
+  earningsMinor: number | null
+  currency: string | null
+}
+
+export interface PortfolioOverview {
+  generatedAt: number
+  days: number
+  daily: PortfolioDailyPoint[]
+  totals: {
+    requests: number
+    succeeded: number
+    failed: number
+    creditsCharged: number
+    /** null means the feed is unavailable — never a fabricated zero. */
+    earningsMinor: number | null
+    providerCostUsd: number | null
+    providerCostUnavailableCount: number
+    succeededPayments: number
+    pendingPayments: number
+    currencies: string[]
+  }
+  /** The equal-length window immediately before the reported one. */
+  prior: { requests: number; creditsCharged: number; earningsMinor: number | null }
+  /** Credits vs the prior window; null when that window saw no spend. */
+  spendChangePct: number | null
+  earningsStatus: "ok" | "unavailable" | "error"
+  earningsNote: string | null
+  projectsCount: number
+  earningsSweepComplete: boolean
+  byProject: PortfolioBusinessRow[]
+}
+
+/** Percent change against a prior window; no honest percentage exists at zero. */
+export function windowChangePct(current: number, prior: number): number | null {
+  return prior === 0 ? null : Math.round(((current - prior) / prior) * 100)
+}
+
+/** A day's provider cost is a number only when at least one call reported one. */
+function dayProviderCostUsd(point: DailyFinancePoint): number | null {
+  const reported = point.requests - point.providerCostUnavailableCount
+  return reported > 0 || point.providerCostUsd !== null ? point.providerCostUsd : null
 }
 
 /**
- * Week-over-week spending direction from a zero-filled daily series — the
- * small honest math the dashboard mini-card titles itself with.
+ * One point per day for the whole window. A quiet day is a real zero, not a
+ * gap the reader has to infer from the shape of the line.
  */
-export function spendTrend(daily: Array<{ date: string; creditsCharged: number }>): Pick<SpendTrend, "creditsTotal14d" | "creditsPrior14d" | "changePct"> {
-  const last14 = daily.slice(-14)
-  const prior14 = daily.slice(-28, -14)
-  const sum = (rows: Array<{ creditsCharged: number }>) => rows.reduce((a, r) => a + r.creditsCharged, 0)
-  const total = sum(last14)
-  const prior = sum(prior14)
+export function zeroFillPortfolioDaily(
+  days: number,
+  to: number,
+  points: DailyFinancePoint[],
+): PortfolioDailyPoint[] {
+  const byDate = new Map(points.map((p) => [p.date, p]))
+  const out: PortfolioDailyPoint[] = []
+  for (let offset = days - 1; offset >= 0; offset--) {
+    const date = new Date(to - offset * DAY_MS).toISOString().slice(0, 10)
+    const found = byDate.get(date)
+    out.push({
+      date,
+      creditsCharged: found?.creditsCharged ?? 0,
+      earningsMinor: found?.earningsMinor ?? 0,
+      providerCostUsd: found ? dayProviderCostUsd(found) : null,
+    })
+  }
+  return out
+}
+
+/** Keep only the payments that fall inside one window. */
+function scopeEarningsToWindow(result: EarningsResult, from: number, to: number): EarningsResult {
+  if (result.status !== "ok") return result
   return {
-    creditsTotal14d: total,
-    creditsPrior14d: prior,
-    changePct: prior === 0 ? null : Math.round(((total - prior) / prior) * 100),
+    ...result,
+    payments: result.payments.filter((p) => p.createdAt !== null && p.createdAt >= from && p.createdAt <= to),
   }
 }
 
 /**
- * Fold successful attributed payments into the zero-filled daily trend
- * buckets (same honesty rules as the finance pages: only succeeded amounts
- * count, un-parseable dates are not day-bucketed). Pure and unit-tested.
+ * Fold successful attributed payments into zero-filled day buckets, keeping the
+ * minor-unit honesty of the finance pages (only succeeded amounts count,
+ * payments with no parseable date are not day-bucketed). Pure and unit-tested.
  */
 export function mergeEarningsIntoDaily(
   daily: Array<{ date: string; creditsCharged: number }>,
@@ -519,88 +602,101 @@ export function mergeEarningsIntoDaily(
 }
 
 /**
- * Bounded portfolio spending + earnings trend for the home dashboard
- * mini-card: one Mongo aggregation (all owned projects, 28 days, UTC day
- * buckets), zero-filled, the week-over-window spend comparison, and the
- * attributed earnings over the same window via the SAME bounded sweep the
- * platform finance page uses (≤ MAX_EARNINGS_PROJECTS projects, each its
- * own cached sync). Read-only.
+ * Portfolio overview for the home dashboard: one expense read and one earnings
+ * sweep across TWICE the reported window, split at the halfway date so the
+ * current window and the equal-length window before it come from the same
+ * aggregation. Every total, percentage and daily bucket is computed here — the
+ * browser renders numbers and never derives one.
+ *
+ * Units stay separate on purpose: runtime spend is credits, earnings are money
+ * in whatever currency arrived. Credits have no single purchase price (packs
+ * sell 200k for $59 and 500k for $119), so no cross-unit "net" is produced.
+ *
+ * Bounds and honesty states match getPlatformFinances: at most
+ * MAX_EARNINGS_PROJECTS projects are swept, `earningsSweepComplete` says when
+ * that truncates, and an unavailable earnings feed stays null.
  */
-export async function getPortfolioSpendTrend(userId: string): Promise<SpendTrend> {
+export async function getPortfolioOverview(
+  userId: string,
+  days: PortfolioRange = DEFAULT_PORTFOLIO_RANGE,
+): Promise<PortfolioOverview> {
   const to = Date.now()
-  const from = to - SPEND_TREND_DAYS * DAY_MS
+  const spanMs = days * DAY_MS
+  const windowFrom = to - spanMs
+  // Day boundary between the two halves: rows on or after this UTC date belong
+  // to the reported window, anything earlier is the comparison window.
+  const cutDate = new Date(windowFrom).toISOString().slice(0, 10)
 
   const projects = await store.listProjects(userId, MAX_PROJECTS)
   const projectIds = projects.map((p) => p.id)
+  const sweep = projects.slice(0, MAX_EARNINGS_PROJECTS)
 
-  let dayRows: Array<{ _id: string; creditsCharged: number }> = []
-  let earningsDaily: Array<{ date: string; creditsCharged: number; earningsMinor: number }> = []
-  let earningsTotal14d: number | null = null
-  let netTotal14d: number | null = null
-  const earningsCurrencies = new Set<string>()
+  const [rows, earningsResults] = await Promise.all([
+    aggregateExpenseRows(projectIds, windowFrom - spanMs, to),
+    mapWithConcurrency(sweep, EARNINGS_CONCURRENCY, (p) => getProjectEarnings(p.id, windowFrom - spanMs)),
+  ])
 
-  if (projectIds.length > 0) {
-    const sweep = projects.slice(0, MAX_EARNINGS_PROJECTS)
-    const [earningsResults] = await Promise.all([
-      mapWithConcurrency(sweep, EARNINGS_CONCURRENCY, (p) => getProjectEarnings(p.id, from)),
-      (async () => {
-        await ensureRuntimeIndexes()
-        const col = await runtimeUsageCol()
-        dayRows = await col
-          .aggregate<{ _id: string; creditsCharged: number }>([
-            { $match: { projectId: { $in: projectIds }, createdAt: { $gte: from, $lte: to } } },
-            {
-              $group: {
-                _id: {
-                  $dateToString: {
-                    format: "%Y-%m-%d",
-                    date: { $dateTrunc: { date: { $add: [EPOCH_DATE, "$createdAt"] }, unit: "day" } },
-                  },
-                },
-                creditsCharged: { $sum: "$creditsCharged" },
-              },
-            },
-            { $sort: { _id: 1 } },
-          ])
-          .toArray()
-      })(),
-    ])
+  const current = collapseExpenseRows(rows.filter((r) => r.date >= cutDate))
+  const prior = collapseExpenseRows(rows.filter((r) => r.date < cutDate))
 
-    // Zero-fill every day of the window — gaps are honest zeros. Oldest first.
-    const creditsByDate = new Map(dayRows.map((r) => [r._id, r.creditsCharged]))
-    const creditsDaily: Array<{ date: string; creditsCharged: number }> = []
-    for (let day = SPEND_TREND_DAYS - 1; day >= 0; day--) {
-      const date = new Date(to - day * DAY_MS).toISOString().slice(0, 10)
-      creditsDaily.push({ date, creditsCharged: creditsByDate.get(date) ?? 0 })
-    }
+  const statuses: EarningsStatusInput[] = earningsResults.map((r) =>
+    r.status === "ok" ? { status: "ok" as const } : { status: r.status, note: r.note },
+  )
+  const combined =
+    sweep.length === 0
+      ? {
+          status: "unavailable" as const,
+          note: "You have no projects yet — your portfolio finances roll up here once you create one.",
+        }
+      : combineEarningsStatus(statuses)
 
-    // Earnings: only feeds that reported "ok" contribute. If none did, the
-    // earnings fields stay null — unavailable, never a fabricated zero.
-    const okResults = earningsResults.filter((r) => r.status === "ok")
-    const allPayments = okResults.flatMap((r) => r.payments)
-    earningsDaily = mergeEarningsIntoDaily(creditsDaily, allPayments)
-    if (okResults.length > 0) {
-      for (const p of allPayments) {
-        if (p.currency) earningsCurrencies.add(p.currency)
-      }
-      const earnings14 = earningsDaily.slice(-14).reduce((a, r) => a + r.earningsMinor, 0)
-      const credits14 = earningsDaily.slice(-14).reduce((a, r) => a + r.creditsCharged, 0)
-      earningsTotal14d = earnings14
-      netTotal14d = earnings14 - credits14
-    }
-  }
+  const windowed = earningsResults.map((r) => scopeEarningsToWindow(r, windowFrom, to))
+  const currentPayments = windowed.flatMap((r) => (r.status === "ok" ? r.payments : []))
+  const priorPayments = earningsResults.flatMap((r) =>
+    r.status === "ok"
+      ? r.payments.filter((p) => p.createdAt !== null && p.createdAt < windowFrom)
+      : [],
+  )
 
-  const daily = earningsDaily.length > 0 ? earningsDaily : Array.from({ length: SPEND_TREND_DAYS }, (_, i) => ({
-    date: new Date(to - (SPEND_TREND_DAYS - 1 - i) * DAY_MS).toISOString().slice(0, 10),
-    creditsCharged: 0,
-    earningsMinor: 0,
+  const dailyMerged = mergeDailySeries(current.daily, currentPayments)
+  const totals = buildTotals(current, { status: combined.status, payments: currentPayments }, windowFrom, to)
+  const priorTotals = buildTotals(prior, { status: combined.status, payments: priorPayments }, windowFrom - spanMs, windowFrom)
+
+  const entries: PortfolioEntry[] = sweep.map((p, index) => ({
+    projectId: p.id,
+    projectName: p.name,
+    expense:
+      current.byProject.get(p.id) ??
+      { requests: 0, creditsCharged: 0, providerCostUsd: 0, providerCostUnavailableCount: 0 },
+    earnings: windowed[index],
   }))
 
   return {
-    daily,
-    ...spendTrend(daily),
-    earningsTotal14d,
-    netTotal14d,
-    earningsCurrencies: [...earningsCurrencies].sort(),
+    generatedAt: to,
+    days,
+    daily: zeroFillPortfolioDaily(days, to, dailyMerged),
+    totals: {
+      requests: totals.requests,
+      succeeded: totals.succeeded,
+      failed: totals.failed,
+      creditsCharged: totals.creditsCharged,
+      earningsMinor: totals.earningsMinor,
+      providerCostUsd: totals.providerCostUsd,
+      providerCostUnavailableCount: totals.providerCostUnavailableCount,
+      succeededPayments: totals.succeededPayments,
+      pendingPayments: totals.pendingPayments,
+      currencies: totals.currencies,
+    },
+    prior: {
+      requests: priorTotals.requests,
+      creditsCharged: priorTotals.creditsCharged,
+      earningsMinor: priorTotals.earningsMinor,
+    },
+    spendChangePct: windowChangePct(totals.creditsCharged, priorTotals.creditsCharged),
+    earningsStatus: combined.status,
+    earningsNote: combined.note,
+    projectsCount: projects.length,
+    earningsSweepComplete: projects.length <= MAX_EARNINGS_PROJECTS,
+    byProject: portfolioProjectRows(entries),
   }
 }
