@@ -99,7 +99,9 @@ export const listCampaignsSchema = z.object({
 
 export const createProjectSchema = z.object({
   mode: z.enum(["scratch", "website", "github"]),
-  idea: z.string().min(8).max(4000).optional(),
+  // Long enough for a full business brief: the direct API paths impose no cap,
+  // and nothing the founder writes may be rejected for length here alone.
+  idea: z.string().min(8).max(12000).optional(),
   url: z.string().min(3).max(2000).optional(),
   githubRepoOwner: z.string().min(1).max(120).optional(),
   githubRepoName: z.string().min(1).max(120).optional(),
@@ -177,7 +179,7 @@ export const requestBuildSchema = z.object({
 
 export const requestFollowupEditSchema = z.object({
   projectId: z.string().min(1).max(80),
-  prompt: z.string().min(2).max(4000),
+  prompt: z.string().min(2).max(12000),
 }).strip()
 
 export const requestDeploySchema = z.object({

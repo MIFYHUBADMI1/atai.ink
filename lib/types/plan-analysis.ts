@@ -52,22 +52,49 @@ export const PlanAnalysisSchema = z.object({
 })
 export type PlanAnalysis = z.infer<typeof PlanAnalysisSchema>
 
-/** Coarse dependency hints between plan sections (spec section 11). These
- * are static product knowledge, not AI guesses — when the user accepts a
- * change to one section, related sections are surfaced for review. */
-export const SECTION_DEPENDENCIES: Record<string, string[]> = {
-  targetUsers: ["valueProposition", "marketPositioning", "features"],
-  valueProposition: ["marketPositioning", "targetUsers"],
-  marketPositioning: ["valueProposition", "targetUsers"],
-  marketingPlan: ["marketPositioning", "valueProposition", "targetUsers", "pricingTiers"],
-  businessModel: ["revenueModel", "pricingTiers", "marketPositioning"],
-  revenueModel: ["businessModel", "pricingTiers", "marketPositioning"],
-  pricingTiers: ["revenueModel", "features", "businessModel"],
-  designDirection: ["features"],
-  vision: ["valueProposition", "targetUsers", "features"],
-  overview: ["vision", "targetUsers"],
-  features: ["flows", "data"],
-  flows: ["data", "features"],
-  data: ["features"],
-  seo: ["targetUsers", "valueProposition", "marketPositioning"],
-}
+/** Plan sections that state the same reality from different angles, grouped
+ * into clusters (spec section 11). These are static product knowledge, not AI
+ * guesses.
+ *
+ * Declared as clusters rather than pairwise hints on purpose: a pairwise map
+ * can only ever show part of a cluster (a chat about Target Customers reached
+ * Pricing Tiers but ran out of room before Pricing Structure, Business Model
+ * and Revenue Model), and a half-shown cluster is exactly how the plan drifts
+ * — two tier lists, two prices. Any section inside a cluster ships WITH every
+ * other member of that cluster, so the co-founder AI and the accept-card
+ * always see the whole money story, the whole market story, the whole product
+ * story. A section may belong to several clusters; their union is its context.
+ * List the most load-bearing members first: the context cap keeps the front. */
+export const SECTION_CLUSTERS: ReadonlyArray<{ name: string; sections: readonly string[] }> = [
+  {
+    // The money story: what is sold, to whom, for how much, and what limits
+    // justify each price. Pricing Structure is what the build consumes;
+    // Pricing Tiers is the detailed catalogue — they must say the same thing.
+    name: "Money & offer",
+    sections: ["pricingTiers", "pricingTiersDetail", "revenueModel", "businessModel", "targetUsers", "features", "runtimeIntegrations"],
+  },
+  {
+    name: "Go-to-market",
+    sections: ["marketingPlan", "targetUsers", "seo", "vision", "overview", "pricingTiersDetail"],
+  },
+  {
+    name: "Product shape",
+    sections: ["features", "flows", "data", "userRoles", "auth", "adminConsole", "pricingTiersDetail"],
+  },
+  {
+    name: "Foundation",
+    sections: ["vision", "overview", "applicationType", "targetUsers", "marketingPlan"],
+  },
+  {
+    name: "Experience",
+    sections: ["designDirection", "features", "flows", "marketingPlan"],
+  },
+  {
+    name: "Technical",
+    sections: ["backend", "integrations", "runtimeIntegrations", "adminConsole", "data"],
+  },
+]
+
+/** Sections that must be told which field is authoritative, because the same
+ * money story lives in two of them. */
+export const PRICING_PAIR_SECTIONS: readonly string[] = ["pricingTiers", "pricingTiersDetail"]

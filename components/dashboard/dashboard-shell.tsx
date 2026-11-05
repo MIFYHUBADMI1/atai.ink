@@ -4,6 +4,7 @@ import { useEffect, useId, useMemo, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
+  Bell,
   Building2,
   Compass,
   Home,
@@ -34,6 +35,7 @@ import { cn } from "@/lib/utils"
 const NAV = [
   { href: "/dashboard", label: "Home", icon: Home },
   { href: "/projects", label: "Businesses", icon: Building2 },
+  { href: "/notifications", label: "Notifications", icon: Bell },
   { href: "/new", label: "New business", icon: Sparkles },
 ] as const
 

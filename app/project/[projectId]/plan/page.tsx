@@ -55,27 +55,25 @@ import { STATE_LABELS, type Project } from "@/lib/types/project"
 
 type BusinessFieldKey =
   | "vision"
-  | "valueProposition"
   | "businessModel"
   | "revenueModel"
   | "pricingTiers"
   | "pricingStructure"
   | "runtimeIntegrations"
+  | "adminConsole"
   | "seoPlan"
-  | "marketPositioning"
   | "marketingPlan"
 
 const BUSINESS_FIELDS: { key: BusinessFieldKey; label: string }[] = [
   { key: "vision", label: "Vision, purpose, problem & solution" },
-  { key: "valueProposition", label: "Value proposition" },
   { key: "businessModel", label: "Business model" },
   { key: "revenueModel", label: "Revenue model" },
   { key: "pricingTiers", label: "Pricing tiers" },
   { key: "pricingStructure", label: "Pricing structure" },
   { key: "runtimeIntegrations", label: "Runtime integrations" },
+  { key: "adminConsole", label: "Admin console & owner tools" },
   { key: "seoPlan", label: "SEO plan" },
-  { key: "marketPositioning", label: "Market positioning" },
-  { key: "marketingPlan", label: "Marketing plan" },
+  { key: "marketingPlan", label: "Value proposition, market positioning & marketing plan" },
 ]
 
 // ─── Formatting helpers ───────────────────────────────────────────────────────

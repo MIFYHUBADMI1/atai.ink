@@ -1,7 +1,18 @@
 import type { ApplicationSpecification } from "@/lib/types/specification"
-import { PLAN_SECTIONS, sectionStatus, computePlanHealth, isPlaceholderValue, clampPlanSectionValue, readCombinedFoundation, type PlanSectionDef } from "@/lib/analysis/plan-sections"
+import {
+  PLAN_SECTIONS,
+  sectionStatus,
+  computePlanHealth,
+  isPlaceholderValue,
+  clampPlanSectionValue,
+  readCombinedFoundation,
+  relatedSections,
+  sectionClusterNames,
+  findPricingConflicts,
+  describePricingConflict,
+  type PlanSectionDef,
+} from "@/lib/analysis/plan-sections"
 import { PlanAnalysisSchema, type PlanAnalysis, type PlanFinding, type PlanProposal } from "@/lib/types/plan-analysis"
-import { SECTION_DEPENDENCIES } from "@/lib/types/plan-analysis"
 import type { ConversationMessage, ProjectPreferences } from "@/lib/types/project"
 // Import the standalone ID helper directly — NOT from store.ts, which would
 // pull the mongo store (server-only) into client-bundlable/testable modules.
@@ -61,29 +72,102 @@ export function buildPlanBrief(spec: ApplicationSpecification): string {
   return lines.join("\n")
 }
 
+/** Cap for each related section's body inside the focus block. High enough
+ * that a whole tier list or revenue model fits; the ellipsis keeps one giant
+ * neighbour from crowding out the rest of the cluster. */
+const RELATED_SECTION_CAP = 2200
+
+function clampRelatedSectionValue(value: string): string {
+  const clean = value.trim()
+  if (clean.length <= RELATED_SECTION_CAP) return clean
+  const cut = clean.slice(0, RELATED_SECTION_CAP)
+  const lastBreak = Math.max(cut.lastIndexOf(" "), cut.lastIndexOf("\n"))
+  return `${(lastBreak > RELATED_SECTION_CAP * 0.6 ? cut.slice(0, lastBreak) : cut).trimEnd()}…`
+}
+
+/**
+ * The two pricing sections state one money story at different depths, and the
+ * founder's requirement is that they never diverge. So the disagreement is
+ * computed with CODE (findPricingConflicts), not left to the model: every tier
+ * priced in both is compared, and a clash is named in the context with the
+ * field the build actually consumes declared as the authority. Honest by
+ * construction — the model is told to raise the clash with the founder rather
+ * than pick a side, and the founder's own card says the same thing.
+ */
+function buildPricingConsistencyBlock(spec: ApplicationSpecification): string {
+  const structure = (spec.pricingStructure ?? "").trim()
+  const detail = (spec.pricingTiers ?? "").trim()
+  if (!structure && !detail) return ""
+  const lines = [
+    'PRICING AUTHORITY: the "Pricing Structure" section (propose it as section id "pricingTiers") is the field the builder consumes; the "Pricing Tiers" section (id "pricingTiersDetail") is the detailed tier catalogue behind the SAME money story. The ids read like opposites of the labels — use the label you mean, never the other id. Both must state the same tiers at the same prices.',
+  ]
+  const conflicts = findPricingConflicts(spec)
+  lines.push(
+    conflicts.length
+      ? `PRICING CONFLICT DETECTED (${conflicts.length} tier${conflicts.length > 1 ? "s" : ""} priced differently in the two pricing sections):\n${conflicts
+          .slice(0, 5)
+          .map((c) => `- ${describePricingConflict(c)}`)
+          .join("\n")}\nDo NOT silently pick a side and do NOT invent a third price. Tell the founder which tiers disagree, ask which figure is right (or recommend one with a reason), and propose the reconciliation for BOTH pricing sections so the plan ends up stating one price per tier. Any dependent section you touch (Revenue Model, Business Model, Runtime & Integrations) must use the reconciled figures too.`
+      : "The two pricing sections currently agree on every tier that is priced in both — keep that.",
+  )
+  return lines.join("\n")
+}
+
 /**
  * Full detail for the section the founder is working on — this is the only
  * place an untruncated section value ships, keeping requests cheap while
  * giving the model everything it needs for the section at hand.
+ *
+ * Consistency (founder requirement, 2026-10-30): sections that state the
+ * same reality from different angles (pricing tiers ↔ pricing structure ↔
+ * business model ↔ revenue model, the go-to-market cluster, the product
+ * cluster) must never disagree. So the block also ships the REAL content of
+ * every related section and a hard never-contradict rule — the compact plan
+ * brief previews every section in one line, but only this block gives the
+ * model the depth it needs to keep the cluster universally the same.
  */
 export function buildSectionFocusBlock(sectionId: string, spec: ApplicationSpecification): string {
   const def = PLAN_SECTIONS.find((d) => d.id === sectionId)
   if (!def) return ""
   const value = def.read(spec)
   const current = !value || isPlaceholderValue(value) ? "(not defined yet)" : value
-  const related = (SECTION_DEPENDENCIES[sectionId] ?? [])
-    .map((id) => PLAN_SECTIONS.find((d) => d.id === id)?.label ?? id)
+  const related = relatedSections(sectionId)
+  const clusters = sectionClusterNames(sectionId)
+  const defined = related.filter((r) => {
+    const v = r.read(spec)
+    return v && !isPlaceholderValue(v)
+  })
+  const undefinedLabels = related
+    .filter((r) => !defined.includes(r))
+    .map((r) => r.label)
+  const pricing = buildPricingConsistencyBlock(spec)
   return [
-    `FOCUS SECTION: ${def.label} (${def.group})`,
+    `FOCUS SECTION: ${def.label} (${def.group}${clusters.length ? ` · ${clusters.join(" + ")} cluster` : ""})`,
     `Current content: ${current}`,
     sectionId === "marketingPlan"
-      ? "This is ONE combined go-to-market section: cover marketing, launch and growth together in one coherent plan."
+      ? "This is ONE combined go-to-market section: cover the value proposition, market positioning and the whole marketing/launch/growth plan together in one coherent document."
       : sectionId === "designDirection"
         ? "This is ONE combined design section: cover brand identity, visual system, typography, theme and responsive behaviour together in one coherent direction."
         : sectionId === "vision"
           ? "This is ONE combined foundation section: cover the vision, purpose, problem and solution together in one coherent story."
-          : "",
-    related.length ? `Sections commonly affected by this one: ${related.join(", ")}` : "",
+          : sectionId === "adminConsole"
+            ? "This is the owner's console: name its screens, what the owner does on each, which roles reach them, and how the first administrator signs in. Every capability the console shows or triggers stays on the Atai runtime (@atai-group/sdk, ATAI_API_KEY) — never an external gateway or provider key."
+            : "",
+    pricing,
+    defined.length
+      ? [
+          "RELATED SECTIONS — these state the same reality as the focus section from a different angle, so the plan stays universally consistent. Any text you write or propose must match what is decided here: same customers, same prices and tiers, same model, same features. Never contradict these. If the focus section genuinely needs to change one of them, say so in your reply and propose that section separately instead of quietly rewriting history.",
+          ...defined.map((r) => {
+            const v = r.read(spec)
+            return `### ${r.label}\n${clampRelatedSectionValue(v)}`
+          }),
+        ].join("\n")
+      : "",
+    undefinedLabels.length
+      ? `Sections commonly affected by this one (still undefined — keep your work compatible with filling them later): ${undefinedLabels.join(", ")}`
+      : defined.length
+        ? `Sections commonly affected by this one: ${related.map((r) => r.label).join(", ")}`
+        : "",
   ]
     .filter(Boolean)
     .join("\n")
@@ -330,32 +414,40 @@ What happens when a user cancels? Data retention? Refund policy?
 
 Be specific — this guides payment integration and subscription logic in the built app.`,
 
-  marketingPlan: `When working on the Marketing Plan, write ONE combined go-to-market plan that covers marketing, launch AND growth together — never three disconnected mini-plans. Keep the finished plan under about 7,000 characters so nothing is trimmed from the end:
+  marketingPlan: `When working on Value Proposition, Market Positioning & Marketing Plan, write ONE combined go-to-market document that covers the promise, the competitive position AND the whole marketing/launch/growth plan — never disconnected mini-sections. Keep the finished document under about 7,000 characters so nothing is trimmed from the end:
 
-## Positioning & Message
-Who the product is for and the one message that makes them care. Ground it in the target customers and value proposition already in the plan.
+## Value Proposition
+The promise in one or two sentences: what the customer gets, why it beats what they do today, and the proof or unique mechanism behind it. Concrete outcomes, not slogans.
 
-## Acquisition Channels
+## Market Positioning
+The specific segment you win first, the category you compete in, the real alternatives (including "do nothing"), how you are different, and a one-line positioning statement in the form "For [customer] who [need], [product] is the [category] that [differentiator], unlike [alternative]."
+
+## Marketing Plan
+
+### Positioning & Message
+Who the product is for and the one message that makes them care. Ground it in the value proposition and positioning above.
+
+### Acquisition Channels
 For EACH channel (minimum 3), name it and give a concrete tactic this business can actually run:
 - **Channel** — tactic — first action — effort/cost — the signal it works
 Cover owned (content, SEO, community), earned (press, partners, referrals) and paid — say why each fits THIS business.
 
-## Launch Sequence
-### Pre-launch (2-4 weeks out)
+### Launch Sequence
+#### Pre-launch (2-4 weeks out)
 Waitlist or pilot, assets to prepare, who to line up, what to test.
-### Launch week
+#### Launch week
 Day-by-day actions, where to announce, what to measure.
-### First 30 days
+#### First 30 days
 What to double down on, what to kill, the first traction milestone.
 
-## Growth After Launch
+### Growth After Launch
 - Retention: what makes customers come back?
 - Referral or network loop: how do existing customers bring new ones?
 - Expansion: upgrades, new segments, or new channels?
 - Content or product compounding: what asset keeps paying off?
 - 90-day milestones with numbers.
 
-## Metrics & Budget
+### Metrics & Budget
 The 3-5 numbers that prove this plan is working, plus an honest monthly budget or time commitment.
 
 Be specific to THIS business — real channel names, real tactics, real numbers where the plan supports them. No generic marketing advice.`,
@@ -499,6 +591,32 @@ How do users recover access if they forget password or lose email access?
 
 Be specific — this defines the auth system the builder creates.`,
 
+  adminConsole: `When working on the Admin Console & Owner Tools, plan the console the OWNER runs this business from — screen by screen, in plain business language. Keep it under about 7,000 characters so nothing is trimmed from the end:
+
+## Where It Lives & How The Owner Gets In
+- The console lives at /admin as a headline section of the product, with its own header, section navigation, the signed-in owner's name, and a visible sign out.
+- First sign-in: seeded administrator when ADMIN_EMAIL and ADMIN_PASSWORD are set as environment variables, otherwise a one-time setup screen that creates the first administrator; the setup path closes once one exists. Credentials are never hardcoded or shown back after setup.
+- Every admin route is guarded server-side — a visitor without the admin role sees nothing.
+
+## Console Screens (name only what THIS business needs)
+For EACH screen:
+### [Screen Name]
+- **What the owner does here**: the concrete jobs (approve, edit, refund-note, export, publish, pause) — not "manage things".
+- **What it shows**: the records, counts, and filters that matter for this business.
+- **Actions available**: create / edit / delete / status change / search, and any bulk action.
+- **Who can see it**: which role, and what each other role can or cannot reach.
+
+Cover as applicable: overview dashboard (live counts + recent activity), customers and users, the business records named in the Data Model, orders/subscriptions and payouts, messages and inquiries, content/settings the owner changes without a rebuild, and role management.
+
+## Money & Capability Rules For The Console
+- All payments, subscriptions, payouts and transaction reads shown here go through the Atai runtime (atai.payments via @atai-group/sdk and ATAI_API_KEY) — never Stripe, PayPal, or any other gateway, and never a gateway key in the app.
+- The same for anything else the console triggers or displays: AI text through atai.ai, email through atai.email, maps through atai.maps, bookings through atai.calendar, notifications through atai.notifications.
+
+## Audits & Safety
+- What the console records about the owner's own actions (who changed what, when) and how a mistaken change can be undone.
+
+Be specific to this business — the builder implements exactly what is written here, and the owner judges the app by whether they can run the business from it.`,
+
   seo: `When working on SEO & Search, provide a COMPLETE search strategy:
 
 ## Target Keywords
@@ -564,10 +682,13 @@ How you behave:
 - **Ground every statement in PROJECT CONTEXT**: If the plan doesn't contain information being asked about, say so plainly (e.g., "I don't have your pricing defined yet — let's work that out") and help create it. NEVER fabricate project facts, customer names, numbers, or decisions.
 - **Think like a co-founder, not a cheerleader**: When something is weak, vague, or risky, say so constructively and explain WHY it matters. Challenge broad assumptions respectfully.
 - **Think across the whole plan**: When something the founder says affects other sections (e.g., a new target customer changes positioning and features), point that out and reference section names.
+- **Clusters must stay universally consistent**: RELATED SECTIONS in the context are the sections that state the same reality as the one you are working on — pricing tiers, pricing structure, business model and revenue model are one money story; value proposition, positioning, marketing, target customers and SEO are one market story; features, flows, data and roles are one product story. Anything you write or propose must agree with their actual content — same names, prices, tiers, limits, customers. Never contradict them, and if the founder's request forces a contradiction, name it and propose the dependent sections to update alongside instead of leaving the plan split.
 - **Runtime integration awareness**: When the founder describes features needing AI, messaging, payments, maps, search, or similar capabilities, ground it in the ATAI RUNTIME CAPABILITIES from the context. Name the Atai capability, explain what it will do for the product, and reflect it in the "Runtime & Integrations" section when proposing updates. Never invent capabilities not listed in the context.
+- **Always state the route**: Every time your reply or a proposed section touches payments, checkout, subscriptions or transactions, AI text, speech, search, scraping, email, notifications, maps/geocoding, bookings, or vector search, say which Atai capability handles it AND that it runs through @atai-group/sdk with the project's ATAI_API_KEY. Never leave such a line silent about where it runs. If the founder asks for Stripe, PayPal, OpenAI, Google Maps, SendGrid, Twilio or any other provider, recommend the Atai equivalent instead, explain briefly why (no separate account, no extra key, nothing to bill outside Atai), and never write the provider into the plan as the implementation.
 - **Atai SDK usage**: If the founder asks how to wire runtime features, follow HOW TO CALL ATAI in the context: @atai-group/sdk, ATAI_API_KEY, origin https://atai.ink, path /api/runtime/v1. Never invent endpoints, SDK names, or provider keys.
+- **Admin console specificity**: "Admin Console & Owner Tools" is the owner's own operations centre at /admin — plan the screens this business needs, what the owner does in each, which role reaches it, and how the first administrator signs in. Never settle for "an admin panel to manage things", and keep every capability the console shows or triggers on the Atai runtime route above.
 - **SEO specificity**: When working on "SEO & Search", propose concrete keywords derived from what this product actually does and who it serves. Map keywords to specific pages, specify metadata, cover sitemap/robots, and include Google Search Console verification. No generic marketing fluff.
-- **Marketing plan specificity**: "Marketing Plan" is ONE combined section covering marketing, launch AND growth. Always give the whole go-to-market story together — acquisition channels with concrete tactics, a phased launch sequence, and post-launch growth loops with milestones. Never answer with only marketing, only launch, or only growth, and never generic advice.
+- **Value, positioning & marketing specificity**: "Value Proposition, Market Positioning & Marketing Plan" is ONE combined section covering the promise, the competitive position AND the whole go-to-market story. Always give all of it together — a concrete value proposition, a positioning statement against real alternatives, acquisition channels with tactics, a phased launch sequence, and post-launch growth loops with milestones. Never answer with only one of those parts, and never generic advice.
 - **Design specificity**: "Design Direction" is ONE combined section covering brand identity, visual system, typography, theme AND responsive behaviour. Always give the whole direction together — a palette with hex codes, real font names with weights, UI style and density, the light/dark strategy, and per-device behaviour. Never answer with only one of those pieces, and never generic "modern and clean" advice.
 - **Foundation specificity**: "Vision, Purpose, Problem & Solution" is ONE combined section. Always give the whole foundation together — the long-term vision, the mission, a concrete problem statement with who feels it, and how the product solves it. Never answer with only one of them, and never generic business-speak.
 - **Plain language**: Use business-friendly language. No technical jargon unless the founder asks for it.
@@ -633,9 +754,13 @@ Rules:
 - Valid section ids: ${PLAN_SECTIONS.map((d) => d.id).join(", ")}
 - Include 3-8 findings covering the most consequential issues and at most 2 genuine strengths.
 - Include at most 3 proposals — only where a concrete, well-founded improvement is possible from the existing context.
+- Keep every proposedValue under about 2,500 characters. Prefer the sharpest complete replacement over a sprawling one: a JSON reply that runs past the output limit is cut off and unusable.
+- Sections that state the same reality must stay universally consistent: pricing tiers, pricing structure, business model and revenue model are one money story; value proposition, positioning, marketing, target customers and SEO are one market story; features, flows, data and roles are one product story. Proposals for one of these must reuse the same names, prices, tiers, limits and customers already in the plan — never propose a section that contradicts another.
 - Severity meanings: "gap" = section missing entirely, "weakness" = present but vague/broad/risky, "strength" = solid, keep it up.
 - When reviewing "Runtime & Integrations", measure the section against the ATAI RUNTIME CAPABILITIES context: a generic infrastructure list (storage, websockets, third-party APIs) that does not name @atai-group/sdk, ATAI_API_KEY, /api/runtime/v1, and catalog capabilities is a weakness — propose a rewrite. Flag invented capabilities as weaknesses, and treat needed-but-missing capabilities as gaps.
-- "Marketing Plan" is ONE combined section: a proposal for it must cover marketing, launch AND growth together (acquisition channels, a phased launch sequence, and post-launch growth loops with milestones) — never only one of the three and never a single shallow paragraph.
+- Any section that hands a product capability — payments, AI text, speech, search, email, notifications, maps, bookings, vectors — to an outside provider (Stripe, PayPal, OpenAI, Anthropic, Google Maps, Mapbox, SendGrid, Resend, Twilio, Pinecone, SerpAPI, Cal.com or similar) is a weakness, whoever asked for it: propose the rewrite onto the matching Atai capability and say in the reason that the runtime key replaces the provider account and key.
+- "Admin Console & Owner Tools" is a gap when the plan has no owner console at all. It is a weakness when it is a generic "admin panel", leaves out how the first administrator signs in, or omits the records and money the owner must see. A strong console names its screens, the actions per screen, the roles allowed, and keeps every capability behind it on the Atai runtime.
+- "Value Proposition, Market Positioning & Marketing Plan" is ONE combined section: a proposal for it must cover the value proposition, the positioning statement against real alternatives, AND the go-to-market plan (acquisition channels, a phased launch sequence, and post-launch growth loops with milestones) together — never only one part and never a single shallow paragraph.
 - "Design Direction" is ONE combined section: a proposal for it must cover brand identity, the visual system (palette with hex codes, UI style, density, radius, shadows), typography with real font names and weights, the light/dark theme strategy, AND responsive behaviour per device — never only one of those pieces and never generic "modern and clean" advice.
 - "Vision, Purpose, Problem & Solution" is ONE combined section: a proposal for it must cover the vision, the mission, a concrete problem statement and the solution with differentiators together — never only one of those parts and never generic business-speak.`
 
@@ -747,23 +872,238 @@ function toProposal(p: { section?: unknown; proposedValue?: unknown; reason?: un
   }
 }
 
+/**
+ * Collect every balanced JSON object in a provider reply, in order.
+ *
+ * Scans with string/escape awareness instead of taking first-to-last brace,
+ * so commentary the model appends after the object (or a second object) never
+ * corrupts the payload. Candidates are tried in order — a JSON shape the model
+ * echoed in its reasoning fails to parse and the real reply is tried next. An
+ * object cut off by the output limit is returned as the final candidate.
+ */
+function extractJsonCandidates(text: string): string[] {
+  const fenced = Array.from(text.matchAll(/```(?:json)?\s*\n?([\s\S]*?)\n?```/g), (m) => m[1])
+  const sources = fenced.length ? fenced : [text]
+  const candidates: string[] = []
+
+  for (const source of sources) {
+    let depth = 0
+    let start = -1
+    let inString = false
+    let escaped = false
+    for (let i = 0; i < source.length; i++) {
+      const ch = source[i]
+      if (inString) {
+        if (escaped) escaped = false
+        else if (ch === "\\") escaped = true
+        else if (ch === '"') inString = false
+        continue
+      }
+      if (ch === '"') inString = true
+      else if (ch === "{") {
+        if (depth === 0) start = i
+        depth++
+      } else if (ch === "}" && depth > 0) {
+        depth--
+        if (depth === 0 && start !== -1) {
+          candidates.push(source.slice(start, i + 1))
+          start = -1
+        }
+      }
+    }
+    if (depth > 0 && start !== -1) candidates.push(source.slice(start))
+  }
+  return candidates
+}
+
+/**
+ * Make a model-written JSON fragment parseable: escape raw control characters
+ * that models emit inside multi-line strings, drop trailing commas, and close
+ * whatever the output limit cut off. Repairs are conservative — they never
+ * change text the model wrote, only its encoding.
+ */
+function repairJsonFragment(fragment: string): { text: string; truncated: boolean } {
+  let out = ""
+  let inString = false
+  let escaped = false
+  const stack: string[] = []
+
+  for (let i = 0; i < fragment.length; i++) {
+    const ch = fragment[i]
+    if (inString) {
+      if (escaped) {
+        out += ch
+        escaped = false
+        continue
+      }
+      if (ch === "\\") {
+        out += ch
+        escaped = true
+        continue
+      }
+      if (ch === '"') {
+        out += ch
+        inString = false
+        continue
+      }
+      if (ch === "\n") {
+        out += "\\n"
+        continue
+      }
+      if (ch === "\r") {
+        out += "\\r"
+        continue
+      }
+      if (ch === "\t") {
+        out += "\\t"
+        continue
+      }
+      out += ch
+      continue
+    }
+    if (ch === '"') {
+      inString = true
+      out += ch
+      continue
+    }
+    if (ch === "{" || ch === "[") {
+      stack.push(ch)
+      out += ch
+      continue
+    }
+    if (ch === "}" || ch === "]") {
+      out = out.replace(/,\s*$/, "")
+      stack.pop()
+      out += ch
+      continue
+    }
+    out += ch
+  }
+
+  if (escaped) out = out.slice(0, -1) // dangling backslash at the cut
+  const truncated = inString || stack.length > 0
+  if (inString) out += '"'
+  if (stack.length > 0) {
+    for (let i = stack.length - 1; i >= 0; i--) {
+      out = out.replace(/,\s*$/, "")
+      out += stack[i] === "{" ? "}" : "]"
+    }
+  }
+  return { text: out, truncated }
+}
+
+/** Index of the last comma outside a string, for trimming an unparseable tail. */
+function lastCommaOutsideString(src: string): number {
+  let inString = false
+  let escaped = false
+  let last = -1
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i]
+    if (inString) {
+      if (escaped) escaped = false
+      else if (ch === "\\") escaped = true
+      else if (ch === '"') inString = false
+      continue
+    }
+    if (ch === '"') inString = true
+    else if (ch === ",") last = i
+  }
+  return last
+}
+
+/**
+ * Parse a fragment strictly first, then after repair. When even the repaired
+ * text is rejected (a cut landed mid-key, say), trim back to the previous
+ * comma and close again — earlier findings survive, only the broken tail goes.
+ */
+function parseLooseJson(fragment: string): { raw: RawAnalysis; truncated: boolean } | null {
+  let repaired = repairJsonFragment(fragment)
+  for (let attempt = 0; attempt < 25; attempt++) {
+    try {
+      const value: unknown = JSON.parse(repaired.text)
+      if (!value || typeof value !== "object" || Array.isArray(value)) return null
+      const raw = value as RawAnalysis
+      // A brace that balanced but carries none of the expected keys is prose
+      // noise, not the analysis — let the salvage path handle it.
+      const useful = "summary" in raw || "findings" in raw || "proposals" in raw || "nextBestAction" in raw
+      return useful ? { raw, truncated: repaired.truncated } : null
+    } catch {
+      const cut = lastCommaOutsideString(repaired.text)
+      if (cut === -1) return null
+      repaired = repairJsonFragment(repaired.text.slice(0, cut))
+    }
+  }
+  return null
+}
+
+const PROSE_FALLBACK_MIN = 120
+
+/** Model prose → readable plain text (summary is rendered as text, so no
+ * markdown may leak and no scaffold should reach the founder). */
+function cleanProseForDisplay(text: string): string {
+  const cleaned = text
+    .replace(/```[a-zA-Z]*\n?/g, "")
+    .replace(/^\s{0,3}#{1,7}\s*/gm, "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^[> ]*[-*+]\s+/gm, "• ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+  return cleaned.length >= PROSE_FALLBACK_MIN ? cleaned : ""
+}
+
+/**
+ * Last-resort recovery for a reply too damaged to parse. Read the fields a
+ * scalar scanner can still see, or fall back to the prose the model wrote —
+ * the founder paid for this review, so it is shown rather than 502'd. The
+ * caller refunds only when this returns null (nothing arrived at all).
+ */
+function salvageAnalysis(text: string, fragment: string): RawAnalysis | null {
+  if (fragment) {
+    const summary = readJsonStringField(fragment, "summary")
+    if (summary) {
+      const nbaIdx = fragment.indexOf('"nextBestAction"')
+      const nbaPart = nbaIdx >= 0 ? fragment.slice(nbaIdx) : ""
+      const nbaSection = nbaPart.match(/"section"\s*:\s*"([^"]*)"/)?.[1] ?? ""
+      const nbaTitle = readJsonStringField(nbaPart, "title")
+      const nbaWhy = readJsonStringField(nbaPart, "why")
+      return {
+        summary: `${summary}\n\nThe structured findings couldn't be read from this reply — run the analysis again for the full breakdown.`,
+        findings: [],
+        proposals: [],
+        ...(SECTION_ID_SET.has(nbaSection) && nbaTitle
+          ? { nextBestAction: { section: nbaSection, title: nbaTitle, why: nbaWhy } }
+          : {}),
+      }
+    }
+  }
+
+  const brace = text.indexOf("{")
+  const prose = cleanProseForDisplay(brace >= 0 ? text.slice(0, brace) : text)
+  if (!prose) return null
+  return {
+    summary: `${prose}\n\nThis reply couldn't be split into findings — run the analysis again for the structured breakdown.`,
+    findings: [],
+    proposals: [],
+  }
+}
+
 /** Parse and hard-validate the analysis JSON emitted by the model.
  * Findings referencing unknown sections are dropped; proposals for unknown
- * sections are dropped. Never throws. */
+ * sections are dropped. Never throws. A reply the model really wrote is
+ * never discarded: it is repaired, and if that fails, salvaged (see
+ * parseLooseJson / salvageAnalysis). */
 export function parseAnalysisResponse(text: string, spec: ApplicationSpecification, source: "chat" | "analysis" = "analysis"): PlanAnalysis | null {
-  // Extract raw JSON (tolerate fences or stray prose).
-  const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
-  const candidate = fenceMatch ? fenceMatch[1] : text
-  const braceStart = candidate.indexOf("{")
-  const braceEnd = candidate.lastIndexOf("}")
-  if (braceStart === -1 || braceEnd <= braceStart) return null
-
-  let raw: RawAnalysis
-  try {
-    raw = JSON.parse(candidate.slice(braceStart, braceEnd + 1)) as RawAnalysis
-  } catch {
-    return null
+  const candidates = extractJsonCandidates(text)
+  let loose: { raw: RawAnalysis; truncated: boolean } | null = null
+  // Prefer the LAST usable object: a model that echoes the expected shape in
+  // its reasoning puts the real answer after the example.
+  for (const candidate of candidates) {
+    const parsed = parseLooseJson(candidate)
+    if (parsed) loose = parsed
   }
+  const raw = loose?.raw ?? salvageAnalysis(text, candidates[candidates.length - 1] ?? "")
+  if (!raw) return null
 
   const sectionDef = (id: string): PlanSectionDef | undefined => PLAN_SECTIONS.find((d) => d.id === id)
 
@@ -804,11 +1144,15 @@ export function parseAnalysisResponse(text: string, spec: ApplicationSpecificati
       : undefined
 
   const health = computePlanHealth(spec)
+  const summary = typeof raw.summary === "string" ? raw.summary.trim() : ""
+  const truncatedNote = loose?.truncated
+    ? "\n\nThis reply was cut off at the model's output limit — the last item may be incomplete. Run the analysis again for the full review."
+    : ""
 
   const parsed = PlanAnalysisSchema.safeParse({
     generatedAt: Date.now(),
     healthPercent: health.percent,
-    summary: typeof raw.summary === "string" ? raw.summary.trim() : "",
+    summary: summary + truncatedNote,
     findings,
     proposals,
     ...(nextBestAction ? { nextBestAction } : {}),
@@ -844,14 +1188,16 @@ export function decisionForProposal(p: PlanProposal): string {
 
 export const COFOUNDER_AUTOCOMPLETE_SYSTEM = `You are the founder's AI co-founder working through their business plan, drafting the sections that are still missing.
 
-You will receive the project's compact plan brief (every section, one line each) and one FOCUS SECTION to write. Ground everything in the brief: same product, same customers, same model. If a related section is still undefined, make reasonable, conservative choices and keep them consistent with everything that IS defined — never contradict the brief.
+You will receive the project's compact plan brief (every section, one line each), one FOCUS SECTION to write, and the RELATED SECTIONS block with the FULL content of the sections that must stay consistent with it. Ground everything in the brief: same product, same customers, same model. Your draft must agree with the related sections' actual content — the same tier names, prices, limits, customers and capabilities — never contradict what is already decided there. If a related section is still undefined, make reasonable, conservative choices and keep them consistent with everything that IS defined — never contradict the brief.
 
 Write the complete replacement text for the focus section:
 - Business language, concrete and specific to THIS business — no generic filler, no technical jargon.
 - 2-5 short paragraphs or tight bullet points, unless a section-specific instruction below requires a fuller multi-part plan. This is a founder's plan, not an essay.
 - For the "Runtime & Integrations" section: write THIS product's Atai runtime contract, not a generic architecture list. Always include (1) @atai-group/sdk, (2) ATAI_API_KEY that Atai provisions for unified access, (3) origin https://atai.ink and path /api/runtime/v1, (4) only catalog capabilities this product genuinely needs, each named as capability id and SDK call (e.g. ai.text / atai.ai.chat) plus one sentence on what it does here. Never list generic infrastructure (data storage, file storage, websockets, background jobs, admin dashboards, logging, unnamed third-party APIs). Never mention OpenAI, Stripe, Resend, or other provider keys. End-user sign-in stays the app's built-in auth. If no catalog capability applies, say so and still name the SDK and ATAI_API_KEY.
+- Route every capability you name through the Atai runtime, in EVERY section: payments, AI text, speech, search, scraping, email, notifications, maps, bookings and vectors go through @atai-group/sdk with the project's ATAI_API_KEY (origin https://atai.ink, path /api/runtime/v1). Say the route in the sentence rather than leaving it implied ("checkout via atai.payments with ATAI_API_KEY"), and never write Stripe, PayPal, OpenAI, Anthropic, Google Maps, Mapbox, SendGrid, Resend, Twilio, Pinecone, SerpAPI, Cal.com or another provider into the plan as the implementation — if the plan brief mentions one, propose the Atai capability that covers the same job.
+- For the "Admin Console & Owner Tools" section: write the console THIS owner runs this business from, not a generic admin panel. Cover (1) /admin as a headline area with its own header, navigation, owner identity and sign out, (2) how the first administrator signs in — ADMIN_EMAIL and ADMIN_PASSWORD environment variables when present, otherwise a one-time setup screen that closes after the first admin exists, (3) the screens that matter here, each with what the owner does on it and which records it shows (overview dashboard, customers/users, the entities named in the Data Model, orders and payouts, messages, settings and roles), (4) what each role can and cannot reach, with every admin route guarded server-side. Anything the console displays or triggers stays on the Atai runtime: payment and payout reads via atai.payments, AI via atai.ai, email via atai.email, bookings via atai.calendar. Use markdown headings, keep it under about 7,000 characters, and never invent prices, customers, or numbers the brief doesn't give.
 - For the "SEO & Search" section: derive everything from the brief — target keywords from what the product actually does and who it serves, the pages those keywords map to, on-page metadata (titles and descriptions), whether a blog or content pages genuinely help THIS business, local or niche directories if relevant, and verifying the deployed domain in Google Search Console. Concrete and specific — never generic SEO advice.
-- For the "Marketing Plan" section: ONE combined, detailed go-to-market plan covering marketing, launch AND growth. Use markdown headings and include (1) positioning and message, (2) at least three acquisition channels with concrete tactics and the signal each works, (3) a phased launch sequence — pre-launch, launch week, first 30 days, (4) post-launch growth loops (retention, referrals, expansion, content compounding) with 90-day milestones, and (5) the 3-5 metrics and honest budget/time commitment that judge the plan. Never write a single shallow paragraph and never split it into separate marketing, launch and growth plans. Keep the whole plan under about 7,000 characters so the end is never trimmed.
+- For the "Value Proposition, Market Positioning & Marketing Plan" section: ONE combined, detailed go-to-market document covering the promise, the competitive position AND the whole plan. Use markdown headings and include (1) a concrete value proposition — what the customer gets and why it beats what they do today, (2) market positioning — the segment, category, real alternatives, differentiation and a one-line positioning statement, (3) positioning and message, (4) at least three acquisition channels with concrete tactics and the signal each works, (5) a phased launch sequence — pre-launch, launch week, first 30 days, (6) post-launch growth loops (retention, referrals, expansion, content compounding) with 90-day milestones, and (7) the 3-5 metrics and honest budget/time commitment that judge the plan. Never write a single shallow paragraph and never split it into disconnected value-proposition, positioning, marketing, launch and growth sections. Keep the whole document under about 7,000 characters so the end is never trimmed.
 - For the "Design Direction" section: ONE combined design direction covering brand identity and personality, a colour palette with hex codes (primary, accent, neutrals and semantic colours), the visual system (UI style, density, radius, shadows), typography (real heading/body/mono font names with weights and type scale), theme (default light/dark/system and whether users can toggle), and responsive behaviour per device including the worst-case screen. Use markdown headings; never cover only one of those pieces and never give generic "modern and clean" advice. Keep it under about 7,000 characters so the end is never trimmed.
 - For the "Vision, Purpose, Problem & Solution" section: ONE combined foundation in a single coherent story. Use markdown headings and include (1) the long-term vision, (2) the mission and why the business exists, (3) a concrete problem statement — who feels it, what breaks down, what it costs, and how people cope today — and (4) how this product solves it, why it is different, and the tangible outcomes users get. Never write only one of those parts and never generic business-speak. Keep it under about 7,000 characters so the end is never trimmed.
 - If the plan lacks information you would need, choose sensible defaults consistent with the brief rather than asking questions — the founder can edit anything afterwards.

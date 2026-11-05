@@ -212,7 +212,9 @@ export class ModelRegistry {
       researchAgent: {
         primary: resolveModel(process.env.RESEARCH_MODEL, 'RESEARCH_MODEL', globalModel),
         fallbacks: buildFallbacks(process.env.RESEARCH_FALLBACK_MODEL, 'RESEARCH_FALLBACK_MODEL'),
-        maxTokens: 4000,
+        // Gap analysis returns long JSON arrays; at 4000 the answer was cut
+        // mid-array and the whole stage failed.
+        maxTokens: 8000,
         temperature: 0.7,
       },
       primaryPlanner: {

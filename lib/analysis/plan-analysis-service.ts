@@ -93,7 +93,7 @@ export async function runPlanAnalysis(
       model: MODEL,
       system: COFOUNDER_ANALYZE_SYSTEM,
       prompt: context,
-      maxOutputTokens: 4096,
+      maxOutputTokens: 8192,
     })
     text = result.text
   } catch (aiError) {
@@ -103,7 +103,8 @@ export async function runPlanAnalysis(
 
   const parsed = parseAnalysisResponse(text, spec)
   if (!parsed) {
-    return { ok: false, status: 502, code: "UNKNOWN", message: "The analysis came back unreadable. Please try again." }
+    await refundCollaboration(userId, projectId, "analysis")
+    return { ok: false, status: 502, code: "UNKNOWN", message: "The analysis came back unreadable. No credits were kept — please try again." }
   }
 
   const costs = await getCollaborateCosts()

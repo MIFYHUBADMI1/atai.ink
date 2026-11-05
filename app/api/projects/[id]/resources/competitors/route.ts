@@ -6,6 +6,7 @@ import { scopedIntentKey } from "@/lib/billing/operation-identity"
 import { generateWithRetry, logAIFailure } from "@/lib/resources/ai-retry"
 import { refuseInsufficientCredits } from "@/lib/api/credit-refusal"
 import { RESOURCES_CREDIT_COSTS } from "@/lib/resources/credit-costs"
+import { readValuePropositionText } from "@/lib/analysis/plan-sections"
 
 /** Read the optional client intent id (idempotency identity only — validated
  * and scoped to this authenticated user + this ownership-checked project). */
@@ -59,7 +60,7 @@ Business details:
 - Description: ${spec.description || spec.purpose || ""}
 - Target customers: ${(spec.targetUsers || []).join(", ") || "Not specified"}
 - Business model: ${spec.businessModel || "Not specified"}
-- Value proposition: ${spec.valueProposition || "Not specified"}
+- Value proposition: ${readValuePropositionText(spec) || "Not specified"}
 
 Return a JSON array with this exact structure for each competitor:
 [

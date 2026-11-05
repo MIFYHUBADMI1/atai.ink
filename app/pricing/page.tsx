@@ -27,50 +27,50 @@ const TIERS = Object.values(BUILD_TIERS).map((tier) => ({
   popular: tier.id === "medium",
   features: tier.id === "simple"
     ? [
-      "Basic website/application generation",
+      "A first live version of the business",
       "Standard pages and components",
       "Responsive UI",
       "Basic functionality",
-      "Suitable for simpler projects",
+      "Right for testing one offer",
     ]
     : tier.id === "medium"
       ? [
-        "Multi-page applications",
-        "Authentication",
-        "Database-backed functionality",
+        "A business with real customers",
+        "Sign-in and member areas",
+        "Database-backed records of your work and sales",
         "APIs",
         "Dashboards",
-        "More advanced application logic",
+        "Pricing tiers, offers and richer logic",
         "More customization",
       ]
       : [
-        "Complex application structures",
+        "A full platform business",
         "Advanced backend functionality",
-        "Multiple application features",
+        "Multiple revenue and operations features",
         "More sophisticated data flows",
         "Advanced integrations",
-        "Larger full-stack projects",
+        "Larger businesses, end to end",
       ],
 }))
 
 export const metadata: Metadata = {
-  title: "Atai Pricing | Credits & Application Generation Plans",
+  title: "Atai Pricing | Credits & Business Launch Plans",
   description:
-    "Choose an Atai plan to generate full-stack applications. Simple, Medium, and Complex tiers with transparent credit-based pricing.",
+    "Choose an Atai plan to launch and run a business with your own AI team. Simple, Medium, and Complex builds with transparent credit-based pricing.",
   alternates: { canonical: "/pricing" },
   openGraph: {
     type: "website",
     locale: "en_US",
     url: `${SITE_URL}/pricing`,
     siteName: "Atai",
-    title: "Atai Pricing | Credits & Application Generation Plans",
-    description: "Choose an Atai plan to generate full-stack applications. Simple, Medium, and Complex tiers with transparent credit-based pricing.",
+    title: "Atai Pricing | Credits & Business Launch Plans",
+    description: "Choose an Atai plan to launch and run a business with your own AI team. Simple, Medium, and Complex builds with transparent credit-based pricing.",
     images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Atai Pricing" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Atai Pricing | Credits & Application Generation Plans",
-    description: "Choose an Atai plan to generate full-stack applications.",
+    title: "Atai Pricing | Credits & Business Launch Plans",
+    description: "Choose an Atai plan to launch and run a business with your own AI team.",
     images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Atai Pricing" }],
   },
 }
@@ -79,7 +79,7 @@ const pricingStructuredData = {
   "@context": "https://schema.org",
   "@type": "Product",
   name: "Atai",
-  description: "The founder platform for launching businesses without code. Turn ideas into working full-stack applications.",
+  description: "Atai.ink is the business builder for founders: launch, run and grow a real business with an AI team — customers, sales and your own admin console included. No code.",
   brand: { "@type": "Organization", name: "ATAI Enterprises", url: "https://atai.ink" },
   offers: SUBSCRIPTION_PLANS.filter((p) => !p.custom).map((plan) => ({
     "@type": "Offer",
@@ -109,15 +109,16 @@ export default async function PricingPage() {
       <section className="mx-auto max-w-4xl px-6 pt-20 pb-16 text-center">
         <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">Pricing</p>
         <h1 className="mt-4 text-4xl font-semibold tracking-tight sm:text-5xl">
-          Build More With<br />{CREDIT_UNIT_NAME}
+          Run More Businesses On<br />{CREDIT_UNIT_NAME}
         </h1>
         <p className="mt-5 text-lg text-muted-foreground max-w-xl mx-auto">
-          Use credits to create, improve and customize applications with Atai.
+          Credits power your AI team as it launches, improves and runs the business —
+          from the first idea to the first paying customer.
           Start with {WELCOME_BONUS_CREDITS.toLocaleString()} free credits on us.
         </p>
         <div className="mt-8 flex items-center justify-center gap-3">
           <AuthTrigger view="signup" next="/pricing" className={buttonVariants({ size: "lg" }) + " h-12 px-6"}>
-            Start Building <ArrowRight className="size-4" />
+            Start your business <ArrowRight className="size-4" />
           </AuthTrigger>
         </div>
       </section>
@@ -231,13 +232,13 @@ export default async function PricingPage() {
         </div>
       </section>
 
-      {/* Application Generation Pricing */}
+      {/* Build Tier Pricing — sized to the business, not a toy project */}
       <section className="mx-auto max-w-5xl px-6 py-20">
         <div className="text-center mb-12">
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">Application Generation</p>
-          <h2 className="mt-3 text-3xl font-semibold tracking-tight">Choose Your Project Size</h2>
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">Launches &amp; Upgrades</p>
+          <h2 className="mt-3 text-3xl font-semibold tracking-tight">Choose Your Build Size</h2>
           <p className="mt-3 text-muted-foreground">
-            Credits are consumed when Atai builds your application.
+            Credits are consumed when Atai's team works on your business — launching it, changing it, growing it.
           </p>
         </div>
 
@@ -302,7 +303,7 @@ export default async function PricingPage() {
             <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">Hosting Options</p>
             <h2 className="mt-3 text-3xl font-semibold tracking-tight">Free Subdomain vs Custom Domain</h2>
             <p className="mt-3 text-muted-foreground max-w-xl mx-auto">
-              After building your app, you can publish it to a free subdomain or connect your own domain.
+              Once your business is built, publish it to a free subdomain or connect your own domain.
               Both options cost 500 credits and include HTTPS, CDN, and lifetime hosting.
             </p>
           </div>
@@ -474,14 +475,14 @@ export default async function PricingPage() {
       <section className="border-y border-border bg-card/40">
         <div className="mx-auto max-w-4xl px-6 py-16 text-center">
           <h2 className="text-2xl font-semibold tracking-tight">
-            Ready to build something real?
+            Ready to run something real?
           </h2>
           <p className="mt-3 text-muted-foreground">
-            Start with {WELCOME_BONUS_CREDITS.toLocaleString()} free credits and see what Atai can create.
+            Start with {WELCOME_BONUS_CREDITS.toLocaleString()} free credits and let your AI team take it from the first idea to the first customer.
           </p>
           <div className="mt-6 flex items-center justify-center gap-3">
             <AuthTrigger view="signup" next="/pricing" className={buttonVariants({ size: "lg" }) + " h-12 px-6"}>
-              Try Atai <ArrowRight className="size-4" />
+              Start free <ArrowRight className="size-4" />
             </AuthTrigger>
           </div>
         </div>
@@ -493,7 +494,7 @@ export default async function PricingPage() {
           <p className="mb-4 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Learn more</p>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              { href: "/docs", icon: BookOpen, label: "Documentation", desc: "Complete guides on building with Atai", color: "text-primary", bg: "bg-primary/10" },
+              { href: "/docs", icon: BookOpen, label: "Documentation", desc: "Guides to launching and running a business with Atai", color: "text-primary", bg: "bg-primary/10" },
               { href: "/sdk", icon: Code2, label: "SDK & API", desc: "Runtime API reference — @atai-group/sdk", color: "text-cyan-600 dark:text-cyan-400", bg: "bg-cyan-500/10" },
               { href: "/developers", icon: Zap, label: "Developers", desc: "Atai infrastructure for your own projects", color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-500/10" },
               { href: "/about", icon: LinkIcon, label: "About Atai", desc: "Our mission and story", color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-500/10" },

@@ -363,6 +363,8 @@ export function buildNotificationInbox(input: {
   creditsAvailable?: number
   now?: number
   featureRequests?: { id: string; title: string; status: string; updatedAt: number }[]
+  maxItems?: number
+  maxFeatureRequests?: number
 }): InboxItem[] {
   const now = input.now ?? Date.now()
   const items: InboxItem[] = []
@@ -428,7 +430,7 @@ export function buildNotificationInbox(input: {
   const requests = [...(input.featureRequests ?? [])]
     .filter((r) => requestStatusCopy[r.status])
     .sort((a, b) => b.updatedAt - a.updatedAt)
-    .slice(0, 3)
+    .slice(0, input.maxFeatureRequests ?? 3)
   for (const request of requests) {
     const copy = requestStatusCopy[request.status]!
     items.push({
@@ -449,7 +451,62 @@ export function buildNotificationInbox(input: {
       if (sr !== 0) return sr
       return b.at - a.at
     })
-    .slice(0, 12)
+    .slice(0, input.maxItems ?? 12)
+}
+
+export type NotificationTab = "all" | "unread" | "action" | "progress" | "update" | "dismissed"
+export type NotificationSort = "newest" | "oldest" | "priority"
+
+/**
+ * Shared selection for both inbox surfaces: the header preview (limit 3, unseen
+ * first) and the full /notifications page (search, tabs, sorting).
+ */
+export function selectNotifications(input: {
+  items: InboxItem[]
+  read: Set<string>
+  dismissed: Set<string>
+  tab?: NotificationTab
+  search?: string
+  sort?: NotificationSort
+  preferUnread?: boolean
+  limit?: number
+}): InboxItem[] {
+  const tab = input.tab ?? "all"
+  const sort = input.sort ?? "newest"
+  const query = (input.search ?? "").trim().toLowerCase()
+
+  const items = input.items.filter((item) => {
+    const gone = input.dismissed.has(item.id)
+    if (tab === "dismissed") {
+      if (!gone) return false
+    } else if (gone) {
+      return false
+    }
+    if (tab === "unread" && input.read.has(item.id)) return false
+    if (tab === "action" || tab === "progress" || tab === "update") {
+      if (item.kind !== tab) return false
+    }
+    if (query) {
+      const haystack = `${item.title} ${item.description} ${item.actionLabel} ${item.kind}`.toLowerCase()
+      if (!haystack.includes(query)) return false
+    }
+    return true
+  })
+
+  items.sort((a, b) => {
+    if (input.preferUnread) {
+      const seen = Number(input.read.has(a.id)) - Number(input.read.has(b.id))
+      if (seen !== 0) return seen
+    }
+    if (sort === "oldest") return a.at - b.at
+    if (sort === "priority") {
+      const sr = SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]
+      return sr !== 0 ? sr : b.at - a.at
+    }
+    return b.at - a.at
+  })
+
+  return input.limit === undefined ? items : items.slice(0, input.limit)
 }
 
 const NOISY_STAGES = new Set(["heartbeat", "poll", "status"])

@@ -92,7 +92,7 @@ async function post(req: Request, { params }: { params: Promise<{ id: string }> 
         model: MODEL,
         system: COFOUNDER_ANALYZE_SYSTEM,
         prompt: context,
-        maxOutputTokens: 4096,
+        maxOutputTokens: 8192,
         maxRetries: 3,
         abortSignal: aiSignal(),
       })
@@ -108,7 +108,7 @@ async function post(req: Request, { params }: { params: Promise<{ id: string }> 
       const salvaged = await requestRawCompletion({
         system: COFOUNDER_ANALYZE_SYSTEM,
         prompt: context,
-        maxOutputTokens: 4096,
+        maxOutputTokens: 8192,
       })
       if (salvaged?.text.trim()) {
         text = salvaged.text
@@ -138,6 +138,8 @@ async function post(req: Request, { params }: { params: Promise<{ id: string }> 
       logger.warn("api.projects.analyze-plan", "analysis response was unreadable", {
         projectId: id,
         length: text.length,
+        head: text.slice(0, 160).replace(/\s+/g, " "),
+        tail: text.slice(-160).replace(/\s+/g, " "),
       })
       return fail("UNKNOWN", "The analysis came back unreadable. No credits were kept — please try again.", 502)
     }

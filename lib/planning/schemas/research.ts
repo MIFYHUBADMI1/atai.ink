@@ -44,7 +44,8 @@ export function getEmptyFindings(analyzedType: "idea" | "website", modelUsed: st
     uxGaps: [],
     technicalRisks: [],
     recommendations: [],
-    completenessScore: 100, // Optimistic score when no analysis performed
+    completenessScore: 0, // Nothing measured — an empty result is not a perfect one
+    analysisFailed: true,
     analyzedType,
     createdAt: Date.now(),
     modelUsed,

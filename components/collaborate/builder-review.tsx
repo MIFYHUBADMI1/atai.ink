@@ -10,8 +10,9 @@ import {
   Sparkles,
   Target,
 } from "lucide-react"
-import { PLAN_SECTIONS, sectionStatus, type PlanSectionId } from "@/lib/analysis/plan-sections"
-import { buildInitialBuildPrompt } from "@/lib/analysis/prompt-builder"
+import { PLAN_SECTIONS, sectionStatus, type PlanSectionId, readCombinedMarketingPlan } from "@/lib/analysis/plan-sections"
+import { buildInitialBuildPrompt, specCapabilityClaims } from "@/lib/analysis/prompt-builder"
+import { findPlanContradictions } from "@/lib/analysis/consistency"
 import type { AIArtifact, AIArtifactStatus } from "@/lib/types/ai-artifacts"
 import type { ApplicationSpecification } from "@/lib/types/specification"
 import type { ProjectPreferences } from "@/lib/types/project"
@@ -93,8 +94,9 @@ export function computeBriefCoverage(
   spec: ApplicationSpecification,
   understanding?: ProjectUnderstanding,
   preferences?: ProjectPreferences,
+  founderIdea?: string,
 ): BriefCoverage {
-  const prompt = buildInitialBuildPrompt(spec, understanding, preferences)
+  const prompt = buildInitialBuildPrompt(spec, understanding, preferences, founderIdea)
   const inBrief = PLAN_SECTIONS.filter((def) => briefMatchFor(def, spec, prompt).inBrief).map((def) => def.id)
   return { prompt, inBrief, total: PLAN_SECTIONS.length }
 }
@@ -103,18 +105,20 @@ export function BuilderReviewPanel({
   spec,
   understanding,
   preferences,
+  founderIdea,
   artifacts,
   onClose,
 }: {
   spec: ApplicationSpecification
   understanding?: ProjectUnderstanding
   preferences?: ProjectPreferences
+  founderIdea?: string
   artifacts: AIArtifact[]
   onClose?: () => void
 }) {
   const coverage = useMemo(
-    () => computeBriefCoverage(spec, understanding, preferences),
-    [spec, understanding, preferences],
+    () => computeBriefCoverage(spec, understanding, preferences, founderIdea),
+    [spec, understanding, preferences, founderIdea],
   )
   const prompt = coverage.prompt
 
@@ -140,6 +144,18 @@ export function BuilderReviewPanel({
   }, [sections])
 
   const stages = useMemo(() => [...artifacts].sort((a, b) => a.at - b.at), [artifacts])
+
+  const claimWarnings = useMemo(
+    () => specCapabilityClaims(spec, readCombinedMarketingPlan(spec)),
+    [spec],
+  )
+
+  // Same detector the brief uses, so the Review can never disagree with what
+  // the builder actually receives.
+  const contradictionWarnings = useMemo(
+    () => findPlanContradictions(spec, preferences, founderIdea),
+    [spec, preferences, founderIdea],
+  )
 
   // ── highlight-in-brief linking ──
   const [highlight, setHighlight] = useState<string | null>(null)
@@ -188,6 +204,21 @@ export function BuilderReviewPanel({
             <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
               {sections.length} sections · {inBriefCount} in brief
             </span>
+            {spec.planPipeline && (
+              <span
+                className={
+                  spec.planPipeline === "legacy-fallback"
+                    ? "rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
+                    : "rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+                }
+              >
+                {spec.planPipeline === "enhanced"
+                  ? "deep plan"
+                  : spec.planPipeline === "legacy-fallback"
+                    ? "quick draft — the deep plan run didn't finish"
+                    : "quick draft"}
+              </span>
+            )}
           </div>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
             The whole plan as it stands, the AI responses that built it, and the exact brief your
@@ -205,6 +236,45 @@ export function BuilderReviewPanel({
           </button>
         )}
       </header>
+
+      {(claimWarnings.length > 0 || contradictionWarnings.length > 0) && (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+          <p className="text-sm font-medium text-foreground">
+            {[
+              claimWarnings.length > 0
+                ? claimWarnings.length === 1
+                  ? "One promise in the plan needs a job the Atai runtime can't do"
+                  : `${claimWarnings.length} promises in the plan need jobs the Atai runtime can't do`
+                : "",
+              contradictionWarnings.length > 0
+                ? contradictionWarnings.length === 1
+                  ? "One instruction collides with a non-negotiable platform rule"
+                  : `${contradictionWarnings.length} instructions collide with non-negotiable platform rules`
+                : "",
+            ]
+              .filter(Boolean)
+              .join("; ")}
+            .{" "}
+            <span className="font-normal text-muted-foreground">
+              The builder receives an explicit workaround for each — never an invented API or an
+              external gateway.
+            </span>
+          </p>
+          <ul className="mt-2 flex flex-col gap-1.5">
+            {claimWarnings.map((c) => (
+              <li key={`claim-${c.quote}`} className="text-xs leading-5 text-muted-foreground">
+                <span className="font-medium text-foreground">“{c.quote}”</span> — {c.note}
+              </li>
+            ))}
+            {contradictionWarnings.map((c) => (
+              <li key={`conflict-${c.quote}`} className="text-xs leading-5 text-muted-foreground">
+                <span className="font-medium text-foreground">“{c.quote}”</span> — {c.conflict}.{" "}
+                <span className="text-foreground">Resolved:</span> {c.resolution}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* ── The builder brief ── */}
       <section

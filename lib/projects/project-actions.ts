@@ -127,7 +127,7 @@ export async function startProjectBuild(userId: string, projectId: string): Prom
     userId,
     mirrorProjectId: projectId,
     kind: "initial",
-    prompt: buildInitialBuildPrompt(project.specification, project.understanding, project.preferences),
+    prompt: buildInitialBuildPrompt(project.specification, project.understanding, project.preferences, project.idea),
     status: "reserved",
     startedAt: Date.now(),
     creditsReserved: creditsNeeded,

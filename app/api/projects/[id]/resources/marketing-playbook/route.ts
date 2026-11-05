@@ -7,6 +7,7 @@ import { scopedIntentKey } from "@/lib/billing/operation-identity"
 import { generateWithRetry, logAIFailure } from "@/lib/resources/ai-retry"
 import { refuseInsufficientCredits } from "@/lib/api/credit-refusal"
 import { RESOURCES_CREDIT_COSTS } from "@/lib/resources/credit-costs"
+import { readMarketPositioningText, readValuePropositionText } from "@/lib/analysis/plan-sections"
 
 import { withAiProtection } from "@/lib/api/ai-protection"
 
@@ -63,8 +64,8 @@ Format in clean, scannable markdown.`
 **Description**: ${spec.description || spec.purpose || ""}
 **Target customers**: ${(spec.targetUsers || []).join(", ") || "Not specified"}
 **Business model**: ${spec.businessModel || "Not specified"}
-**Value proposition**: ${spec.valueProposition || "Not specified"}
-**Market positioning**: ${spec.marketPositioning || "Not specified"}
+**Value proposition**: ${readValuePropositionText(spec) || "Not specified"}
+**Market positioning**: ${readMarketPositioningText(spec) || "Not specified"}
 
 ${channelContext}
 

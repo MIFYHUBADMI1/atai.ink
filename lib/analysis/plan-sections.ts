@@ -1,6 +1,7 @@
 import type { ApplicationSpecification } from "@/lib/types/specification"
 import type { BusinessPlanField, CoreFlow, SpecDataEntity, SuggestedFeature } from "@/lib/types/specification"
-import { isRuntimeIntegrationsGrounded } from "@/lib/analysis/runtime-capabilities"
+import { isRuntimeIntegrationsGrounded, mentionsExternalProvider } from "@/lib/analysis/runtime-capabilities"
+import { SECTION_CLUSTERS } from "@/lib/types/plan-analysis"
 
 /**
  * Canonical plan sections for the Collaborate workspace.
@@ -10,8 +11,9 @@ import { isRuntimeIntegrationsGrounded } from "@/lib/analysis/runtime-capabiliti
  * deterministic — derived from field population — so the UI never fabricates
  * a score. "Needs work" is only ever added by AI findings, never guessed.
  *
- * Marketing Plan is ONE combined section covering marketing, launch and
- * growth together, Design Direction is ONE combined section covering brand
+ * Value Proposition, Market Positioning & Marketing Plan is ONE combined
+ * section covering the promise, the competitive position and the whole
+ * go-to-market story, Design Direction is ONE combined section covering brand
  * identity, visual system, typography, theme and responsive behaviour, and
  * Vision, Purpose, Problem & Solution is ONE combined foundation section.
  * The legacy spec fields behind those merges are still read and cleared so
@@ -55,26 +57,32 @@ export interface PlanSectionDef {
 
 const s = (v: string | undefined | null): string => (v ?? "").trim()
 
-/** The fields the combined marketing section reads (full spec or a partial
- * stored record both satisfy this). */
-type MarketingPlanSource = Pick<ApplicationSpecification, "marketingPlan" | "launchPlan" | "growthPlan">
+/** The fields the combined value/positioning/marketing section reads (full
+ * spec or a partial stored record both satisfy this). */
+type MarketingPlanSource = Pick<
+  ApplicationSpecification,
+  "valueProposition" | "marketPositioning" | "marketingPlan" | "launchPlan" | "growthPlan"
+>
 
 const MARKETING_PLAN_PARTS: ReadonlyArray<{
   heading: string
   read: (spec: MarketingPlanSource) => string
 }> = [
+  { heading: "Value proposition", read: (spec) => s(spec.valueProposition) },
+  { heading: "Market positioning", read: (spec) => s(spec.marketPositioning) },
   { heading: "Marketing", read: (spec) => s(spec.marketingPlan) },
   { heading: "Launch", read: (spec) => s(spec.launchPlan) },
   { heading: "Growth", read: (spec) => s(spec.growthPlan) },
 ]
 
-/** The combined Marketing Plan value.
+/** The combined Value Proposition, Market Positioning & Marketing Plan value.
  *
- * One section now covers marketing, launch and growth. Plans drafted while
- * those were three sections keep their words: when more than one of the
- * legacy fields still carries content, the parts are merged under headings so
- * nothing is silently dropped. Explicit generator placeholders never count as
- * content. New drafts write the whole plan to `marketingPlan` (and retire the
+ * One section now covers the promise, the competitive position and the whole
+ * go-to-market story (marketing, launch and growth). Plans drafted while those
+ * were separate sections keep their words: when more than one of the fields
+ * still carries content, the parts are merged under headings so nothing is
+ * silently dropped. Explicit generator placeholders never count as content.
+ * New drafts write the whole document to `marketingPlan` (and retire the
  * legacy copies, see applySectionUpdate). */
 export function readCombinedMarketingPlan(spec: MarketingPlanSource | undefined | null): string {
   if (!spec) return ""
@@ -88,6 +96,43 @@ export function readCombinedMarketingPlan(spec: MarketingPlanSource | undefined 
   }
   if (defined.length === 1) return defined[0].value
   return defined.map((part) => `## ${part.heading}\n${part.value}`).join("\n\n")
+}
+
+/** One heading's prose from a combined document (`## Heading` up to the next
+ * heading of the same or higher level). Empty when the heading is absent. */
+function headingBlock(text: string, name: RegExp): string {
+  const lines = text.split(/\r?\n/)
+  let start = -1
+  let level = 0
+  for (let i = 0; i < lines.length; i++) {
+    const match = lines[i].match(/^(#{1,6})\s+(.*)$/)
+    if (start < 0) {
+      if (match && name.test(match[2].trim())) {
+        start = i + 1
+        level = match[1].length
+      }
+    } else if (match && match[1].length <= level) {
+      return lines.slice(start, i).join("\n").trim()
+    }
+  }
+  return start < 0 ? "" : lines.slice(start).join("\n").trim()
+}
+
+/** Just the value proposition from the combined section — for the marketing
+ * surfaces that still need that part on its own. Falls back to the legacy
+ * field, then to the "Value proposition" heading of the combined document. */
+export function readValuePropositionText(spec: MarketingPlanSource | undefined | null): string {
+  const legacy = s(spec?.valueProposition)
+  if (legacy) return legacy
+  return headingBlock(readCombinedMarketingPlan(spec), /value proposition/i)
+}
+
+/** Just the market positioning from the combined section. See
+ * readValuePropositionText. */
+export function readMarketPositioningText(spec: MarketingPlanSource | undefined | null): string {
+  const legacy = s(spec?.marketPositioning)
+  if (legacy) return legacy
+  return headingBlock(readCombinedMarketingPlan(spec), /market positioning/i)
 }
 
 /** The fields the combined design section reads (full spec or a partial
@@ -210,28 +255,12 @@ export const PLAN_SECTIONS: PlanSectionDef[] = [
     read: (spec) => spec.userRoles.filter(Boolean).join(", "),
   },
   {
-    id: "valueProposition",
-    label: "Value Proposition",
-    icon: "Star",
-    group: "Market",
-    emptyHint: "Let's articulate why customers would choose you.",
-    read: (spec) => s(spec.valueProposition),
-  },
-  {
-    id: "marketPositioning",
-    label: "Market Positioning",
-    icon: "Compass",
-    group: "Market",
-    emptyHint: "Let's position this product against the alternatives.",
-    read: (spec) => s(spec.marketPositioning),
-  },
-  {
     id: "marketingPlan",
-    label: "Marketing Plan",
+    label: "Value Proposition, Market Positioning & Marketing Plan",
     icon: "Megaphone",
     group: "Market",
     emptyHint:
-      "Let's build one go-to-market plan — who it's for, how customers find you, the launch, and how the business grows after it.",
+      "Let's build one go-to-market story — the promise (value proposition), the competitive position, how customers find you, the launch, and how the business grows after it.",
     read: (spec) => readCombinedMarketingPlan(spec),
   },
   {
@@ -269,6 +298,15 @@ export const PLAN_SECTIONS: PlanSectionDef[] = [
     group: "Product",
     emptyHint: "Let's decide how people sign in and what they can do.",
     read: (spec) => s(spec.authenticationRequirements),
+  },
+  {
+    id: "adminConsole",
+    label: "Admin Console & Owner Tools",
+    icon: "ShieldCheck",
+    group: "Product",
+    emptyHint:
+      "Let's set out the owner's console at /admin — the screens they run the business from, what each one manages, who can reach it, and how the first administrator signs in.",
+    read: (spec) => s(spec.adminConsole),
   },
   {
     id: "backend",
@@ -359,6 +397,105 @@ export function getPlanSection(id: string): PlanSectionDef | undefined {
   return PLAN_SECTIONS.find((d) => d.id === id)
 }
 
+/**
+ * Sections that state the same reality as this one and must stay universally
+ * consistent with it (the money story, the market story, the product story).
+ * Cluster membership is symmetric by construction: a section inside a cluster
+ * always gets EVERY other member, never a partial view — because a half-shown
+ * cluster is how two tier lists end up carrying two prices. A section in
+ * several clusters gets their union, most load-bearing cluster first.
+ * Unknown ids dropped; the focus section itself is never returned.
+ */
+export function relatedSections(id: string, max = 8): PlanSectionDef[] {
+  const out: PlanSectionDef[] = []
+  const seen = new Set<string>([id])
+  for (const cluster of SECTION_CLUSTERS) {
+    if (!cluster.sections.includes(id)) continue
+    for (const member of cluster.sections) {
+      if (seen.has(member)) continue
+      const def = getPlanSection(member)
+      if (!def) continue
+      seen.add(member)
+      out.push(def)
+    }
+  }
+  return out.slice(0, max)
+}
+
+/** Names of the clusters this section belongs to — which story it is part of. */
+export function sectionClusterNames(id: string): string[] {
+  return SECTION_CLUSTERS.filter((c) => c.sections.includes(id)).map((c) => c.name)
+}
+
+// ─── Pricing consistency ─────────────────────────────────────────────────────
+//
+// The money story lives in two sections at two depths: "Pricing Structure"
+// (id pricingTiers, spec.pricingStructure — the field the build consumes) and
+// "Pricing Tiers" (id pricingTiersDetail, spec.pricingTiers — the tier
+// catalogue). Two views of one decision drift silently, so the drift is
+// checked with CODE and shown to the founder, not left for the AI to notice.
+
+export interface PricingConflict {
+  /** Normalised tier name, e.g. "pro". */
+  tier: string
+  /** Monthly figure stated by Pricing Structure. */
+  structure: number
+  /** Monthly figure stated by Pricing Tiers. */
+  detail: number
+}
+
+/** Tier name → monthly figure, read deterministically from free text. Only
+ * amounts written with a currency sign count, so a seat count, a storage
+ * quota or a discount percentage can never be mistaken for a price. */
+export function readTierPrices(text: string): Map<string, number> {
+  const prices = new Map<string, number>()
+  const noise = /^(plan|tier|package|per|month|mo|year|yr|usd|\$|—|–|-|:|,)$/i
+  for (const segment of text.split(/[,;\n]|\s\/\s|\s\|\s/)) {
+    const money = segment.match(/\$\s*(\d+(?:[.,]\d{1,2})?)(?:\s*\/\s*(mo|month|year|yr))?/i)
+    if (!money) continue
+    const name = segment
+      .slice(0, money.index)
+      .toLowerCase()
+      .replace(/[^a-z0-9 ]+/g, " ")
+      .split(/\s+/)
+      .filter((word) => word && !noise.test(word))
+      .slice(-2)
+      .join(" ")
+      .trim()
+    if (!name) continue
+    const amount = Number(money[1].replace(",", "."))
+    const yearly = /\/\s*(yr|year)/i.test(money[0])
+    if (prices.has(name)) continue
+    prices.set(name, yearly ? Math.round((amount / 12) * 100) / 100 : amount)
+  }
+  return prices
+}
+
+/** Every tier priced in BOTH pricing sections with a different figure. Empty
+ * when either section is undefined, or when they agree. */
+export function findPricingConflicts(spec: ApplicationSpecification): PricingConflict[] {
+  const structure = s(spec.pricingStructure)
+  const detail = s(spec.pricingTiers)
+  if (!structure || !detail || isPlaceholderValue(structure) || isPlaceholderValue(detail)) return []
+  const a = readTierPrices(structure)
+  const b = readTierPrices(detail)
+  const conflicts: PricingConflict[] = []
+  for (const [tier, price] of a) {
+    const other = b.get(tier)
+    if (other === undefined || other === price) continue
+    conflicts.push({ tier, structure: price, detail: other })
+  }
+  return conflicts
+}
+
+const money = (v: number): string => (Number.isInteger(v) ? `$${v}` : `$${v.toFixed(2)}`)
+
+/** One plain-English line per conflict, shared by the AI context and the
+ * founder's card so both describe the same problem in the same words. */
+export function describePricingConflict(c: PricingConflict): string {
+  return `${c.tier} tier costs ${money(c.structure)} in Pricing Structure but ${money(c.detail)} in Pricing Tiers`
+}
+
 /** True when a section's value still reads as the generator's explicit
  * "not defined yet" placeholder — treated as missing, never as content. */
 export function isPlaceholderValue(value: string): boolean {
@@ -370,6 +507,11 @@ export function sectionStatus(def: PlanSectionDef, spec: ApplicationSpecificatio
   const value = def.read(spec)
   if (!value || isPlaceholderValue(value)) return "missing"
   if (def.id === "runtimeIntegrations" && !isRuntimeIntegrationsGrounded(value)) return "needs_work"
+  // A capability line handed to an outside provider contradicts the runtime
+  // mandate, so the section says so instead of reading as finished.
+  if ((def.id === "runtimeIntegrations" || def.id === "adminConsole") && mentionsExternalProvider(value)) {
+    return "needs_work"
+  }
   return "complete"
 }
 
@@ -453,12 +595,11 @@ export const GENERATOR_MANAGED_SECTIONS: ReadonlySet<string> = new Set(["feature
 export const TEXT_PLAN_SECTIONS: ReadonlySet<string> = new Set([
   "applicationType",
   "vision",
-  "valueProposition",
   "businessModel",
   "revenueModel",
   "runtimeIntegrations",
+  "adminConsole",
   "seo",
-  "marketPositioning",
   "marketingPlan",
   "designDirection",
   "additionalInstructions",
@@ -476,9 +617,17 @@ export function clearSectionUpdate(
   if (sectionId === "backend") return { ...spec, backendRequirements: [] }
   if (sectionId === "integrations") return { ...spec, integrations: [] }
   if (sectionId === "features" || sectionId === "flows" || sectionId === "data") return spec
-  // One combined section: clearing it retires the legacy launch/growth copies too.
+  // One combined section: clearing it retires the legacy value-proposition,
+  // positioning, launch and growth copies too.
   if (sectionId === "marketingPlan") {
-    return { ...spec, marketingPlan: "", launchPlan: "", growthPlan: "" }
+    return {
+      ...spec,
+      marketingPlan: "",
+      valueProposition: "",
+      marketPositioning: "",
+      launchPlan: "",
+      growthPlan: "",
+    }
   }
   // One combined section: clearing it retires the five legacy design copies too.
   if (sectionId === "designDirection") {
@@ -500,11 +649,10 @@ export function clearSectionUpdate(
   // Map plan-section ids to their spec text fields. "seo" (the SEO & Search
   // section) stores in seoPlan; every other text section shares its id.
   const businessFields = new Set<string>([
-    "valueProposition",
     "businessModel",
     "revenueModel",
     "runtimeIntegrations",
-    "marketPositioning",
+    "adminConsole",
     "additionalInstructions",
   ])
   if (sectionId === "seo") return { ...spec, seoPlan: "" }
@@ -620,18 +768,25 @@ export function applySectionUpdate(
   options?: ApplySectionUpdateOptions,
 ): ApplicationSpecification {
   const businessFields = new Set<string>([
-    "valueProposition",
     "businessModel",
     "revenueModel",
     "runtimeIntegrations",
-    "marketPositioning",
+    "adminConsole",
     "additionalInstructions",
   ])
-  // One combined Marketing Plan replaced the separate marketing/launch/growth
-  // sections. The whole plan is stored in marketingPlan and the legacy copies
-  // are retired together, so the section never shows the same content twice.
+  // One combined section replaced the separate value-proposition, positioning,
+  // marketing, launch and growth sections. The whole document is stored in
+  // marketingPlan and the legacy copies are retired together, so the section
+  // never shows the same content twice.
   if (sectionId === "marketingPlan") {
-    return { ...spec, marketingPlan: value, launchPlan: "", growthPlan: "" }
+    return {
+      ...spec,
+      marketingPlan: value,
+      valueProposition: "",
+      marketPositioning: "",
+      launchPlan: "",
+      growthPlan: "",
+    }
   }
   // One combined Design Direction replaced the five separate design sections.
   // The whole direction is stored in designDirection and the legacy copies are
@@ -715,10 +870,16 @@ export interface SectionQualityRequirements {
  * detail for production-ready builds */
 export const SECTION_QUALITY_REQUIREMENTS: Partial<Record<PlanSectionId, SectionQualityRequirements>> = {
   marketingPlan: {
-    // One section now carries marketing, launch and growth — it needs the
-    // depth of all three combined, not a single paragraph.
-    minWordCount: 400,
-    requiredPatterns: [/launch/i, /growth/i, /channel|acquisition/i, /metric|retention|loop/i],
+    // One section now carries the value proposition, market positioning and
+    // the whole go-to-market plan — it needs the depth of all of them, not a
+    // single paragraph.
+    minWordCount: 500,
+    requiredPatterns: [
+      /value|proposition/i,
+      /position|competitor|alternative/i,
+      /launch/i,
+      /growth|channel|acquisition|metric|retention/i,
+    ],
     maxPlaceholders: 1,
   },
   features: {
@@ -751,6 +912,17 @@ export const SECTION_QUALITY_REQUIREMENTS: Partial<Record<PlanSectionId, Section
   auth: {
     minWordCount: 100,
     requiredPatterns: [/sign|login|auth|password|email/i],
+    maxPlaceholders: 1,
+  },
+  adminConsole: {
+    // The console is a product surface, not a paragraph: it has to name the
+    // screens, what each manages, who reaches them, and how the owner signs in.
+    minWordCount: 200,
+    requiredPatterns: [
+      /\/admin|admin (console|area|panel)|owner console/i,
+      /manage|list|edit|create|delete|overview|dashboard/i,
+      /role|permission|sign[- ]in|credential|password|setup/i,
+    ],
     maxPlaceholders: 1,
   },
   seo: {

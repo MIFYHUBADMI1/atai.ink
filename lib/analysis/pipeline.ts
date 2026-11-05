@@ -104,7 +104,7 @@ export async function autoLaunchBuild(projectId: string) {
       return
     }
     await store.appendEvent(projectId, event("build", "🎪 Setting up the build circus... Juggling code, APIs, and databases!"))
-    const prompt = buildInitialBuildPrompt(project.specification, project.understanding, project.preferences)
+    const prompt = buildInitialBuildPrompt(project.specification, project.understanding, project.preferences, project.idea)
     const run: BuildRun = {
       id: cryptoId(),
       userId: project.userId,

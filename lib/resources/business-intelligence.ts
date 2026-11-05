@@ -6,6 +6,7 @@
 
 import type { ApplicationSpecification } from "@/lib/types/specification"
 import type { ProjectState } from "@/lib/types/project"
+import { readMarketPositioningText } from "@/lib/analysis/plan-sections"
 import {
   allSummaries,
   LEARNING_PATHS,
@@ -80,8 +81,8 @@ export function getStageNextSteps(state: ProjectState, spec?: ApplicationSpecifi
     if (!spec.pricingTiers && stage !== "planning") {
       extras.push({ id: "define-pricing", title: "Define your pricing tiers", description: "You have no pricing model set. Add tiers in your collaborate plan — free, pro, or enterprise.", priority: "high", category: "finance", action: "pricingTiers" })
     }
-    if (!spec.marketPositioning && stage === "live") {
-      extras.push({ id: "market-position", title: "Define your market positioning", description: "Your positioning statement is missing. Write why customers choose you over every alternative.", priority: "medium", category: "market", action: "marketPositioning" })
+    if (!readMarketPositioningText(spec) && stage === "live") {
+      extras.push({ id: "market-position", title: "Define your market positioning", description: "Your positioning statement is missing. Write why customers choose you over every alternative.", priority: "medium", category: "market", action: "marketingPlan" })
     }
   }
 
@@ -117,8 +118,9 @@ export function deriveMarketSnapshot(spec: ApplicationSpecification): MarketCard
     cards.push({ label: "Revenue Model", value: spec.revenueModel.slice(0, 80), icon: "DollarSign" })
   }
 
-  if (spec.marketPositioning) {
-    cards.push({ label: "Positioning", value: spec.marketPositioning.slice(0, 120), icon: "Compass" })
+  const positioning = readMarketPositioningText(spec)
+  if (positioning) {
+    cards.push({ label: "Positioning", value: positioning.slice(0, 120), icon: "Compass" })
   }
 
   if (spec.applicationType) {

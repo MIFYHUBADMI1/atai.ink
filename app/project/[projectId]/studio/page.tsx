@@ -7,6 +7,7 @@ import { StudioCalendar } from "@/components/marketing/studio-calendar"
 import { StudioBrandForm } from "@/components/marketing/studio-brand-form"
 import { ProjectComingSoon } from "@/components/workspace/project-coming-soon"
 import { getCurrentUser } from "@/lib/auth/session"
+import { readValuePropositionText } from "@/lib/analysis/plan-sections"
 import { isStudioWorkspaceEnabled } from "@/lib/marketing/feature-flags"
 import { getBrandProfile } from "@/lib/marketing/studio/brand"
 import { listPlannedContent, searchContentItems } from "@/lib/marketing/studio/library"
@@ -67,7 +68,7 @@ export default async function ProjectStudioPage({
     listPlannedContent(project.id, { limit: 50 }),
   ])
 
-  const valueProp = project.specification?.valueProposition?.trim()
+  const valueProp = readValuePropositionText(project.specification).trim()
   const audience = (project.specification?.targetUsers ?? []).map((t) => (t ?? "").trim()).filter(Boolean).slice(0, 3)
   const liveUrl = project.deployment?.status === "success" ? project.deployment?.productionUrl : undefined
 

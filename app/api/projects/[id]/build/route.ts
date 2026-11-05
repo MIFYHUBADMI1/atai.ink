@@ -80,7 +80,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       userId,
       mirrorProjectId: id,
       kind: "initial",
-      prompt: buildInitialBuildPrompt(project.specification, project.understanding, project.preferences),
+      prompt: buildInitialBuildPrompt(project.specification, project.understanding, project.preferences, project.idea),
       status: "reserved",
       startedAt: Date.now(),
       creditsReserved: creditsNeeded,

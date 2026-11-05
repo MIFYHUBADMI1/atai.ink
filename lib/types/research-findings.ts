@@ -68,6 +68,10 @@ export const ResearchFindingsSchema = z.object({
 
   completenessScore: z.number().min(0).max(100),
 
+  // True when the findings are empty because the analysis did not complete —
+  // an absence of gaps is then NOT evidence of a complete plan.
+  analysisFailed: z.boolean().optional(),
+
   // Metadata
   analyzedType: z.enum(["idea", "website"]),
   createdAt: z.number(),

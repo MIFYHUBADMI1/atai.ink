@@ -99,7 +99,7 @@ export interface SiteAvailability {
 }
 
 export interface AiPlanDocument {
-  id: "seoPlan" | "marketingPlan" | "marketPositioning" | "designDirection"
+  id: "seoPlan" | "marketingPlan" | "designDirection"
   label: string
   present: boolean
   characterCount: number
@@ -196,9 +196,8 @@ export interface GrowthOverviewInput {
 const WINDOW_MS = 30 * 24 * 60 * 60 * 1000 // 30-day measurement window (< MAX_RANGE_MS 90d)
 
 const AI_PLAN_DOC_DEFS: Array<{ id: AiPlanDocument["id"]; label: string }> = [
-  { id: "marketingPlan", label: "Marketing plan (marketing, launch & growth)" },
+  { id: "marketingPlan", label: "Value proposition, market positioning & marketing plan" },
   { id: "seoPlan", label: "SEO plan" },
-  { id: "marketPositioning", label: "Market positioning" },
   { id: "designDirection", label: "Design direction (brand, visual system & responsive)" },
 ]
 

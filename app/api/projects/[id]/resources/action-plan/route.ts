@@ -6,6 +6,7 @@ import { scopedIntentKey } from "@/lib/billing/operation-identity"
 import { generateWithRetry, logAIFailure } from "@/lib/resources/ai-retry"
 import { refuseInsufficientCredits } from "@/lib/api/credit-refusal"
 import { RESOURCES_CREDIT_COSTS } from "@/lib/resources/credit-costs"
+import { readValuePropositionText } from "@/lib/analysis/plan-sections"
 
 /** Extract the optional client intent id (idempotency identity ONLY — never
  * authorization; `scopedIntentKey` validates it and scopes it to this
@@ -60,7 +61,7 @@ Format your response in clean markdown with clear sections.`
 **Target customers**: ${(spec.targetUsers || []).join(", ") || "Not specified"}
 **Business model**: ${spec.businessModel || "Not specified"}
 **Revenue model**: ${spec.revenueModel || "Not specified"}
-**Value proposition**: ${spec.valueProposition || "Not specified"}
+**Value proposition**: ${readValuePropositionText(spec) || "Not specified"}
 **Stage**: ${project.state}
 
 Write a concrete, specific 30/60/90-day action plan. For each phase include:

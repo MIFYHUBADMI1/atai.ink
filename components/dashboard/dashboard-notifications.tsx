@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo } from "react"
 import { useRouter } from "next/navigation"
-import { Bell } from "lucide-react"
+import { ArrowRight, Bell, X } from "lucide-react"
+import { toast } from "sonner"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,30 +15,12 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { jsonFetcher, useProjects, useSession } from "@/lib/client/api"
 import { relativeTimeShort } from "@/lib/client/format"
-import { buildNotificationInbox, type InboxItem } from "@/lib/dashboard/view-model"
+import { buildNotificationInbox, selectNotifications, type InboxItem } from "@/lib/dashboard/view-model"
+import { useNotificationState } from "@/lib/dashboard/notifications-store"
 import type { PublicFeatureRequest } from "@/lib/feature-requests/types"
 import useSWR from "swr"
 
-const STORAGE_KEY = "atai:dashboard-notifications-read"
-
-function loadRead(): Set<string> {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return new Set()
-    const parsed = JSON.parse(raw) as unknown
-    return Array.isArray(parsed) ? new Set(parsed.filter((x) => typeof x === "string")) : new Set()
-  } catch {
-    return new Set()
-  }
-}
-
-function saveRead(ids: Set<string>) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([...ids].slice(-120)))
-  } catch {
-    /* ignore quota */
-  }
-}
+const PREVIEW_COUNT = 3
 
 const KIND_LABEL: Record<InboxItem["kind"], string> = {
   action: "Needs you",
@@ -54,11 +37,7 @@ export function DashboardNotifications() {
     jsonFetcher,
     { revalidateOnFocus: true, dedupingInterval: 30_000 },
   )
-  const [read, setRead] = useState<Set<string>>(new Set())
-
-  useEffect(() => {
-    setRead(loadRead())
-  }, [])
+  const { hydrated, read, dismissed, markRead, markAllRead, dismiss, restore } = useNotificationState()
 
   const items = useMemo(
     () =>
@@ -67,32 +46,35 @@ export function DashboardNotifications() {
         emailVerified: session?.user.emailVerified ?? true,
         creditsAvailable: session?.credits.available,
         featureRequests: mine?.items,
+        // Build the full inbox so the badge and "N more" are honest; only three render below.
+        maxItems: 200,
+        maxFeatureRequests: 100,
       }),
     [projects, session, mine],
   )
 
-  const unread = items.filter((item) => !read.has(item.id)).length
-
-  function persist(next: Set<string>) {
-    setRead(next)
-    saveRead(next)
-  }
-
-  function markRead(id: string) {
-    const next = new Set(read)
-    next.add(id)
-    persist(next)
-  }
-
-  function markAllRead() {
-    const next = new Set(read)
-    for (const item of items) next.add(item.id)
-    persist(next)
-  }
+  const live = useMemo(() => selectNotifications({ items, read, dismissed }), [items, read, dismissed])
+  const preview = useMemo(
+    () => selectNotifications({ items, read, dismissed, sort: "newest", preferUnread: true, limit: PREVIEW_COUNT }),
+    [items, read, dismissed],
+  )
+  const unread = live.filter((item) => !read.has(item.id)).length
+  const overflow = live.length - preview.length
+  const dismissedCount = items.filter((item) => dismissed.has(item.id)).length
 
   function openItem(item: InboxItem) {
     markRead(item.id)
     router.push(item.href)
+  }
+
+  function dismissItem(e: React.MouseEvent, item: InboxItem) {
+    e.preventDefault()
+    e.stopPropagation()
+    dismiss(item.id)
+    toast("Notification dismissed", {
+      description: item.title,
+      action: { label: "Undo", onClick: () => restore(item.id) },
+    })
   }
 
   return (
@@ -102,7 +84,7 @@ export function DashboardNotifications() {
         <span className="sr-only">
           {unread > 0 ? `${unread} unread notifications` : "Notifications"}
         </span>
-        {unread > 0 ? (
+        {hydrated && unread > 0 ? (
           <span className="absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] text-primary-foreground">
             {unread > 9 ? "9+" : unread}
           </span>
@@ -112,14 +94,14 @@ export function DashboardNotifications() {
         <DropdownMenuGroup>
           <DropdownMenuLabel className="flex items-center justify-between gap-2 text-foreground">
             <span>Inbox</span>
-            {unread > 0 ? (
+            {live.length > 0 && unread > 0 ? (
               <button
                 type="button"
                 className="text-[11px] font-medium text-primary hover:underline"
                 onClick={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
-                  markAllRead()
+                  markAllRead(live.map((item) => item.id))
                 }}
               >
                 Mark all read
@@ -129,16 +111,18 @@ export function DashboardNotifications() {
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          {items.length === 0 ? (
+          {preview.length === 0 ? (
             <>
               <DropdownMenuItem disabled className="items-start whitespace-normal">
-                You&apos;re all caught up. When a plan needs review, a build fails, or a request ships, it shows up here.
+                {live.length === 0 && dismissedCount > 0
+                  ? "Nothing left here. Dismissed items are in your notifications page."
+                  : "You're all caught up. When a plan needs review, a build fails, or a request ships, it shows up here."}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => router.push("/new")}>Start a business</DropdownMenuItem>
               <DropdownMenuItem onClick={() => router.push("/feature-requests")}>Shape Atai</DropdownMenuItem>
             </>
           ) : (
-            items.map((item) => {
+            preview.map((item) => {
               const unseen = !read.has(item.id)
               return (
                 <DropdownMenuItem
@@ -159,11 +143,30 @@ export function DashboardNotifications() {
                     <span className="line-clamp-2 text-xs text-muted-foreground">{item.description}</span>
                     <span className="text-xs text-primary">{item.actionLabel}</span>
                   </span>
+                  <span
+                    role="button"
+                    tabIndex={-1}
+                    aria-label={`Dismiss notification: ${item.title}`}
+                    onClick={(e) => dismissItem(e, item)}
+                    className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <X className="size-3" />
+                  </span>
                 </DropdownMenuItem>
               )
             })
           )}
         </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          className="text-primary"
+          onClick={() => router.push("/notifications")}
+        >
+          <span className="flex items-center justify-between gap-2">
+            <span>View all notifications{overflow > 0 ? ` · ${overflow} more` : ""}</span>
+            <ArrowRight className="size-3.5" />
+          </span>
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )

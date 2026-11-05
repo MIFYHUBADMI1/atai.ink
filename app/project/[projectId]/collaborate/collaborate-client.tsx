@@ -10,6 +10,7 @@ import { PricingTierBuilder } from "@/components/collaborate/pricing-tier-builde
 import { ExpectedVisuals } from "@/components/collaborate/expected-visuals"
 import { PlanIncubator } from "@/components/collaborate/plan-incubator"
 import { BuilderReviewPanel, computeBriefCoverage } from "@/components/collaborate/builder-review"
+import { buildInitialBuildPrompt } from "@/lib/analysis/prompt-builder"
 import { AIOutputsPanel } from "@/components/collaborate/ai-outputs"
 import { ProjectIdDialog } from "@/components/project-id-dialog"
 import { postJson, patchJson, deleteJson, jsonFetcher, postNdjson } from "@/lib/client/api"
@@ -17,6 +18,7 @@ import { useVoiceDictation } from "@/lib/client/use-voice-dictation"
 import { useSpeechReadout } from "@/lib/client/use-speech-readout"
 import { plainTextFromMarkdown } from "@/lib/client/speech-text"
 import type { AIArtifact } from "@/lib/types/ai-artifacts"
+import type { ResearchFindings } from "@/lib/types/research-findings"
 import {
   readErrorCode,
   trackPlanApproved,
@@ -38,9 +40,8 @@ import type { ProjectChat, ProjectChatSummary } from "@/lib/types/collab-chat"
 import type { ApplicationSpecification } from "@/lib/types/specification"
 import { buildJourneySteps } from "@/lib/workspace/workspace-view-model"
 import { cn } from "@/lib/utils"
-import { PLAN_SECTIONS, computePlanHealth, sectionStatus, getPlanSection, isPlaceholderValue, applySectionUpdate, clearSectionUpdate, TEXT_PLAN_SECTIONS, calculatePlanQuality, calculateSectionQuality, type PlanSectionId, type PlanSectionDef } from "@/lib/analysis/plan-sections"
+import { PLAN_SECTIONS, computePlanHealth, sectionStatus, getPlanSection, isPlaceholderValue, applySectionUpdate, clearSectionUpdate, TEXT_PLAN_SECTIONS, calculatePlanQuality, calculateSectionQuality, relatedSections, findPricingConflicts, describePricingConflict, type PlanSectionId, type PlanSectionDef } from "@/lib/analysis/plan-sections"
 import type { PlanAnalysis, PlanProposal } from "@/lib/types/plan-analysis"
-import { SECTION_DEPENDENCIES } from "@/lib/types/plan-analysis"
 import {
   Lightbulb,
   Puzzle,
@@ -94,6 +95,9 @@ import {
   TrendingUp,
   Layers,
   FileText,
+  Download,
+  TriangleAlert,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react"
 
@@ -131,6 +135,7 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
   Rocket,
   TrendingUp,
   Layers,
+  ShieldCheck,
   ListChecks: ClipboardList,
 }
 
@@ -200,13 +205,14 @@ function statusFor(
 }
 
 // ─── Plan-aware affordances (chat ⇆ plan) ───────────────────────────────
-/** The order a brand-new plan should be filled in — the first three define
- * the product, the rest is where the money is. The builder downstream can
- * only start from these. */
+/** The order a brand-new plan should be filled in — the first two define the
+ * product, the rest is where the money is. The builder downstream can only
+ * start from these. Vision, Purpose, Problem & Solution is ONE foundation
+ * section since the merge, so it occupies the two slots problem and solution
+ * used to hold. */
 const STARTER_SECTION_ORDER: PlanSectionId[] = [
   "overview",
-  "problem",
-  "solution",
+  "vision",
   "targetUsers",
   "features",
   "revenueModel",
@@ -227,10 +233,8 @@ const SECTION_MENTION_TERMS: Array<{ id: PlanSectionId; terms: string[] }> = [
   { id: "integrations", terms: ["integration"] },
   { id: "targetUsers", terms: ["target customers", "target audience", "target users"] },
   { id: "userRoles", terms: ["user roles", "role-based access"] },
-  { id: "valueProposition", terms: ["value proposition"] },
   { id: "vision", terms: ["vision", "mission", "purpose statement", "problem statement", "core problem", "solution idea"] },
-  { id: "marketPositioning", terms: ["market positioning"] },
-  { id: "marketingPlan", terms: ["marketing plan", "go-to-market", "launch plan", "growth plan", "growth loop"] },
+  { id: "marketingPlan", terms: ["value proposition", "market positioning", "marketing plan", "go-to-market", "launch plan", "growth plan", "growth loop"] },
   { id: "designDirection", terms: ["design direction", "brand identity", "visual identity", "visual system", "typography", "theme & appearance", "color palette", "responsive"] },
   { id: "seo", terms: ["seo"] },
 ]
@@ -653,6 +657,52 @@ function PlanNav({
 
 // ─── Section detail (replaces plan content view when a section is selected) ──
 
+/**
+ * The money story lives in two sections — Pricing Structure (what the builder
+ * consumes) and Pricing Tiers (the catalogue behind it) — and they can drift
+ * apart without either looking wrong on its own. The drift is computed with
+ * CODE, so the founder is told about it in plain words instead of meeting it
+ * in the built app.
+ */
+export function PricingConflictNotice({
+  conflicts,
+  canEdit,
+  onReconcile,
+}: {
+  conflicts: ReturnType<typeof findPricingConflicts>
+  canEdit: boolean
+  onReconcile: () => void
+}) {
+  if (conflicts.length === 0) return null
+  return (
+    <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3" role="alert">
+      <div className="flex items-start gap-3">
+        <TriangleAlert className="size-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" aria-hidden />
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-medium text-foreground">Your two pricing sections disagree</p>
+          <ul className="mt-1 space-y-0.5 text-[11px] leading-relaxed text-muted-foreground">
+            {conflicts.map((c) => (
+              <li key={c.tier}>{describePricingConflict(c)}.</li>
+            ))}
+          </ul>
+          <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+            Pricing Structure is the one the builder uses, so your app would ship the prices written there. Put both
+            sections on the same figures before you build.
+          </p>
+        </div>
+        {canEdit && (
+          <button
+            onClick={onReconcile}
+            className="shrink-0 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            Reconcile with AI
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function SectionDetail({
   spec,
   sectionId,
@@ -715,6 +765,11 @@ function SectionDetail({
   const raw = def.read(spec)
   const missing = !raw || isPlaceholderValue(raw)
   const status = missing ? "missing" : "complete"
+  // Pricing lives in two sections at two depths and they drift silently; when
+  // they disagree the founder is told in plain words on the card, because an
+  // unexplained amber chip is its own kind of confusion.
+  const pricingConflicts =
+    sectionId === "pricingTiers" || sectionId === "pricingTiersDetail" ? findPricingConflicts(spec) : []
   // Baseline is what the section holds right now — empty when the section has
   // no content yet (the generator placeholder never counts as a draft).
   const baseline = missing ? "" : raw.trim()
@@ -945,6 +1000,13 @@ function SectionDetail({
             </div>
           )}
 
+          {/* Pricing conflict — one money story, two different prices */}
+          <PricingConflictNotice
+            conflicts={pricingConflicts}
+            canEdit={canEdit}
+            onReconcile={() => requestClose(onWorkOnThis)}
+          />
+
           {/* Expand with AI button - show when section exists but quality could improve */}
           {canEdit && qualityScore < 75 && qualityScore > 0 && (
             <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
@@ -1104,11 +1166,11 @@ function ProposalCard({
         <p className="mt-2 text-xs italic text-muted-foreground">Why: {proposal.reason}</p>
       )}
 
-      {(SECTION_DEPENDENCIES[proposal.section] ?? []).length > 0 && (
+      {relatedSections(proposal.section).length > 0 && (
         <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
           This change may also affect{" "}
-          {(SECTION_DEPENDENCIES[proposal.section] ?? [])
-            .map((id) => getPlanSection(id)?.label ?? id)
+          {relatedSections(proposal.section)
+            .map((def) => def.label)
             .join(", ")}
           . We can review those next.
         </p>
@@ -1282,6 +1344,7 @@ function ChatPanel({
   onSpecChanged,
   analysis,
   onOpenSection,
+  promptSeed,
 }: {
   projectId: string
   isOwner: boolean
@@ -1292,6 +1355,8 @@ function ChatPanel({
   analysis: PlanAnalysis | null
   /** Tap a plan section mentioned in a reply to open it in the plan panel. */
   onOpenSection?: (id: PlanSectionId) => void
+  /** A gap card asked to be worked on — load its prompt into the composer. */
+  promptSeed?: { text: string; nonce: number } | null
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState("")
@@ -1365,6 +1430,17 @@ function ChatPanel({
       // Ignore quota/security errors — the composer still works in-memory.
     }
   }, [draftKey, input])
+
+  // "Work on this" from a research gap card — the prompt lands in the
+  // composer ready to edit, never sent on its own, and is applied once so
+  // tab switches don't wipe an edited draft.
+  const appliedSeedRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (!promptSeed || appliedSeedRef.current === promptSeed.nonce) return
+    appliedSeedRef.current = promptSeed.nonce
+    setInput(promptSeed.text)
+    textareaRef.current?.focus()
+  }, [promptSeed])
 
   // Grow to fit the message, then scroll — one line on load, compact on
   // every viewport, never taller than ~7 lines on a phone.
@@ -2647,6 +2723,8 @@ function InsightsPanel({
   projectId,
   onSpecChanged,
   onAnalysisUpdated,
+  research,
+  onAddressGap,
 }: {
   spec: ApplicationSpecification
   analysis: PlanAnalysis | null
@@ -2658,8 +2736,39 @@ function InsightsPanel({
   projectId: string
   onSpecChanged: (spec: ApplicationSpecification) => void
   onAnalysisUpdated: (a: PlanAnalysis | null) => void
+  /** Research-stage gap findings — what the idea still needs before planning. */
+  research: ResearchFindings | null
+  /** Hand a gap prompt to the co-founder's composer. */
+  onAddressGap: (prompt: string) => void
 }) {
   const health = useMemo(() => computePlanHealth(spec), [spec])
+
+  // Turn the research artifact into flat, severity-ordered work cards. Every
+  // finding stays visible — the founder decides what to address.
+  const gapCards = useMemo(() => {
+    if (!research) return []
+    const rank: Record<string, number> = { critical: 0, warning: 1, info: 2 }
+    const priorityToSeverity: Record<string, "critical" | "warning" | "info"> = { high: "critical", medium: "warning", low: "info" }
+    const prompt = (title: string, detail?: string) =>
+      `Your research on my idea flagged this gap: "${title}".${detail ? ` Suggested fix: ${detail}.` : ""} Make sure my plan actually covers it — add the pages, sections, and functions it needs, most important first.`
+    const cards: Array<{ id: string; group: string; severity: string; title: string; detail?: string; prompt: string }> = []
+    ;(research.missingFeatures ?? []).forEach((g, i) =>
+      cards.push({ id: `mf-${i}`, group: "Missing piece", severity: g.severity, title: g.description, detail: g.recommendation, prompt: prompt(g.description, g.recommendation) }),
+    )
+    ;(research.securityConcerns ?? []).forEach((g, i) =>
+      cards.push({ id: `sc-${i}`, group: "Security", severity: g.severity, title: g.description, detail: g.recommendation, prompt: prompt(g.description, g.recommendation) }),
+    )
+    ;(research.uxGaps ?? []).forEach((g, i) =>
+      cards.push({ id: `ux-${i}`, group: "UX", severity: g.severity, title: g.description, detail: g.recommendation, prompt: prompt(g.description, g.recommendation) }),
+    )
+    ;(research.technicalRisks ?? []).forEach((g, i) =>
+      cards.push({ id: `tr-${i}`, group: "Technical risk", severity: g.severity, title: g.description, detail: g.mitigation, prompt: prompt(g.description, g.mitigation) }),
+    )
+    ;(research.recommendations ?? []).forEach((g, i) =>
+      cards.push({ id: `rc-${i}`, group: "Recommendation", severity: priorityToSeverity[g.priority] ?? "info", title: g.action, detail: g.rationale, prompt: prompt(g.action, g.rationale) }),
+    )
+    return cards.sort((a, b) => (rank[a.severity] ?? 2) - (rank[b.severity] ?? 2))
+  }, [research])
 
   const groups: Array<{ key: string; label: string; ids: PlanSectionId[] }> = [
     { key: "Foundation", label: "Foundation", ids: PLAN_SECTIONS.filter((d) => d.group === "Foundation").map((d) => d.id) },
@@ -2735,6 +2844,59 @@ function InsightsPanel({
           </>
         )}
       </section>
+
+      {/* Research gaps — what the co-founder's idea study found missing */}
+      {research && (
+        <section aria-label="Gaps your co-founder found" className="rounded-xl border border-border bg-card p-4">
+          <h3 className="font-mono text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+            Gaps your co-founder found
+          </h3>
+          <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
+            The research pass checked what an app like yours still needs — admin sections, pages,
+            flows, safeguards. Anything not in the plan yet can be worked on here.
+          </p>
+          {gapCards.length === 0 ? (
+            <p className="mt-2 text-sm text-foreground">
+              No gaps were flagged — the research pass came back clean.
+            </p>
+          ) : (
+            <div className="mt-3 flex flex-col gap-1.5">
+              {gapCards.map((c) => (
+                <div
+                  key={c.id}
+                  className={cx(
+                    "rounded-lg border p-2.5",
+                    c.severity === "critical"
+                      ? "border-destructive/25 bg-destructive/5"
+                      : c.severity === "warning"
+                        ? "border-amber-500/25 bg-amber-500/5"
+                        : "border-border bg-muted/30",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-xs font-medium text-foreground">{c.title}</p>
+                    <span className="shrink-0 rounded-full border border-border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                      {c.severity}
+                    </span>
+                  </div>
+                  {c.detail && (
+                    <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">{c.detail}</p>
+                  )}
+                  <div className="mt-1.5 flex items-center justify-between gap-2">
+                    <span className="text-[10px] uppercase tracking-widest text-muted-foreground/80">{c.group}</span>
+                    <button
+                      onClick={() => onAddressGap(c.prompt)}
+                      className="inline-flex min-h-8 items-center text-[11px] font-medium text-primary hover:underline"
+                    >
+                      Work on this →
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* AI found */}
       <section aria-label="AI findings">
@@ -3671,6 +3833,57 @@ export function CollaborateClient({
     setShowReview(false)
   }, [])
 
+  // Recomputed from the saved plan with the same prompt builder the launch
+  // route uses, so the nav badge and the review panel can never drift from
+  // what the builder is actually sent. It must run BEFORE the !spec early
+  // return below — a hook after that return changes the hook count between
+  // renders and React aborts the page.
+  const coverage = useMemo(
+    () =>
+      spec
+        ? computeBriefCoverage(spec, initialProject.understanding, initialProject.preferences, initialProject.idea)
+        : null,
+    [spec, initialProject.understanding, initialProject.preferences, initialProject.idea],
+  )
+
+  // Research-stage gap findings persisted as an artifact — once a plan exists,
+  // the insights column shows what the idea study found missing (admin
+  // sections, pages, functions) so the founder can work through them.
+  const researchFindings = useMemo<ResearchFindings | null>(() => {
+    const artifact = artifacts.find((a) => a.kind === "research" && (a.status === "ready" || a.status === "fallback"))
+    const content = artifact?.content as Partial<ResearchFindings> | undefined
+    if (!content || !Array.isArray(content.missingFeatures)) return null
+    return content as ResearchFindings
+  }, [artifacts])
+
+  const [chatSeed, setChatSeed] = useState<{ text: string; nonce: number } | null>(null)
+  const addressGap = useCallback((prompt: string) => {
+    setShowOutputs(false)
+    setShowReview(false)
+    setActiveSection(null)
+    setChatWithFocus(false)
+    setMobileView("chat")
+    setChatSeed((prev) => ({ text: prompt, nonce: (prev?.nonce ?? 0) + 1 }))
+  }, [])
+
+  // Download the exact brief the Totalum builder is sent — same prompt
+  // builder as the launch route, so the file can never drift from the build.
+  const downloadPlanBrief = useCallback(() => {
+    if (!spec) return
+    const brief = buildInitialBuildPrompt(spec, initialProject.understanding, initialProject.preferences, initialProject.idea)
+    const slug = (initialProject.name || "plan").trim().replace(/[^\p{L}\p{N}._-]+/gu, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "plan"
+    const blob = new Blob([brief], { type: "text/markdown;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement("a")
+    anchor.href = url
+    anchor.download = `${slug}-build-plan.md`
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(url)
+    toast("Downloaded the full plan exactly as the builder receives it.")
+  }, [spec, initialProject.understanding, initialProject.preferences, initialProject.idea, initialProject.name])
+
   if (!spec) {
     const pipelineFailed = projectState === "analysis_failed" || projectState === "plan_failed"
     const planning = projectState === "analysis_complete" || projectState === "pending_plan"
@@ -3746,13 +3959,6 @@ export function CollaborateClient({
   const health = computePlanHealth(spec)
   const firstMissing = health.missing[0] ?? null
   const artifactCount = artifacts.length + (artifacts.some((a) => a.kind === "final_spec") ? 0 : 1)
-  // Recomputed from the saved plan with the same prompt builder the launch
-  // route uses, so the nav badge and the review panel can never drift from
-  // what the builder is actually sent.
-  const coverage = useMemo(
-    () => computeBriefCoverage(spec, initialProject.understanding, initialProject.preferences),
-    [spec, initialProject.understanding, initialProject.preferences],
-  )
   const runActive = Boolean(autoRun && (autoRun.phase === "working" || !autoDismissed))
 
   return (
@@ -3796,6 +4002,21 @@ export function CollaborateClient({
           headerSlots.actions,
         )
         : null}
+      {/* Full plan download — the exact brief the builder is sent, as a file. */}
+      {headerSlots.actions
+        ? createPortal(
+          <button
+            onClick={downloadPlanBrief}
+            title="Download the complete plan exactly as it is sent to the AI coding agent"
+            className="inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent"
+          >
+            <Download className="size-3.5 shrink-0" aria-hidden />
+            <span className="hidden sm:inline">Download full plan</span>
+            <span className="sm:hidden">Plan</span>
+          </button>,
+          headerSlots.actions,
+        )
+        : null}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Desktop: 3 areas — plan (left), AI (center, dominant), insights
           (right). Tablets stay in the tab flow below so all three are reachable
@@ -3819,7 +4040,7 @@ export function CollaborateClient({
               setActiveSection(null)
               setChatWithFocus(false)
             }}
-            reviewCount={coverage.inBrief.length}
+            reviewCount={coverage?.inBrief.length ?? 0}
             reviewActive={showReview}
             onOpenReview={() => {
               setShowReview(true)
@@ -3851,6 +4072,7 @@ export function CollaborateClient({
                 spec={spec}
                 understanding={initialProject.understanding}
                 preferences={initialProject.preferences}
+                founderIdea={initialProject.idea}
                 artifacts={artifacts}
                 onClose={() => setShowReview(false)}
               />
@@ -3895,6 +4117,7 @@ export function CollaborateClient({
               activeSection={chatWithFocus ? activeSection : null}
               onSpecChanged={setSpec}
               analysis={analysis}
+              promptSeed={chatSeed}
               onOpenSection={(id) => {
                 setShowOutputs(false)
                 setShowReview(false)
@@ -3921,6 +4144,8 @@ export function CollaborateClient({
             projectId={projectId}
             onSpecChanged={setSpec}
             onAnalysisUpdated={setAnalysis}
+            research={researchFindings}
+            onAddressGap={addressGap}
           />
         </aside>
 
@@ -3982,6 +4207,7 @@ export function CollaborateClient({
                       spec={spec}
                       understanding={initialProject.understanding}
                       preferences={initialProject.preferences}
+                      founderIdea={initialProject.idea}
                       artifacts={artifacts}
                       onClose={() => setShowReview(false)}
                     />
@@ -4012,7 +4238,7 @@ export function CollaborateClient({
                         setActiveSection(null)
                         setChatWithFocus(false)
                       }}
-                      reviewCount={coverage.inBrief.length}
+                      reviewCount={coverage?.inBrief.length ?? 0}
                       reviewActive={showReview}
                       onOpenReview={() => {
                         setShowReview(true)
@@ -4052,6 +4278,7 @@ export function CollaborateClient({
                         activeSection={chatWithFocus ? activeSection : null}
                         onSpecChanged={setSpec}
                         analysis={analysis}
+                        promptSeed={chatSeed}
                         onOpenSection={(id) => {
                           setShowOutputs(false)
                           setShowReview(false)
@@ -4083,6 +4310,8 @@ export function CollaborateClient({
                     projectId={projectId}
                     onSpecChanged={setSpec}
                     onAnalysisUpdated={setAnalysis}
+                    research={researchFindings}
+                    onAddressGap={addressGap}
                   />
                 </div>
               )}

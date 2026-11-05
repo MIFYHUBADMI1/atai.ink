@@ -5,6 +5,7 @@ import { createApiKey, revokeApiKey } from "@/lib/runtime/keys/service"
 import { isTotalumConfigured, createSecret } from "@/lib/integrations/totalum/service"
 import { TotalumError } from "@/lib/integrations/totalum/errors"
 import { getAppUrl } from "@/lib/env"
+import { ROUTE_CAPABILITY_IDS } from "@/runtime/contracts/router"
 import type {
   CapabilityScope,
   RuntimeEnvironment,
@@ -69,13 +70,19 @@ import type {
 export const ATAI_RUNTIME_SECRET_NAME = "ATAI_API_KEY" as const
 
 /**
- * Scopes granted to an auto-provisioned generated-application key. LEAST
- * PRIVILEGE: the runtime currently exposes exactly one routed capability
- * (ai.text → chat), so the key gets exactly that — never "*" (empty scopes
- * = all capabilities, which manual dashboard keys may use but automatic
- * provisioning must not).
+ * Scopes granted to an auto-provisioned generated-application key. The Atai
+ * runtime is the generated application's core infrastructure: every product
+ * capability the plan calls for — payments, AI, email, search, maps and the
+ * rest — must flow through ATAI_API_KEY, so the provisioned key carries the
+ * full routed capability set. Derived from the runtime contract
+ * (ROUTE_CAPABILITY_IDS) so it can never drift from what the router actually
+ * accepts; the test-only echo capability is excluded because it is not a
+ * product capability. Still never "*" / empty scopes (manual dashboard keys
+ * may use those; automatic provisioning must not).
  */
-export const PROVISIONED_KEY_SCOPES: readonly CapabilityScope[] = ["ai.text"] as const
+export const PROVISIONED_KEY_SCOPES: readonly CapabilityScope[] = ROUTE_CAPABILITY_IDS.filter(
+  (id) => id !== "test",
+) as CapabilityScope[]
 
 /**
  * The deterministic environment mapping (Phase 8 §101):

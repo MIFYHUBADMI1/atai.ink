@@ -52,6 +52,9 @@ export const ApplicationSpecificationSchema = z.object({
   problem: z.string().optional(),
   /** @deprecated Legacy section. See purpose. */
   solution: z.string().optional(),
+  /** @deprecated Legacy field from when the value proposition was a separate
+   * section. Still stored so older plans validate; read through
+   * readCombinedMarketingPlan (or readValuePropositionText). */
   valueProposition: z.string().optional(),
   businessModel: z.string().optional(),
   revenueModel: z.string().optional(),
@@ -78,12 +81,20 @@ export const ApplicationSpecificationSchema = z.object({
   /** Atai Runtime capabilities the generated app will consume (@atai-group/sdk) —
    * planned in the Collaborate workspace, honored by the build prompt. */
   runtimeIntegrations: z.string().optional(),
+  /** The owner's console: which admin surfaces the app ships, what each one
+   * manages, who can reach them, and how the first administrator signs in.
+   * Drafted in the Collaborate workspace and carried into the build prompt. */
+  adminConsole: z.string().optional(),
   /** SEO & search-engine plan for the generated application — drafted in the
    * Collaborate workspace, carried verbatim into the build prompt. Covers
    * metadata, sitemap/robots, structured data, and site-verification tags. */
   seoPlan: z.string().optional(),
+  /** @deprecated Legacy field from when market positioning was a separate
+   * section. Still stored so older plans validate; read through
+   * readCombinedMarketingPlan (or readMarketPositioningText). */
   marketPositioning: z.string().optional(),
-  /** Combined go-to-market plan — marketing, launch and growth in one document. */
+  /** Combined go-to-market document — value proposition, market positioning,
+   * marketing, launch and growth in one document. */
   marketingPlan: z.string().optional(),
   /** @deprecated Legacy fields from when launch/growth were separate sections.
    * Still stored so older plans validate; read through readCombinedMarketingPlan. */
@@ -107,6 +118,10 @@ export const ApplicationSpecificationSchema = z.object({
   responsiveRequirements: z.string().optional(),
   additionalInstructions: z.string().default(""),
   complexity: z.enum(["simple", "medium", "complex"]).optional(),
+  /** Which pipeline drafted this plan: the deep staged pipeline, a chosen
+   * quick draft, or a quick draft used after the deep pipeline failed.
+   * Older plans may not have it yet. */
+  planPipeline: z.enum(["enhanced", "legacy", "legacy-fallback"]).optional(),
 })
 export type ApplicationSpecification = z.infer<typeof ApplicationSpecificationSchema>
 
@@ -114,13 +129,12 @@ export type ApplicationSpecification = z.infer<typeof ApplicationSpecificationSc
  * workspace. Optional — older projects may not have them yet. */
 export const BUSINESS_PLAN_FIELDS = [
   "vision",
-  "valueProposition",
   "businessModel",
   "revenueModel",
   "pricingTiers",
   "runtimeIntegrations",
+  "adminConsole",
   "seoPlan",
-  "marketPositioning",
   "marketingPlan",
 ] as const
 export type BusinessPlanField = (typeof BUSINESS_PLAN_FIELDS)[number]

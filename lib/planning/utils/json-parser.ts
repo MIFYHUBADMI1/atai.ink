@@ -82,6 +82,61 @@ export function parseAIJson(text: string, context: string): any | null {
 }
 
 /**
+ * Recover JSON that was cut off mid-generation (token-limit truncations).
+ *
+ * Walks the text tracking string/escape state, remembers the last position
+ * where an element completed cleanly, rewinds to it, and closes everything
+ * still open. Complete entries survive; only the half-written tail is lost.
+ *
+ * @param text - Truncated JSON-ish text
+ * @returns Parsed partial value, or null if even the first entry is unusable
+ */
+export function salvageTruncatedJson(text: string): unknown | null {
+  const start = text.indexOf("{")
+  if (start === -1) return null
+  const body = text.slice(start)
+
+  const stack: string[] = []
+  let inString = false
+  let escaped = false
+  let cutAt = -1
+  let cutStack: string[] | null = null
+
+  for (let i = 0; i < body.length; i++) {
+    const ch = body[i]
+    if (inString) {
+      if (escaped) escaped = false
+      else if (ch === "\\") escaped = true
+      else if (ch === '"') inString = false
+      continue
+    }
+    if (ch === '"') {
+      inString = true
+    } else if (ch === "{" || ch === "[") {
+      stack.push(ch === "{" ? "}" : "]")
+    } else if (ch === "}" || ch === "]") {
+      if (stack.pop() !== ch) return null
+      cutAt = i + 1
+      cutStack = [...stack]
+    } else if (ch === ",") {
+      cutAt = i
+      cutStack = [...stack]
+    }
+  }
+
+  // Only meaningful for text that actually ended mid-structure.
+  if (!inString && stack.length === 0) return null
+  if (cutAt <= 0 || !cutStack) return null
+
+  const candidate = `${body.slice(0, cutAt).replace(/\s+$/, "")}${[...cutStack].reverse().join("")}`
+  try {
+    return JSON.parse(candidate)
+  } catch {
+    return null
+  }
+}
+
+/**
  * Attempt to repair common JSON formatting errors
  * 
  * Fixes:

@@ -60,6 +60,7 @@ This specification MUST use ONLY the Totalum stack:
 - **Authentication**: Totalum SDK auth (NO Firebase Auth, Auth0, Clerk, Supabase Auth)
 - **File Storage**: Totalum SDK (NO AWS S3, Cloudinary, Firebase Storage)
 - **Backend-as-a-Service**: Totalum SDK only (NO Firebase, Supabase, AWS Amplify)
+- **Product capabilities** (payments, AI text, speech, search, scraping, email, notifications, maps, bookings, vectors): Atai Runtime only via @atai-group/sdk with the project's ATAI_API_KEY (NO Stripe, PayPal, OpenAI, Anthropic, Google Maps, Mapbox, SendGrid, Resend, Twilio, Pinecone, or any other provider account or key)
 
 **REJECT ANY REFERENCE TO UNSUPPORTED TECHNOLOGIES**
 
@@ -81,7 +82,7 @@ Generate a complete, production-ready specification including:
 
 2. **Users and Roles**
    - targetUsers: Who will use this application
-   - userRoles: Distinct roles with different permissions (e.g., "user", "admin", "moderator")
+   - userRoles: Distinct roles with different permissions (e.g., "user", "admin", "moderator"). Every business plan must include an "admin" role for the owner, and the admin must be able to run the business from an admin console.
 
 3. **Core Flows**
    - Key user journeys that define the application
@@ -109,18 +110,26 @@ Generate a complete, production-ready specification including:
    - All using Next.js API routes and Totalum SDK
 
 8. **Integrations**
-   - Third-party services required (payment processors, email services, etc.)
+   - Product capabilities come from the Atai Runtime, not third-party services: payments, AI text, speech, web search, scraping, email, notifications, maps/geocoding, bookings, and vector search are named as runtime capabilities (e.g. "payments via atai.payments") and always stated with their route — @atai-group/sdk with the project's ATAI_API_KEY.
+   - NEVER plan an external provider or provider key here (Stripe, PayPal, OpenAI, Anthropic, Google Maps, Mapbox, SendGrid, Resend, Twilio, Pinecone, SerpAPI, Cal.com and the like). Atai provisions the runtime credential automatically; the built app needs no other account.
    - Avoid suggesting database/backend services - use Totalum SDK
 
-9. **Design Direction**
+9. **Admin & Owner Console (adminConsole)** — MANDATORY in every plan
+   - The /admin area the owner runs the business from, written for THIS business (not a generic "admin panel")
+   - Name the screens: overview dashboard, users/accounts, each business record type, sales and payments, messages/inquiries, settings the owner controls
+   - Say what the owner can do in each (create/edit/delete/list/approve/refund-policy notes/exports) and which roles reach it
+   - State how the first administrator signs in: ADMIN_EMAIL/ADMIN_PASSWORD environment variables when present, otherwise a one-time setup screen; every route guarded server-side
+   - Anything the console shows that is a product capability (payment and payout history, AI-generated content, bookings) is read through the Atai runtime namespaces above
+
+10. **Design Direction**
    - Visual style, tone, UI patterns
    - Use Tailwind CSS for styling
 
-10. **Responsive Requirements**
+11. **Responsive Requirements**
     - Mobile/tablet/desktop support
     - Adaptive layouts
 
-11. **Additional Instructions**
+12. **Additional Instructions**
     - Any special considerations or constraints
     - Technical debt to avoid
     - Performance requirements
@@ -166,6 +175,8 @@ Return ONLY a JSON object (no markdown, no explanation):
     }
   ],
   "authenticationRequirements": "string (optional)",
+  "adminConsole": "string - the owner's /admin console for THIS business: screens, what each manages, roles allowed, and first-administrator sign-in",
+  "runtimeIntegrations": "string - the Atai runtime contract: each needed capability as capability id + atai.* SDK call with what it does here, all through @atai-group/sdk and ATAI_API_KEY",
   "backendRequirements": ["string"],
   "integrations": ["string"],
   "designDirection": "string (optional)",
@@ -453,8 +464,10 @@ Visual Language: ${website.designSystem.visualLanguage || "Modern, clean"}
     }
 
     // Build research section
-    const researchSection = `<research_findings completeness_score="${research.completenessScore}">
-<missing_features count="${research.missingFeatures.length}">
+    const researchSection = `<research_findings completeness_score="${research.completenessScore}"${
+      research.analysisFailed ? ' analysis_failed="true"' : ""
+    }>
+${research.analysisFailed ? "<!-- Gap analysis did not complete — the empty lists below are NOT evidence the plan is complete; derive rigorously from the understanding instead. -->\n" : ""}<missing_features count="${research.missingFeatures.length}">
 ${research.missingFeatures
         .map(
           (f) =>
@@ -524,6 +537,8 @@ Generate a complete, production-ready ApplicationSpecification that:
 3. Uses ONLY Totalum stack technologies
 4. Is implementable by developers without ambiguity
 5. Includes all necessary data entities, flows, and features
+6. Includes an adminConsole plan for this business — the owner must be able to run the whole business from /admin
+7. Routes every product capability (payments, AI, maps, email, search, bookings) through the Atai runtime with ATAI_API_KEY, and names that route in the plan text — never an external provider or gateway
 
 Return ONLY the JSON specification object.`
   }

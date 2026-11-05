@@ -63,8 +63,8 @@ export function studioTemplateLabel(template: StudioTemplate): string {
  * Derive a compact "brand voice" from the plan sections the project ALREADY
  * holds. There is no dedicated brand-voice field in the specification, so this
  * assembles one from the combined `designDirection` section (brand and
- * personality prose), `marketingPlan`, `marketPositioning`, `valueProposition`
- * and `targetUsers`.
+ * personality prose), the combined `marketingPlan` section (value proposition,
+ * market positioning, launch and growth) and `targetUsers`.
  * Returns the contributing sources so the UI can be honest that the voice is
  * DERIVED FROM THE PLAN, not an independent measurement or a stored preference.
  */
@@ -79,9 +79,9 @@ export function deriveBrandVoice(spec: ApplicationSpecification | undefined): { 
     }
   }
   add("Design direction", readCombinedDesignDirection(spec))
-  add("Value proposition", spec?.valueProposition)
-  add("Market positioning", spec?.marketPositioning)
-  add("Marketing plan", readCombinedMarketingPlan(spec))
+  // The combined section already carries the value proposition and market
+  // positioning, so adding them separately would ship the same words twice.
+  add("Marketing plan (value proposition, positioning, launch & growth)", readCombinedMarketingPlan(spec))
   const audience = (spec?.targetUsers ?? []).map((s) => (s ?? "").trim()).filter(Boolean).slice(0, 6)
   if (audience.length) {
     parts.push(`Target audience: ${audience.join(", ")}`)
