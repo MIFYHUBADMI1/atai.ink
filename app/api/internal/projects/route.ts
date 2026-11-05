@@ -16,9 +16,9 @@ import { store } from "@/lib/store/store"
 import { ok, fail, handleRouteError } from "@/lib/api/respond"
 import { authorizeInternalRequest } from "@/lib/api/internal-key"
 import { checkInternalLimit } from "@/lib/api/internal-limit"
-import { getAppUrl } from "@/lib/env"
+import { getPublicBaseUrl } from "@/lib/env"
 
-const Atai_URL = getAppUrl()
+const Atai_URL = getPublicBaseUrl()
 
 export async function GET(req: NextRequest) {
   try {

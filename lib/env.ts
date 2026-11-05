@@ -127,23 +127,58 @@ export function getOAuthRedirectUri(provider: "google" | "github", configuredBas
   }
 }
 
-export const SITE_URL = getAppUrl()
+/** The one public origin Atai is served from. No subdomain, no per-deploy host. */
+export const PUBLIC_SITE_ORIGIN = "https://atai.ink"
 
 /**
- * Developer portal URL. The portal lives at ONE public location: the `/developers`
- * subtree of the canonical app origin. `NEXT_PUBLIC_DEV_PORTAL_HOST` is only an
- * opt-in for a separate staging host — it has no production default, because a
- * hardcoded subdomain would emit links and canonicals to hosts that don't exist.
- * Safe to call from client components: only NEXT_PUBLIC_* vars and NODE_ENV are read.
+ * The canonical PUBLIC origin used for `metadataBase`, `rel=canonical`,
+ * `og:url`, JSON-LD `url`s, `sitemap.xml` and `robots.txt`.
+ *
+ * This is deliberately NOT `getAppUrl()`: that value is deployment
+ * configuration (`NEXT_PUBLIC_APP_URL`, Vercel preview hosts) and when it went
+ * stale every indexed surface published a host that no longer served anything —
+ * telling crawlers the real copy of each live page lived at a 404. The public
+ * origin is a product decision, so it has a fixed default and is client-safe
+ * (no throw at import time).
+ */
+export function getPublicSiteUrl(): string {
+  const override = process.env.NEXT_PUBLIC_SITE_URL
+  if (!override) return PUBLIC_SITE_ORIGIN
+  try {
+    const url = new URL(override)
+    if (url.protocol !== "https:") throw new Error()
+    return url.origin
+  } catch {
+    return PUBLIC_SITE_ORIGIN
+  }
+}
+
+export const SITE_URL = getPublicSiteUrl()
+
+/**
+ * Origin for links handed OUT to people and other systems: email verification
+ * and reset links, payment return URLs, referral links, the runtime base URL
+ * baked into generated apps. Production uses the pinned public origin, so a
+ * stale `NEXT_PUBLIC_APP_URL` can no longer mail users a link to a retired
+ * host. Everywhere else the value follows the deployment, so local development
+ * and previews keep pointing at themselves.
+ */
+export function getPublicBaseUrl(): string {
+  return process.env.NODE_ENV === "production" ? SITE_URL : getAppUrl()
+}
+
+/**
+ * Developer portal URL. The portal has ONE public location: `/developers` on
+ * the canonical origin. `NEXT_PUBLIC_DEV_PORTAL_HOST` is an opt-in for a
+ * separate staging host only — there is no hardcoded subdomain default,
+ * because that is what used to emit links and canonicals to a host with no DNS.
  */
 export function getDeveloperPortalUrl(): string {
   if (process.env.NEXT_PUBLIC_DEV_PORTAL_HOST) {
     return `https://${process.env.NEXT_PUBLIC_DEV_PORTAL_HOST.toLowerCase()}`
   }
-  if (process.env.NODE_ENV === "production" && process.env.NEXT_PUBLIC_APP_URL) {
-    return `${process.env.NEXT_PUBLIC_APP_URL.replace(/\/+$/, "")}/developers`
-  }
-  return "/developers"
+  if (process.env.NODE_ENV !== "production") return "/developers"
+  return `${SITE_URL}/developers`
 }
 
 /** The developer portal's canonical origin (for SEO metadata / sitemap entries). */
@@ -151,10 +186,7 @@ export function getDeveloperPortalOrigin(): string {
   if (process.env.NEXT_PUBLIC_DEV_PORTAL_HOST) {
     return `https://${process.env.NEXT_PUBLIC_DEV_PORTAL_HOST.toLowerCase()}`
   }
-  if (process.env.NODE_ENV === "production" && process.env.NEXT_PUBLIC_APP_URL) {
-    return process.env.NEXT_PUBLIC_APP_URL.replace(/\/+$/, "")
-  }
-  return getAppUrl()
+  return SITE_URL
 }
 
 export function isMongoConfigured(): boolean {

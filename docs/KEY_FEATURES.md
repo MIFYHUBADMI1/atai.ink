@@ -358,7 +358,8 @@ All in `.env.local`:
 
 ```bash
 # App
-NEXT_PUBLIC_APP_URL         # Production URL: https://atai.ink
+NEXT_PUBLIC_APP_URL         # Deployment origin (OAuth callbacks): https://atai.ink
+NEXT_PUBLIC_SITE_URL        # Optional; SEO output (canonical/sitemap/robots) is pinned to https://atai.ink by default
 AUTH_SECRET                 # JWT signing secret (random, keep secret)
 
 # Database

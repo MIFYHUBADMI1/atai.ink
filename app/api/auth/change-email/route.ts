@@ -6,7 +6,7 @@ import { generateToken, hashToken } from "@/lib/auth/crypto"
 import { sendMail } from "@/lib/email/mailer"
 import { emailChangeEmail } from "@/lib/email/templates"
 import { checkRateLimit } from "@/lib/auth/rate-limit"
-import { getAppUrl, isSmtpConfigured } from "@/lib/env"
+import { getPublicBaseUrl, isSmtpConfigured } from "@/lib/env"
 import { normalizeEmail } from "@/lib/auth/users"
 import { AppError } from "@/lib/errors"
 import { logger } from "@/lib/logging/logger"
@@ -80,7 +80,7 @@ export async function POST(req: Request) {
       return ok({ sent: false, reason: "unconfigured" })
     }
 
-    const confirmUrl = `${getAppUrl()}/confirm-email-change?token=${token}`
+    const confirmUrl = `${getPublicBaseUrl()}/confirm-email-change?token=${token}`
     const { subject, html, text } = emailChangeEmail(user.name, newEmail, confirmUrl)
 
     try {

@@ -8,9 +8,10 @@ for both users and crawlers.
 ## How it works
 
 - The portal is the **same Next.js app**, served from `/developers`.
-- `lib/env.ts` builds every portal link from `NEXT_PUBLIC_APP_URL`, so links and
-  canonicals resolve to `https://atai.ink/developers/...` in production and to a
-  relative `/developers` on localhost and preview deploys.
+- `lib/env.ts` builds every portal link from the pinned public origin
+  (`SITE_URL`, default `https://atai.ink`), so links and canonicals resolve to
+  `https://atai.ink/developers/...` in production and to a relative
+  `/developers` on localhost and preview deploys.
 - `app/developers/layout.tsx` sets `metadataBase` to the canonical origin and
   canonicalizes the portal to `/developers`; `app/sitemap.ts` lists that path and
   `app/robots.ts` allows it.
@@ -45,5 +46,5 @@ otherwise you re-creates the dead-link problem this change removed.
 | Symptom | Cause | Fix |
 |---|---|---|
 | Portal link goes to a subdomain | `NEXT_PUBLIC_DEV_PORTAL_HOST` is set in that deploy | Unset it, or point it at a host that actually resolves. |
-| Canonical points at the wrong host | `NEXT_PUBLIC_APP_URL` is not the canonical origin | Set `NEXT_PUBLIC_APP_URL=https://atai.ink` in the host's env. |
+| Canonical points at the wrong host | `NEXT_PUBLIC_SITE_URL` is set to something else | Unset it — the default pins the public origin to `https://atai.ink`. |
 | SSL warning on a new host | Certificate not yet issued | Wait a few minutes after adding the domain on the host. |

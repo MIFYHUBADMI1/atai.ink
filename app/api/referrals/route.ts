@@ -1,7 +1,7 @@
 import { ok, handleRouteError } from "@/lib/api/respond"
 import { requireUser } from "@/lib/auth/session"
 import { getOrCreateReferralCode, getReferralsByReferrer, getReferralStats } from "@/lib/referrals/referrals"
-import { getAppUrl } from "@/lib/env"
+import { getPublicBaseUrl } from "@/lib/env"
 
 /**
  * GET /api/referrals
@@ -12,7 +12,7 @@ export async function GET() {
     const user = await requireUser()
 
     const referralCode = await getOrCreateReferralCode(user.id)
-    const referralLink = `${getAppUrl()}/register?ref=${referralCode}`
+    const referralLink = `${getPublicBaseUrl()}/register?ref=${referralCode}`
     const stats = await getReferralStats(user.id)
 
     // Get referrals with limited info (privacy-safe)

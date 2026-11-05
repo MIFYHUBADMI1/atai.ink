@@ -3,7 +3,7 @@ import { verificationTokensCol, ensureIndexes } from "@/lib/db/collections"
 import { generateToken, hashToken } from "@/lib/auth/crypto"
 import { sendMail } from "@/lib/email/mailer"
 import { verificationEmail } from "@/lib/email/templates"
-import { getAppUrl, isSmtpConfigured } from "@/lib/env"
+import { getPublicBaseUrl, isSmtpConfigured } from "@/lib/env"
 import { AppError } from "@/lib/errors"
 import { logger } from "@/lib/logging/logger"
 
@@ -47,7 +47,7 @@ export async function issueAndSendVerificationEmail(
     return { sent: false, reason: "unconfigured" }
   }
 
-  const verifyUrl = `${getAppUrl()}/verify-email?token=${token}`
+  const verifyUrl = `${getPublicBaseUrl()}/verify-email?token=${token}`
   const { subject, html, text } = verificationEmail(name, verifyUrl)
   console.log("[v0] verification: sending email", { userId, to: email })
   try {

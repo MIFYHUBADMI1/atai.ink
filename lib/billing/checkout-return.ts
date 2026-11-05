@@ -1,4 +1,4 @@
-import { getAppUrl } from "@/lib/env"
+import { getPublicBaseUrl } from "@/lib/env"
 
 const ALLOWED_RETURN_PATHS = new Set([
   "/settings/billing",
@@ -29,5 +29,5 @@ export function checkoutReturnPath(value?: string | null): string {
 }
 
 export function checkoutReturnUrl(value?: string | null): string {
-  return `${getAppUrl()}${checkoutReturnPath(value)}`
+  return `${getPublicBaseUrl()}${checkoutReturnPath(value)}`
 }

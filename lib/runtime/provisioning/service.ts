@@ -4,7 +4,7 @@ import { logger } from "@/lib/logging/logger"
 import { createApiKey, revokeApiKey } from "@/lib/runtime/keys/service"
 import { isTotalumConfigured, createSecret } from "@/lib/integrations/totalum/service"
 import { TotalumError } from "@/lib/integrations/totalum/errors"
-import { getAppUrl } from "@/lib/env"
+import { getPublicBaseUrl } from "@/lib/env"
 import { ROUTE_CAPABILITY_IDS } from "@/runtime/contracts/router"
 import type {
   CapabilityScope,
@@ -106,11 +106,13 @@ export function provisionedKeyName(environment: RuntimeEnvironment): string {
 
 /**
  * The runtime origin handed to the generated application alongside its key.
- * Resolved from the existing deployment configuration — never invented and
- * never hard-coded to a provider or unrelated domain (Phase 8 §24/§25).
+ * In production this is the pinned public origin (the same host the SDK
+ * defaults to); on local dev and previews it follows the deployment, so a
+ * generated app keeps talking to the environment it was built from. Never
+ * invented and never hard-coded to a provider or unrelated domain (Phase 8 §24/§25).
  */
 export function runtimeBaseUrl(): string {
-  return getAppUrl()
+  return getPublicBaseUrl()
 }
 
 // ─── Errors ────────────────────────────────────────────────────────────────

@@ -9,7 +9,7 @@ import { checkRateLimit } from "@/lib/auth/rate-limit"
 import { checkAuthRequest } from "@/lib/auth/request-limit"
 import { passwordResetEmail } from "@/lib/email/templates"
 import { sendMail } from "@/lib/email/mailer"
-import { getAppUrl } from "@/lib/env"
+import { getPublicBaseUrl } from "@/lib/env"
 import { logger } from "@/lib/logging/logger"
 
 export async function POST(request: Request) {
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
         // link cannot consume the account later.
         await col.updateMany({ userId: user.id, purpose: "password_reset", usedAt: { $exists: false } }, { $set: { usedAt: now } })
         await col.insertOne({ _id: new ObjectId(), userId: user.id, purpose: "password_reset", tokenHash: hashToken(token), createdAt: now, expiresAt: new Date(now + 60 * 60 * 1000) })
-        const message = passwordResetEmail(user.name, `${getAppUrl()}/reset-password?token=${encodeURIComponent(token)}`)
+        const message = passwordResetEmail(user.name, `${getPublicBaseUrl()}/reset-password?token=${encodeURIComponent(token)}`)
         await sendMail({ to: user.email, ...message })
       } catch {
         logger.error("api.auth.forgot_password", "Reset email could not be issued or delivered.")
