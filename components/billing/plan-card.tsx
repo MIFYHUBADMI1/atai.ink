@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 import { CheckoutButton } from "@/components/billing/checkout-button"
 import { PlanChangeDialog } from "@/components/billing/plan-change-dialog"
 import { formatUSD, CREDIT_UNIT_NAME, SUBSCRIPTION_PLANS } from "@/lib/billing/config"
+import { translateFeature } from "@/lib/billing/feature-copy"
 import type { SubscriptionPlan } from "@/lib/billing/config"
 
 import { AuthTrigger } from "@/components/auth/auth-trigger"
@@ -22,8 +23,10 @@ interface PlanCardProps {
   /** What the buyer can do with the plan. When supplied, the raw feature lists
    * move into a disclosure below the card so the card reads as an outcome. */
   outcomes?: string[]
-  /** Rewrites a plan's internal feature string for a non-technical reader. */
-  translateFeature?: (feature: string) => string
+  /** Rewrite the plan's internal feature strings for a non-technical reader.
+   * A flag, not a function prop: functions cannot cross the server→client
+   * boundary during prerender. */
+  translateLabels?: boolean
 }
 
 export function PlanCard({
@@ -34,14 +37,14 @@ export function PlanCard({
   className,
   bestFor,
   outcomes,
-  translateFeature,
+  translateLabels = false,
 }: PlanCardProps) {
   const [selected, setSelected] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [checkoutPending, setCheckoutPending] = useState(false)
 
   const framed = Boolean(outcomes && outcomes.length > 0)
-  const readable = translateFeature ?? ((feature: string) => feature)
+  const readable = translateLabels ? translateFeature : ((feature: string) => feature)
 
   const isActive = activePlanId === plan.id
   const hasOtherActivePlan = Boolean(activePlanId) && !isActive && activePlanId !== "free"
