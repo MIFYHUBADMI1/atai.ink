@@ -16,6 +16,7 @@ import {
   Search,
   Settings,
   Sparkles,
+  Wallet,
   X,
 } from "lucide-react"
 import { BrandLogo } from "@/components/brand-logo"
@@ -35,6 +36,7 @@ import { cn } from "@/lib/utils"
 const NAV = [
   { href: "/dashboard", label: "Home", icon: Home },
   { href: "/projects", label: "Businesses", icon: Building2 },
+  { href: "/finances", label: "Finances", icon: Wallet },
   { href: "/notifications", label: "Notifications", icon: Bell },
   { href: "/new", label: "New business", icon: Sparkles },
 ] as const
@@ -238,6 +240,7 @@ function SidebarBody({
         ) : null}
         <nav className="flex flex-col gap-1" aria-label="Workspace">
           <SidebarLink item={{ href: "/dashboard", label: "Dashboard", icon: Home, match: (p) => p === "/dashboard" }} pathname={pathname} collapsed={collapsed} />
+          <SidebarLink item={{ href: "/finances", label: "All business finances", icon: Wallet, match: (p) => p === "/finances" }} pathname={pathname} collapsed={collapsed} />
         </nav>
         <nav className="flex flex-col gap-1" aria-label="Project tools">
           {!collapsed ? (

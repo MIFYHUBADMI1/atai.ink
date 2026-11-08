@@ -2,7 +2,12 @@ import type { ApplicationSpecification } from "@/lib/types/specification"
 import type { ProjectUnderstanding } from "@/lib/types/understanding"
 import type { ProjectPreferences } from "@/lib/types/project"
 import { readCombinedDesignDirection, readCombinedFoundation, readCombinedMarketingPlan } from "@/lib/analysis/plan-sections"
-import { RUNTIME_CAPABILITY_SUMMARIES, unsupportedRuntimeClaims } from "@/lib/analysis/runtime-capabilities"
+import {
+  RUNTIME_CAPABILITY_SUMMARIES,
+  RUNTIME_CAPABILITY_CONFIG_BLOCK,
+  RUNTIME_KEY_ENFORCEMENT_BLOCK,
+  unsupportedRuntimeClaims,
+} from "@/lib/analysis/runtime-capabilities"
 import { buildContradictionResolutionBlock, findPlanContradictions } from "@/lib/analysis/consistency"
 
 /**
@@ -150,11 +155,13 @@ function declinedCapabilityLines(spec: ApplicationSpecification): string {
  * project's ATAI_API_KEY via @atai-group/sdk, and no external payment gateway
  * is ever allowed.
  *
- * The block has two parts:
+ * The block has these parts:
  *   1. A static mandate + concrete access steps (how to reach and call the
  *      runtime with the API key) — identical for every project, so the build
  *      agent can't miss it even when the founder left the plan section blank.
- *   2. The founder's own planned integrations, carried in full. Only
+ *   2. The tested per-capability request shapes from the playground.
+ *   3. The ATAI_API_KEY enforcement contract (fail fast, health check).
+ *   4. The founder's own planned integrations, carried in full. Only
  *      injection-shaped phrases are neutralized (it is plan content), but the
  *      block's own rules are what the build agent must follow.
  */
@@ -168,6 +175,7 @@ function buildRuntimeIntegrationsBlock(runtimeIntegrations?: string): string {
     "- Every product capability — payments/checkout/subscriptions, AI text, text-to-speech, web search, URL scraping, email, realtime notifications, maps/geocoding, calendar bookings, vector/semantic search, and the app's own data — is obtained from the Atai Runtime through the official @atai-group/sdk and the project's ATAI_API_KEY. Not from any other source.",
     "- PAYMENTS ARE RUNTIME-ONLY. All money movement (checkout, subscriptions, payment and payout reads) goes through atai.payments. External payment gateways and their SDKs/keys (Stripe, PayPal, Braintree, Razorpay, LemonSqueezy, Paddle, or any other) are FORBIDDEN — do not install them, do not reference them, do not ask for their keys. There is no fallback to them.",
     "- The same holds for every other capability: never require a provider account or a provider key (OpenAI, Anthropic, SendGrid, Mapbox, Google, etc.). If the app needs it, the Atai runtime provides it through the SDK.",
+    "- RUNTIME FIRST — EVEN OVER TOTALUM BUILT-INS: whenever the app needs a capability from the catalog, implement it through the Atai runtime even if Totalum's own platform offers that same feature. Totalum built-ins are ONLY for end-user identity/auth and the app's own data storage via the Totalum SDK (the same database the runtime's db capability mirrors); every other catalog capability is runtime-only, with no Totalum-native or third-party substitute.",
     "- Never hardcode, request from the user, or expose the API key. Atai provisions ATAI_API_KEY automatically and injects it into the deployed app's secret store.",
     "",
     "HOW TO ACCESS AND USE THE RUNTIME (steps the build must follow):",
@@ -180,6 +188,10 @@ function buildRuntimeIntegrationsBlock(runtimeIntegrations?: string): string {
     "7. Text-to-speech returns base64 audio inside the JSON envelope. Convert it before rendering: atai.voice.toDataUrl(speech) on the client, or Buffer.from(speech.audioBase64, \"base64\") to a file server-side. Never show the raw base64 string to users.",
     "8. End-user sign-in stays on the app's built-in auth (Totalum SDK). The Atai runtime is for product capabilities, not user identity.",
     "9. If a feature cannot be expressed with the capabilities above, implement it with the built-in stack (Totalum SDK) — do NOT invent Atai capabilities and do NOT reach for an external provider or gateway.",
+    "",
+    RUNTIME_CAPABILITY_CONFIG_BLOCK,
+    "",
+    RUNTIME_KEY_ENFORCEMENT_BLOCK,
   ]
   if (founderPlan && !isPlaceholderOnly(founderPlan)) {
     lines.push(
@@ -389,6 +401,25 @@ export function buildInitialBuildPrompt(
   ]
     .filter((l) => l !== "")
     .join("\n")
+}
+
+/**
+ * Follow-up edits reach the same build agent without the launch brief, so the
+ * runtime contract travels with every edit — compact, but with the same teeth:
+ * runtime-only capabilities, no external providers, fail fast without the key.
+ * The founder's words are the instruction itself and are sent untouched.
+ */
+export function buildFollowupAgentPrompt(userPrompt: string): string {
+  return [
+    "═══ RUNTIME RULES FOR THIS EDIT (MANDATORY — APPLY TO EVERY CHANGE) ═══",
+    "This application runs on the Atai runtime: the official @atai-group/sdk, the server-side ATAI_API_KEY, base path /api/runtime/v1. For this edit and every future edit:",
+    "- Any new or changed feature matching a runtime capability (AI text/vision/speech/transcription/image/video, web search or scrape, email, realtime notifications, maps, calendar bookings, vectors, payments) MUST be implemented through the Atai runtime — even where Totalum's platform offers its own version of that feature. Never install or reference an external provider or its key (Stripe, OpenAI, SendGrid, Mapbox, Twilio, Cal.com, or any other), and never add a fallback that bypasses the runtime.",
+    "- The application must keep failing fast without a valid ATAI_API_KEY: no default values, no demo modes, no silent degradation — a failing runtime call surfaces a visible error and never gets replaced by a non-runtime path.",
+    "- New capability calls stay in server-side code through the shared Atai client; the browser never sees the key. Tested request shapes: https://atai.ink/developers/playground — full contract: https://atai.ink/sdk",
+    "",
+    "THE FOUNDER'S EDIT:",
+    userPrompt,
+  ].join("\n")
 }
 
 /**

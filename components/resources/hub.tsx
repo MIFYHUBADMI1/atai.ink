@@ -2,13 +2,20 @@
 
 import { useMemo, useState, type KeyboardEvent } from "react"
 import Link from "next/link"
-import { Search } from "lucide-react"
+import { ArrowRight, Search, Sparkles } from "lucide-react"
 import {
   CATEGORY_META,
+  FORMAT_LABEL,
   LEARNING_PATHS,
   RESOURCE_CATEGORIES,
+  RESOURCE_FORMATS,
+  TYPE_LABEL,
+  type ResourceFormat,
   type ResourceSummary,
 } from "@/lib/resources"
+import { resourceFormat } from "@/lib/resources/media"
+import { ResourceFormatIcon } from "@/components/resources/format-icon"
+import { CATEGORY_ACCENT } from "@/components/resources/accents"
 import { ResourceCard } from "@/components/resources/resource-card"
 import { cn } from "@/lib/utils"
 
@@ -21,16 +28,19 @@ export function ResourcesHub({
 }) {
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState<string>("all")
+  const [format, setFormat] = useState<"all" | ResourceFormat>("all")
   const [activeIndex, setActiveIndex] = useState(0)
+  const featuredAccent = CATEGORY_ACCENT[featured.category]
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     return resources.filter((resource) => {
       if (category !== "all" && resource.category !== category) return false
+      if (format !== "all" && resourceFormat(resource) !== format) return false
       if (!q) return true
       return resource.searchText.includes(q)
     })
-  }, [resources, query, category])
+  }, [resources, query, category, format])
 
   function onSearchKey(event: KeyboardEvent<HTMLInputElement>) {
     if (!query.trim() || filtered.length === 0) return
@@ -94,7 +104,7 @@ export function ResourcesHub({
                       index === activeIndex && "bg-accent/60",
                     )}
                   >
-                    <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                    <p className={cn("font-mono text-[11px] uppercase tracking-[0.14em]", CATEGORY_ACCENT[resource.category].text)}>
                       {CATEGORY_META[resource.category].label}
                     </p>
                     <p className="mt-1 font-medium">{resource.title}</p>
@@ -111,11 +121,27 @@ export function ResourcesHub({
         <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Featured</p>
         <Link
           href={featured.href}
-          className="mt-3 block rounded-3xl border border-indigo-500/20 bg-indigo-500/5 p-6 transition-colors hover:border-indigo-500/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:p-8"
+          className={cn(
+            "group relative mt-3 block overflow-hidden rounded-3xl border border-border bg-card p-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:p-8",
+            featuredAccent.hoverBorder,
+          )}
         >
-          <h2 className="text-2xl font-semibold tracking-tight">{featured.title}</h2>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">{featured.description}</p>
-          <p className="mt-5 text-sm font-medium text-indigo-600 dark:text-indigo-300">Read guide →</p>
+          <div aria-hidden className={cn("pointer-events-none absolute inset-0 bg-gradient-to-br", featuredAccent.glow)} />
+          <div className="relative">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em]", featuredAccent.chip)}>
+                <Sparkles className="size-3" /> Featured
+              </span>
+              <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                {CATEGORY_META[featured.category].label} · {TYPE_LABEL[featured.type]}
+              </span>
+            </div>
+            <h2 className="mt-4 text-2xl font-semibold tracking-tight">{featured.title}</h2>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">{featured.description}</p>
+            <p className={cn("mt-5 inline-flex items-center gap-1 text-sm font-medium", featuredAccent.text)}>
+              Read guide <ArrowRight className="size-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+            </p>
+          </div>
         </Link>
       </section>
 
@@ -138,10 +164,13 @@ export function ResourcesHub({
               type="button"
               onClick={() => setCategory(id)}
               className={cn(
-                "shrink-0 rounded-full border px-3 py-1.5 text-sm",
-                category === id ? "border-indigo-500/40 bg-indigo-500/10" : "border-border text-muted-foreground hover:text-foreground",
+                "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors",
+                category === id
+                  ? CATEGORY_ACCENT[id].chip
+                  : "border-border text-muted-foreground hover:text-foreground",
               )}
             >
+              <span aria-hidden className={cn("size-1.5 rounded-full", CATEGORY_ACCENT[id].dot)} />
               {CATEGORY_META[id].label}
             </button>
           ))}
@@ -156,6 +185,42 @@ export function ResourcesHub({
             </span>
           ))}
         </p>
+
+        <div className="mt-5">
+          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">By format</p>
+          <nav aria-label="Resource formats" className="mt-2 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <button
+              type="button"
+              onClick={() => {
+                setFormat("all")
+                setActiveIndex(0)
+              }}
+              className={cn(
+                "shrink-0 rounded-full border px-3 py-1.5 text-sm",
+                format === "all" ? "border-indigo-500/40 bg-indigo-500/10" : "border-border text-muted-foreground hover:text-foreground",
+              )}
+            >
+              All formats
+            </button>
+            {RESOURCE_FORMATS.map((id) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => {
+                  setFormat(id)
+                  setActiveIndex(0)
+                }}
+                className={cn(
+                  "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm",
+                  format === id ? "border-indigo-500/40 bg-indigo-500/10" : "border-border text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <ResourceFormatIcon format={id} className="size-3.5" />
+                {FORMAT_LABEL[id]}
+              </button>
+            ))}
+          </nav>
+        </div>
       </section>
 
       <section>
@@ -165,14 +230,20 @@ export function ResourcesHub({
             <div key={path.id} className="rounded-2xl border border-border bg-card p-5">
               <h3 className="font-semibold">{path.title}</h3>
               <p className="mt-2 text-sm text-muted-foreground">{path.description}</p>
-              <ol className="mt-4 space-y-2 text-sm">
+              <ol className="mt-4 space-y-2.5 text-sm">
                 {path.steps.map((id, index) => {
                   const item = resources.find((resource) => `${resource.category}/${resource.slug}` === id)
                   if (!item) return null
                   return (
-                    <li key={id}>
-                      <Link href={item.href} className="text-foreground underline-offset-4 hover:underline">
-                        {index + 1}. {item.title}
+                    <li key={id} className="flex items-start gap-2.5">
+                      <span
+                        aria-hidden
+                        className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md bg-indigo-500/10 text-[11px] font-semibold text-indigo-600 dark:text-indigo-300"
+                      >
+                        {index + 1}
+                      </span>
+                      <Link href={item.href} className="underline-offset-4 hover:underline">
+                        {item.title}
                       </Link>
                     </li>
                   )
@@ -196,10 +267,18 @@ export function ResourcesHub({
                 </Link>
               </>
             ) : null}
+            {format !== "all" ? (
+              <>
+                {" · "}
+                <button type="button" onClick={() => setFormat("all")} className="underline-offset-4 hover:underline">
+                  Clear format filter
+                </button>
+              </>
+            ) : null}
           </p>
         </div>
         <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {(query.trim() ? filtered : category === "all" ? resources : filtered).map((resource) => (
+          {(filtered).map((resource) => (
             <ResourceCard key={resource.href} resource={resource} />
           ))}
         </div>

@@ -168,6 +168,7 @@ export function DashboardCommandCenter() {
           <UsageCard
             available={session.credits.available}
             balance={session.credits.balance}
+            allowance={session.credits.allowance}
             emailVerified={session.user.emailVerified}
           />
           <DiscoverCard />
@@ -472,10 +473,12 @@ function BusinessesList({ projects }: { projects: ProjectSummary[] }) {
 function UsageCard({
   available,
   balance,
+  allowance,
   emailVerified,
 }: {
   available: number
   balance: number
+  allowance: number
   emailVerified: boolean
 }) {
   if (!emailVerified && balance === 0) {
@@ -489,7 +492,10 @@ function UsageCard({
       </section>
     )
   }
-  const remaining = balance > 0 ? Math.round((available / balance) * 100) : 0
+  // Spend down the plan's fixed monthly pool, not the live balance (which
+  // would read 100% forever); without a plan the wallet balance is the pool.
+  const pool = allowance > 0 ? allowance : balance
+  const remaining = pool > 0 ? Math.min(100, Math.round((available / pool) * 100)) : 0
   return (
     <section className="rounded-2xl border border-border bg-card p-5">
       <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Atai usage</p>

@@ -11,7 +11,9 @@ import {
 
 export {
   CATEGORY_META,
+  FORMAT_LABEL,
   RESOURCE_CATEGORIES,
+  RESOURCE_FORMATS,
   TYPE_LABEL,
   resourceHref,
   resourcePathId,
@@ -20,6 +22,8 @@ export type {
   Resource,
   ResourceBlock,
   ResourceCategory,
+  ResourceFile,
+  ResourceFormat,
   ResourceSummary,
   ResourceType,
 } from "@/lib/resources/types"
@@ -34,7 +38,17 @@ function searchBlob(resource: Resource) {
       return ""
     })
     .join(" ")
-  return [resource.title, resource.description, resource.category, resource.type, resource.topics.join(" "), body]
+  return [
+    resource.title,
+    resource.description,
+    resource.category,
+    resource.type,
+    resource.format ?? "",
+    resource.topics.join(" "),
+    (resource.keywords ?? []).join(" "),
+    resource.contentMarkdown ?? "",
+    body,
+  ]
     .join(" ")
     .toLowerCase()
 }

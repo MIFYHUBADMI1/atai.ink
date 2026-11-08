@@ -4,15 +4,19 @@ import Link from "next/link"
 import {
   ArrowRight,
   BarChart3,
+  BookOpen,
   Brain,
   Building2,
   Check,
   Database,
+  FileDown,
+  Film,
   GitBranch,
   Globe2,
   Lightbulb,
   Link2,
   Rocket,
+  Route,
   Server,
   Shield,
   Users,
@@ -24,6 +28,8 @@ import { FadeIn } from "@/components/landing/fade-in"
 import { ProductShot } from "@/components/landing/product-shot"
 import { AuthTrigger } from "@/components/auth/auth-trigger"
 import { useSession } from "@/lib/client/api"
+import { CATEGORY_META, RESOURCE_CATEGORIES } from "@/lib/resources"
+import { CATEGORY_ACCENT } from "@/components/resources/accents"
 
 const LIFECYCLE = [
   { id: "idea", title: "Idea", body: "Start with your skills, an idea, or a problem you want to solve." },
@@ -60,8 +66,7 @@ const AUDIENCE = [
   { icon: Brain, title: "Small teams", body: "Work with specialized AI teams while staying in charge of your business." },
 ]
 
-const DIFFERENTIATION = [
-  {
+const DIFFERENTIATION = [  {
     icon: Users,
     title: "Instead of hiring a full team",
     tradeoff: "Salaries, hiring, and management come before anything reaches customers.",
@@ -80,6 +85,111 @@ const DIFFERENTIATION = [
     atai: "Start with a skill, an idea, a website, or a codebase — and stay in charge as the business grows.",
   },
 ]
+
+const RESOURCE_HIGHLIGHTS = [
+  {
+    icon: BookOpen,
+    accent: CATEGORY_ACCENT.start,
+    title: "Guides and playbooks",
+    body: "Practical steps for validating an idea, scoping an MVP, and launching with confidence.",
+    href: "/resources/start",
+  },
+  {
+    icon: Route,
+    accent: CATEGORY_ACCENT.build,
+    title: "Roadmaps",
+    body: "Follow a clear path from first idea to an online business you can run and grow.",
+    href: "/resources/build",
+  },
+  {
+    icon: FileDown,
+    accent: CATEGORY_ACCENT.templates,
+    title: "Documents, PDFs, and templates",
+    body: "Downloadable worksheets and checklists you can keep and use offline.",
+    href: "/resources/templates",
+  },
+  {
+    icon: Film,
+    accent: CATEGORY_ACCENT.atai,
+    title: "Video walkthroughs",
+    body: "Watch how each part of Atai works, from planning through publishing.",
+    href: "/resources/atai",
+  },
+]
+
+export function LandingResources() {
+  return (
+    <section id="resources" className="scroll-mt-24 border-b border-border/60 py-24">
+      <div className="mx-auto max-w-6xl px-6 lg:px-10">
+        <FadeIn>
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+            <div className="max-w-2xl">
+              <p className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-indigo-600 dark:text-indigo-300">
+                Resource library
+              </p>
+              <h2 className="mt-3 text-4xl font-black tracking-tight sm:text-5xl">
+                Learn before you build. Keep learning as you grow.
+              </h2>
+              <p className="mt-4 text-lg leading-8 text-muted-foreground">
+                Guides, playbooks, tutorials, roadmaps, downloadable documents, and videos for every stage of owning a
+                business — with the full Atai documentation beside them.
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <Link href="/resources" className={cn(buttonVariants(), "gap-1.5")}>
+                Browse the resource library
+                <ArrowRight className="size-4" />
+              </Link>
+              <Link href="/docs" className={cn(buttonVariants({ variant: "outline" }), "gap-1.5")}>
+                <BookOpen className="size-4" />
+                Read the docs
+              </Link>
+            </div>
+          </div>
+        </FadeIn>
+
+        <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {RESOURCE_HIGHLIGHTS.map((item, index) => (
+            <FadeIn key={item.title} delay={index * 70}>
+              <Link
+                href={item.href}
+                className={cn(
+                  "group flex h-full flex-col rounded-2xl border border-border/70 bg-card p-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/5 dark:hover:shadow-black/30",
+                  item.accent.hoverBorder,
+                )}
+              >
+                <span className={cn("flex size-9 items-center justify-center rounded-xl", item.accent.iconTile)}>
+                  <item.icon className="size-5" aria-hidden />
+                </span>
+                <h3 className="mt-4 font-bold">{item.title}</h3>
+                <p className="mt-2 flex-1 text-sm leading-6 text-muted-foreground">{item.body}</p>
+                <span className={cn("mt-4 inline-flex items-center gap-1 text-sm font-medium", item.accent.text)}>
+                  Open <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+                </span>
+              </Link>
+            </FadeIn>
+          ))}
+        </div>
+
+        <FadeIn delay={200}>
+          <div className="mt-8 flex flex-wrap items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Goal areas</span>
+            {RESOURCE_CATEGORIES.map((category) => (
+              <Link
+                key={category}
+                href={`/resources/${category}`}
+                className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <span aria-hidden className={cn("size-1.5 rounded-full", CATEGORY_ACCENT[category].dot)} />
+                {CATEGORY_META[category].label}
+              </Link>
+            ))}
+          </div>
+        </FadeIn>
+      </div>
+    </section>
+  )
+}
 
 export function LandingTrust() {
   return (

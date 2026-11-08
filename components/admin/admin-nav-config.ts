@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react"
 import {
   BarChart3,
+  BookOpen,
   Coins,
   CreditCard,
   Database,
@@ -87,6 +88,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     id: "product",
     label: "Product",
     items: [
+      { href: "/admin/resources", label: "Resources", icon: BookOpen, description: "Publish guides, tutorials, roadmaps, PDFs, images, and videos." },
       { href: "/admin/feature-requests", label: "Feature requests", icon: Lightbulb, description: "Demand, review, and status." },
       { href: "/admin/feedback", label: "Doc feedback", icon: MessageSquare, description: "Documentation thumbs and comments." },
     ],

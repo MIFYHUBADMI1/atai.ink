@@ -48,6 +48,11 @@ import {
   DEFAULT_COMPOSER_PREFS,
   loadComposerPrefs,
   saveComposerPrefs,
+  saveComposerFileContents,
+  clearComposerFileContents,
+  MAX_ATTACHMENTS,
+  MAX_ATTACHMENT_BYTES,
+  MAX_TOTAL_ATTACHMENT_BYTES,
   type ComposerAttachment,
 } from "@/lib/start/composer-prefs"
 import {
@@ -222,6 +227,15 @@ function formatSize(size: number) {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`
 }
 
+function readFileAsDataUri(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
+}
+
 export function LandingComposer({
   lockedMode,
   showModes = true,
@@ -301,6 +315,13 @@ export function LandingComposer({
     if (!hydrated) return
     saveComposerPrefs({ prompt, title, mode, agents, tool, auto, files })
   }, [hydrated, prompt, title, mode, agents, tool, auto, files])
+
+  // Attachment contents persist under their own key so a refresh restores the
+  // full files, not just name chips.
+  useEffect(() => {
+    if (!hydrated) return
+    saveComposerFileContents(files)
+  }, [hydrated, files])
 
   // Keep the name field a confirmed, prefilled input rather than a silent
   // derivation: until the user edits it, mirror the suggestion for the current
@@ -428,18 +449,43 @@ export function LandingComposer({
   function addFiles(list: FileList | null) {
     if (!requireAccount()) return
     if (!list?.length) return
-    const next = Array.from(list).slice(0, 6).map((file) => ({
-      id: `${file.name}-${file.size}-${file.lastModified}`,
-      name: file.name,
-      size: file.size,
-    }))
-    setFiles((current) => {
-      const merged = [...current]
-      for (const file of next) {
-        if (!merged.some((item) => item.id === file.id)) merged.push(file)
+    void (async () => {
+      const picked = Array.from(list).slice(0, MAX_ATTACHMENTS)
+      const loaded: ComposerAttachment[] = []
+      try {
+        for (const file of picked) {
+          if (file.size > MAX_ATTACHMENT_BYTES) {
+            setError(`“${file.name}” is over 1 MB — attach a smaller file, or paste the key points into your idea.`)
+            return
+          }
+          loaded.push({
+            id: `${file.name}-${file.size}-${file.lastModified}`,
+            name: file.name,
+            size: file.size,
+            content: await readFileAsDataUri(file),
+          })
+        }
+      } catch {
+        setError("Couldn’t read one of those files. Try again.")
+        return
       }
-      return merged.slice(0, 6)
-    })
+      let overflow = false
+      setFiles((current) => {
+        const merged = [...current]
+        let total = merged.reduce((sum, item) => sum + item.size, 0)
+        for (const file of loaded) {
+          if (merged.some((item) => item.id === file.id)) continue
+          if (merged.length >= MAX_ATTACHMENTS || total + file.size > MAX_TOTAL_ATTACHMENT_BYTES) {
+            overflow = true
+            break
+          }
+          merged.push(file)
+          total += file.size
+        }
+        return merged
+      })
+      if (overflow) setError("Attachment limit reached — up to 6 files and 2.5 MB in total.")
+    })()
   }
 
   function handlePromptChange(event: ChangeEvent<HTMLTextAreaElement>) {
@@ -631,6 +677,11 @@ export function LandingComposer({
   function startPending(nextMode: StartMode, savedTitle: string) {
     const saved = promptForStart(nextMode, prompt)
     const continueHref = "/start"
+    // Only attachments whose content actually survived the read make the trip;
+    // chips without data are decoration and would be dropped downstream anyway.
+    const pendingFiles = files
+      .filter((file): file is ComposerAttachment & { content: string } => Boolean(file.content))
+      .map(({ name, content, size }) => ({ name, content, size }))
     savePendingStart({
       prompt: saved,
       title: savedTitle,
@@ -639,8 +690,12 @@ export function LandingComposer({
       signalType: nextMode === "idea" ? "idea" : "url",
       mode: nextMode,
       pipelineMode: "heavy",
+      files: pendingFiles.length ? pendingFiles : undefined,
     })
-    saveComposerPrefs({ prompt, title: savedTitle, mode: nextMode, agents, tool, auto, files })
+    // The handoff owns the attachments from here; clear them so the composer
+    // starts fresh when the founder returns.
+    saveComposerPrefs({ prompt, title: savedTitle, mode: nextMode, agents, tool, auto, files: [] })
+    setFiles([])
     trackStartSubmitted({ method: nextMode, surface, authenticated: Boolean(session) })
     setSubmitting(true)
     if (!session) {
@@ -894,6 +949,7 @@ export function LandingComposer({
             type="file"
             className="hidden"
             multiple
+            accept=".pdf,.txt,.md,.csv,.json,.xml,.yaml,.yml,.doc,.docx,.xls,.xlsx,.ppt,.pptx,image/png,image/jpeg,image/webp,image/gif"
             onChange={(event) => {
               addFiles(event.target.files)
               event.target.value = ""

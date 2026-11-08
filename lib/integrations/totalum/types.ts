@@ -9,6 +9,16 @@ export interface LaunchProjectRequest {
   prompt: string
   maxDevelopmentCreditsPerMonth?: number
   maxInfrastructureCreditsPerMonth?: number
+  /** First-prompt attachments per the Totalum launch schema: up to 10 items,
+   * each with `name` and exactly one of `url` (public HTTPS) or `content`
+   * (base64/data-URI). */
+  files?: Array<{
+    name: string
+    description?: string
+    imageDescription?: string
+    url?: string
+    content?: string
+  }>
 }
 
 export interface LaunchProjectResponse {

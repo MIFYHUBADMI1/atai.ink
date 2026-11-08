@@ -32,6 +32,7 @@ import { buttonVariants } from "@/components/ui/button"
 import { SiteHeader } from "@/components/site-header"
 import { SiteFooter } from "@/components/site-footer"
 import { DocsSearch } from "@/components/docs-search"
+import { DocsResourceBridge } from "@/components/docs-resource-bridge"
 import { VideoEmbed } from "@/components/video-embed"
 import { ScrollProgress } from "@/components/scroll-progress"
 import { BrandMark } from "@/components/brand-logo"
@@ -156,6 +157,8 @@ export function DocsContent() {
               ))}
             </div>
           </section>
+
+          <DocsResourceBridge />
 
           {/* ─── GETTING STARTED ─── */}
           <section id="getting-started" style={{ opacity: isVisible("getting-started") ? 1 : 0.25, transition: "opacity 0.2s" }}>
@@ -1052,6 +1055,7 @@ export function DocsContent() {
         <p className="mb-4 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Explore more</p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[
+            { href: "/resources", icon: BookOpen, label: "Resource Library", desc: "Guides, tutorials, roadmaps, videos, and downloads", color: "text-teal-600 dark:text-teal-400", bg: "bg-teal-500/10" },
             { href: "/sdk", icon: Code2, label: "SDK & API Reference", desc: "The @atai-group/sdk and Runtime API — keys, endpoints, capabilities", color: "text-cyan-600 dark:text-cyan-400", bg: "bg-cyan-500/10" },
             { href: "/developers", icon: Zap, label: "Developer Portal", desc: "Build with Atai's infrastructure — AI, payments, maps, and 40+ services", color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-500/10" },
             { href: "/pricing", icon: DollarSign, label: "Pricing & Credits", desc: "Plans, credit packs, and what every action costs", color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10" },

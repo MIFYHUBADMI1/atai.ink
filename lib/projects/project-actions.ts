@@ -12,6 +12,7 @@ import { getInfrastructurePlan } from "@/lib/infrastructure/plans"
 import { buildFollowupAgentPrompt, buildInitialBuildPrompt } from "@/lib/analysis/prompt-builder"
 import { getBuildCost } from "@/lib/billing/build-auth"
 import { getDeploymentCosts } from "@/lib/billing/runtime-config"
+import { getProjectAttachments, clearProjectAttachments } from "@/lib/projects/attachments"
 import {
   getPlanSection,
   validatePlanSectionValue,
@@ -161,10 +162,16 @@ export async function startProjectBuild(userId: string, projectId: string): Prom
     const defaultPlan = getInfrastructurePlan(project.infrastructure?.planId ?? "testing")
     const infraCap = defaultPlan?.totalumInfrastructureCredits ?? 5
 
+    // Composer attachments staged at creation ride the first build prompt
+    // (launch `files`). Kept on failure so the retry re-sends them.
+    const attachments = await getProjectAttachments(projectId).catch(() => [])
+    const launchFiles = attachments.map((a) => ({ name: a.name, content: a.content }))
+
     const launch = await launchProject({
       projectId: requestedProjectId,
       prompt: run.prompt,
       maxInfrastructureCreditsPerMonth: infraCap,
+      ...(launchFiles.length ? { files: launchFiles } : {}),
     })
     if (launch.projectId !== requestedProjectId) {
       throw new TotalumError("PROJECT_ID_UNAVAILABLE")
@@ -179,6 +186,12 @@ export async function startProjectBuild(userId: string, projectId: string): Prom
     }
 
     await store.appendEvent(projectId, event("build", "Build started"))
+    if (launchFiles.length) {
+      await clearProjectAttachments(projectId).catch((e) => {
+        logger.warn("api.projects.build", "attachment cleanup failed", { projectId, error: (e as Error).message })
+      })
+      await store.appendEvent(projectId, event("build", `Shared ${launchFiles.length} attached file${launchFiles.length === 1 ? "" : "s"} with the builder.`))
+    }
     return { ok: true, status: 200, code: "OK", buildRunId: run.id, totalumProjectId: launch.projectId, tier, creditsCharged: creditsNeeded }
   } catch (providerError) {
     await releaseReservation({ userId, amount: creditsNeeded, buildId: run.id, reason: "Build provider failure", projectId })

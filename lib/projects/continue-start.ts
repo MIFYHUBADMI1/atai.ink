@@ -8,6 +8,7 @@ export function buildCreatePayload(pending: PendingStart) {
   const name = pending.title?.trim() || undefined
   const mode = pending.mode ?? "idea"
   const pipelineMode = pending.pipelineMode === "legacy" ? "legacy" : "heavy"
+  const attachments = pending.files?.map((file) => ({ name: file.name, content: file.content, size: file.size }))
 
   if (mode === "github") {
     const repo = extractGithubRepo(prompt) ?? prompt
@@ -22,6 +23,7 @@ export function buildCreatePayload(pending: PendingStart) {
       githubSubMode: hasInstruction ? ("extend" as const) : ("clone" as const),
       userRequest: hasInstruction ? prompt : undefined,
       idea: prompt,
+      attachments,
       pipelineMode,
       idempotencyKey: pending.idempotencyKey,
     }
@@ -33,6 +35,7 @@ export function buildCreatePayload(pending: PendingStart) {
       name,
       url: extractWebsiteUrl(prompt) ?? prompt,
       idea: prompt,
+      attachments,
       pipelineMode,
       idempotencyKey: pending.idempotencyKey,
     }
@@ -42,6 +45,7 @@ export function buildCreatePayload(pending: PendingStart) {
     mode: "scratch" as const,
     name,
     idea: prompt,
+    attachments,
     pipelineMode,
     idempotencyKey: pending.idempotencyKey,
   }

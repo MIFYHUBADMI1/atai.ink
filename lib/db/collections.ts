@@ -1,5 +1,5 @@
 import { getDb } from "@/lib/db/mongodb"
-import type { UserDoc, SessionDoc, VerificationTokenDoc, RateLimitDoc, ProjectAssetDoc, ProviderUsageDoc, TopUpDoc, PublishEventDoc, ReferralDoc, DocFeedbackDoc, WebhookEventDoc, PlanningRunDoc, ProjectLikeDoc, UserFollowDoc, ProjectForkDoc, ProjectGitHubDoc, SeoAuditDoc, ContentItemDoc, BrandProfileDoc, GrowthTaskDoc, GrowthTaskHistoryDoc, CampaignDoc, CampaignHistoryDoc } from "@/lib/types/db"
+import type { UserDoc, SessionDoc, VerificationTokenDoc, RateLimitDoc, ProjectAssetDoc, ProjectAttachmentDoc, ProviderUsageDoc, TopUpDoc, PublishEventDoc, ReferralDoc, DocFeedbackDoc, WebhookEventDoc, PlanningRunDoc, ProjectLikeDoc, UserFollowDoc, ProjectForkDoc, ProjectGitHubDoc, SeoAuditDoc, ContentItemDoc, BrandProfileDoc, GrowthTaskDoc, GrowthTaskHistoryDoc, CampaignDoc, CampaignHistoryDoc } from "@/lib/types/db"
 import type {
   FeatureRequestDoc,
   FeatureRequestInternalNoteDoc,
@@ -11,6 +11,7 @@ import type { MirrorProject, BuildRun } from "@/lib/types/project"
 import type { CofounderConversationMongoDoc, PendingActionRecord } from "@/lib/cofounder/types"
 import type { ProjectChatMongoDoc } from "@/lib/types/collab-chat"
 import type { CreditLedgerEntry, BuildAuthorization, PaymentRecord, SubscriptionRecord } from "@/lib/billing/billing-types"
+import type { ResourceDoc } from "@/lib/resources/admin-types"
 
 /** Cache the Db reference across hot reloads so we don't re-resolve per call. */
 const globalForDb = globalThis as unknown as {
@@ -56,6 +57,9 @@ export async function buildRunsCol() {
 export async function projectAssetsCol() {
   return (await getDbCached()).collection<ProjectAssetDoc>("project_assets")
 }
+export async function projectAttachmentsCol() {
+  return (await getDbCached()).collection<ProjectAttachmentDoc>("project_attachments")
+}
 export async function providerUsageCol() {
   return (await getDbCached()).collection<ProviderUsageDoc>("provider_usage")
 }
@@ -70,6 +74,9 @@ export async function referralsCol() {
 }
 export async function docFeedbackCol() {
   return (await getDbCached()).collection<DocFeedbackDoc & { _id?: unknown }>("doc_feedback")
+}
+export async function resourcesCol() {
+  return (await getDbCached()).collection<ResourceDoc & { _id?: unknown }>("resources")
 }
 export async function webhookEventsCol() {
   return (await getDbCached()).collection<WebhookEventDoc & { _id?: unknown }>("webhook_events")
@@ -346,6 +353,15 @@ async function runEnsureIndexes(): Promise<void> {
     publishEvents.createIndex({ createdAt: -1 }),
   ])
 
+  // Project attachment indexes — attachments are looked up by project at
+  // launch and deleted by project in the delete cascade (no TTL: a founder
+  // may legitimately build weeks after attaching).
+  const attachments = await projectAttachmentsCol()
+  await batchedIndexCreation([
+    attachments.createIndex({ id: 1 }, { unique: true, sparse: true, name: "project_attachments_id_unique" }),
+    attachments.createIndex({ projectId: 1 }),
+  ])
+
   // Top-up indexes (historical Mobile Money records — retained permanently
   // for audit/support; NO TTL: the gateway is discontinued but its records
   // must not be auto-deleted by routine index creation)
@@ -375,6 +391,15 @@ async function runEnsureIndexes(): Promise<void> {
   await batchedIndexCreation([
     docFeedback.createIndex({ key: 1 }, { unique: true, name: "doc_feedback_key_unique" }),
     docFeedback.createIndex({ sectionId: 1, vote: 1 }),
+  ])
+
+  // Resource library indexes
+  const resources = await resourcesCol()
+  await batchedIndexCreation([
+    resources.createIndex({ id: 1 }, { unique: true, sparse: true, name: "resources_id_unique" }),
+    resources.createIndex({ category: 1, slug: 1 }, { unique: true, name: "resources_category_slug_unique" }),
+    resources.createIndex({ status: 1, updatedAtMs: -1 }),
+    resources.createIndex({ featured: 1, status: 1, publishedAt: -1 }),
   ])
 
   // Webhook event indexes

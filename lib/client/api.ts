@@ -49,6 +49,8 @@ export interface SessionInfo {
     balance: number
     reserved: number
     available: number
+    /** The active plan's monthly credit grant — the fixed pool the live balance spends down. 0 = no active plan. */
+    allowance: number
   }
 }
 

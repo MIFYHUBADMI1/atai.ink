@@ -474,7 +474,23 @@ export interface ProjectGitHubDoc {
   updatedAt: number
 }
 
-// ─── SEO Audits (Phase 3 — W2 SEO & Visibility) ─────────────────────────────
+// ─── Project Attachments (composer files handed to the builder at launch) ────
+
+/** Files attached in the landing composer, staged server-side until the first build consumes them */
+export interface ProjectAttachmentDoc {
+  _id: ObjectId
+  id: string
+  projectId: string
+  userId: string
+  name: string
+  /** Raw byte length of the decoded file */
+  size: number
+  /** MIME type from the data URI */
+  contentType: string
+  /** Full data URI (base64 payload) — deleted from Mongo once the build consumes it */
+  content: string
+  createdAt: number
+}
 //
 // A durable, per-run snapshot of a deterministic audit of a project's OWN
 // deployed URL. Findings are derived only from the evidence the Firecrawl

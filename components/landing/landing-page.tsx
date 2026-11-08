@@ -14,6 +14,7 @@ import {
   LandingLifecycle,
   LandingManage,
   LandingPlan,
+  LandingResources,
   LandingStart,
   LandingTrust,
 } from "@/components/landing/sections"
@@ -29,6 +30,7 @@ export default function LandingPage() {
       <SiteHeader />
       <LandingHero ctaHref={ctaHref} ctaLabel={ctaLabel} />
       <LandingTrust />
+      <LandingResources />
       <LandingDifferentiation />
       <LandingLifecycle />
       <LandingStart />

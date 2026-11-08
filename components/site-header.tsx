@@ -37,7 +37,7 @@ const defaultLinks: NavLink[] = [
   { href: "/developers", label: "Developers", icon: Zap },
   { href: "/pricing", label: "Pricing", icon: DollarSign },
   { href: "/about", label: "About", icon: Info },
-  { href: "/resources", label: "Resources" },
+  { href: "/resources", label: "Resources", icon: BookOpen },
 ]
 
 const NAV_LINK =

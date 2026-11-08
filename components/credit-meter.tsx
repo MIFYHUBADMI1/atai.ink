@@ -25,7 +25,11 @@ export function CreditMeter({
   // Public pages render the header without a session — don't leave a fake loader behind.
   if (!session) return null
 
-  const { balance, available } = session.credits
+  const { balance, available, allowance } = session.credits
+  // The denominator is the plan's monthly grant, which never moves when
+  // credits are spent — falling back to the live balance would just repeat
+  // the first number. Free users (no plan) get the single-number chip.
+  const planTotal = allowance > 0 ? allowance : null
   const needsVerification = !session.user.emailVerified && balance === 0
   const isLow = !needsVerification && available < 1000
 
@@ -36,7 +40,7 @@ export function CreditMeter({
           "flex h-9 shrink-0 items-center rounded-md border border-border bg-card px-2 sm:px-3",
           needsVerification && "border-amber-500/40",
         )}
-        title={needsVerification ? "Verify your email to receive 500 welcome credits" : `${available.toLocaleString()} available · ${balance.toLocaleString()} total`}
+        title={needsVerification ? "Verify your email to receive 500 welcome credits" : `${available.toLocaleString()} available${planTotal ? ` · ${planTotal.toLocaleString()} on your plan` : ` · ${balance.toLocaleString()} in wallet`}`}
       >
         <span className={compact ? "flex items-center gap-1.5" : "flex items-center gap-1.5 sm:hidden"}>
           <Coins className="size-3.5 text-muted-foreground" />
@@ -56,7 +60,7 @@ export function CreditMeter({
           ) : (
             <span className="font-mono text-sm font-medium text-foreground tabular-nums">
               {available.toLocaleString()}
-              <span className="text-muted-foreground"> / {balance.toLocaleString()}</span>
+              {planTotal ? <span className="text-muted-foreground"> / {planTotal.toLocaleString()}</span> : null}
             </span>
           )}
         </span>

@@ -16,6 +16,9 @@ export type PendingStart = {
   mode?: "idea" | "website" | "url" | "github"
   pipelineMode?: "legacy" | "heavy"
   idempotencyKey?: string
+  /** Files the founder attached in the composer (data URIs). Shared with the
+   * application builder with the first build. */
+  files?: Array<{ name: string; content: string; size?: number }>
 }
 
 export function sanitizeNext(value?: string | null, fallback = "/dashboard"): string {

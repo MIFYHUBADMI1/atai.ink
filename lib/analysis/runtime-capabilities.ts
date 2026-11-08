@@ -136,6 +136,49 @@ HOW TO CALL ATAI (never invent alternatives):
 - Call capabilities only from server-side code. Full contract: https://atai.ink/sdk
 The "Runtime & Integrations" section is this product's Atai runtime contract. It MUST name @atai-group/sdk, ATAI_API_KEY, /api/runtime/v1, and only catalog capabilities this product needs. Generic infrastructure lists (data storage, file storage, websockets, background jobs, admin dashboards, unnamed third-party APIs) are wrong.`
 
+/**
+ * The tested request shapes for every capability, exactly as proven live in the
+ * developer playground (https://atai.ink/developers/playground). Emitted into
+ * every launch brief so the build agent configures the runtime the way it was
+ * verified to work — never from guesses. Provider-neutral on purpose: the
+ * finished app never learns which provider stands behind a capability.
+ */
+export const RUNTIME_CAPABILITY_CONFIG_BLOCK = [
+  "═══ CAPABILITY CONFIGURATION — TESTED REQUEST SHAPES (FOLLOW EXACTLY) ═══",
+  "These are the tested request shapes for each capability, exactly as proven in the Atai playground (https://atai.ink/developers/playground). Use them verbatim — never invent parameters, models, or provider endpoints, and never send a model field unless a line below says one is expected.",
+  `- atai.ai chat/completion — chat: { messages: [{ role: "user", content }] }; completion: { prompt }. The platform model applies server-side; do not send a model.`,
+  "- atai.ai embed — { input: string | string[] } → embeddings; feed these straight into atai.vectors upsert.",
+  `- atai.vision visionInput — messages[] whose content mixes { type: "text", text } and { type: "image_url", image_url: { url } } parts; url may be a public image or a data:image/…;base64 URI. Set max_tokens: 1024 — tighter budgets can return empty answers on reasoning models.`,
+  `- atai.voice synthesize — { text } (1–5,000 chars) → base64 MP3 in the response. Convert with atai.voice.toDataUrl() (client) or Buffer.from(audioBase64, "base64") (server); never render the raw base64 string.`,
+  '- atai.speech speak — { input } (≤10,000 chars), optional voice and response_format ("mp3" | "pcm"); calls without a model get a working platform default with an explicit voice. Returns audioBase64 + mimeType/model/bytes.',
+  "- ai.transcribe transcribe — { input_audio: { data: \"<base64 audio>\", format: \"wav\"|\"mp3\" } }. NEVER send a model field — the transcription model is pinned platform-side and any caller-supplied model is rejected.",
+  "- atai.image generateImage — { prompt, aspect_ratio? } → images[] as base64 + mediaType; the platform image model applies server-side.",
+  "- atai.video generateVideo — { prompt, duration? } → { jobId, status }; poll the SAME operation with { jobId } until finished.",
+  "- atai.search web — { query, limit? } → normalized { title, url, snippet } results.",
+  "- atai.web scrape — { url } → the page as markdown/text.",
+  '- atai.email send — { to: [...], subject, text and/or html }. NEVER send a "from" — the platform sender is injected server-side.',
+  "- atai.notifications send — { channel, event?, title, body, data? }. The channel is automatically scoped to this project; realtime clients subscribe to the same channel for live delivery.",
+  "- atai.maps — geocode { query, limit? } · reverseGeocode { longitude, latitude } · search { query, limit?, longitude?, latitude? } · placeDetails { poiId } (a feature id taken from search/geocode results) · isochrone { coordinates: [lng,lat], profile, minutes[] } · directions { coordinates: [[lng,lat],…], profile } → routes carry GeoJSON geometry for map drawing · matrix { coordinates, annotations[] } (result under payload) · staticImage { longitude, latitude, zoom, width, height, marker? }.",
+  "- atai.calendar — listBookings { limit?, status? } (read-only) · createBooking { start: <future ISO timestamp>, eventTypeId, attendee: { name, email, timeZone } }. Attendee emails must be real addresses — placeholder domains are rejected by the provider.",
+  "- atai.vectors — upsert { vectors: [{ id, values }] } with 768-dimension values (the deployment's index) · search { vector, topK?, returnMetadata? } · delete { ids }. Pipe atai.ai embed output straight into upsert; freshly upserted vectors can take up to ~2 minutes to become searchable.",
+  "- atai.payments — createCheckout { items: [{ productId }], idempotencyKey, successUrl, customerEmail?, currency? } → hosted checkoutUrl. productId is a catalog product id (pdt_…): the charged amount comes from that catalog product, never from the request. createSubscription { productId, quantity, customer: { email, name }, billing: { country } }. listPayments / listPayouts are read-only feeds.",
+  "- atai.db — query { tableName, … } · create/edit/delete { tableName, data?/recordId? }. This is the same database the Totalum SDK serves — use it for cross-cutting server reads (e.g. the admin console).",
+  "- atai.health check() — proves ATAI_API_KEY authenticates and the runtime is reachable (GET /api/runtime/v1/health). Use it for the startup self-check required below.",
+].join("\n")
+
+/**
+ * The key-enforcement contract for every generated application: the app must
+ * not function without a configured, verified ATAI_API_KEY — no demo modes, no
+ * fallbacks, no silent degradation.
+ */
+export const RUNTIME_KEY_ENFORCEMENT_BLOCK = [
+  "═══ ATAI_API_KEY — MANDATORY, VERIFIED, NOTHING WORKS WITHOUT IT ═══",
+  "1. Read ATAI_API_KEY only on the server (process.env.ATAI_API_KEY). If it is missing or blank, fail fast: throw a clear misconfiguration error at startup or first request. Never ship a default value, a placeholder, a demo mode, or any code path that keeps working without the key.",
+  '2. On server startup or first server request, call atai.health.check() once to verify the key is valid and the runtime is reachable. If the check fails, every capability feature shows a clear error state and /admin shows a "runtime not connected" warning — the application must never fall back to a non-runtime implementation.',
+  "3. Never expose the key to the browser, never hardcode it, never ask the user for it — Atai provisions and injects it automatically. A runtime call that fails surfaces its error; it is never silently replaced by another provider or by Totalum built-ins.",
+  "4. The build is not acceptable if any catalog capability works while ATAI_API_KEY is unconfigured or invalid. Configure, verify with the health check, and only then serve the feature.",
+].join("\n")
+
 /** True when Runtime & Integrations is the Atai contract, not generic infra. */
 export function isRuntimeIntegrationsGrounded(text: string): boolean {
   const value = text.trim()

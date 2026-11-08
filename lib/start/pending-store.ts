@@ -30,6 +30,35 @@ function isPending(value: unknown): value is PendingStart {
   return typeof p.prompt === "string" && p.prompt.trim().length > 0 && typeof p.href === "string"
 }
 
+// Attachments ride the pending doc into Mongo, so cap them here at the public
+// boundary: same limits the composer enforces client-side (6 files, ~1 MB each,
+// ~2.5 MB total as raw bytes — base64 inflates by ~4/3, hence the looser caps).
+const MAX_PENDING_FILES = 6
+const MAX_PENDING_FILE_CONTENT_CHARS = 2 * 1024 * 1024
+const MAX_PENDING_FILES_CONTENT_CHARS = 5 * 1024 * 1024
+
+function sanitizePendingFiles(value: unknown): PendingStart["files"] {
+  if (!Array.isArray(value)) return undefined
+  const kept: Array<{ name: string; content: string; size?: number }> = []
+  let total = 0
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object") continue
+    const { name, content, size } = raw as { name?: unknown; content?: unknown; size?: unknown }
+    if (typeof name !== "string" || typeof content !== "string") continue
+    if (!name.trim() || name.length > 255 || !content.startsWith("data:")) continue
+    if (content.length > MAX_PENDING_FILE_CONTENT_CHARS) continue
+    if (total + content.length > MAX_PENDING_FILES_CONTENT_CHARS) break
+    total += content.length
+    kept.push({
+      name: name.slice(0, 255),
+      content,
+      ...(typeof size === "number" && Number.isFinite(size) ? { size: Math.round(size) } : {}),
+    })
+    if (kept.length >= MAX_PENDING_FILES) break
+  }
+  return kept.length ? kept : undefined
+}
+
 export async function savePendingStartServer(payload: PendingStart, userId?: string | null) {
   if (!isPending(payload)) return
   const jar = await cookies()
@@ -46,6 +75,7 @@ export async function savePendingStartServer(payload: PendingStart, userId?: str
           ...payload,
           prompt: payload.prompt.trim().slice(0, 8000),
           href: payload.href.startsWith("/") ? payload.href : "/start",
+          files: sanitizePendingFiles(payload.files),
         },
         ...(userId ? { userId } : {}),
         createdAt: now,

@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { ArrowRight, BookOpen, Check, Zap, Code2, Layers3, Globe, Link as LinkIcon, Shield, Clock, Settings, DollarSign, AlertTriangle, X, Coins } from "lucide-react"
+import { ArrowRight, BookOpen, Check, Store, Users, Building2, Globe, Link as LinkIcon, Shield, HelpCircle, ChevronDown, Coins, Rocket, Wallet } from "lucide-react"
 import { buttonVariants } from "@/components/ui/button"
 import { SiteHeader } from "@/components/site-header"
 import { SiteFooter } from "@/components/site-footer"
@@ -14,63 +14,236 @@ import {
   formatUSD,
   WELCOME_BONUS_CREDITS,
 } from "@/lib/billing/config"
-import { CheckoutButton } from "@/components/billing/checkout-button"
 import { PlanCard } from "@/components/billing/plan-card"
+import { CheckoutButton } from "@/components/billing/checkout-button"
 import { AuthTrigger } from "@/components/auth/auth-trigger"
 
-const TIERS = Object.values(BUILD_TIERS).map((tier) => ({
-  name: tier.label,
-  credits: tier.credits.toLocaleString(),
-  price: `${tier.credits.toLocaleString()} ${CREDIT_UNIT_NAME}`,
-  description: tier.description,
-  icon: tier.id === "simple" ? Code2 : tier.id === "medium" ? Layers3 : Zap,
-  popular: tier.id === "medium",
-  features: tier.id === "simple"
-    ? [
-      "A first live version of the business",
-      "Standard pages and components",
-      "Responsive UI",
-      "Basic functionality",
-      "Right for testing one offer",
-    ]
-    : tier.id === "medium"
-      ? [
-        "A business with real customers",
-        "Sign-in and member areas",
-        "Database-backed records of your work and sales",
-        "APIs",
-        "Dashboards",
-        "Pricing tiers, offers and richer logic",
-        "More customization",
-      ]
-      : [
-        "A full platform business",
-        "Advanced backend functionality",
-        "Multiple revenue and operations features",
-        "More sophisticated data flows",
-        "Advanced integrations",
-        "Larger businesses, end to end",
-      ],
-}))
+/**
+ * Pricing is where a first-time owner decides whether Atai is for them, so the
+ * page leads with what the business gets and puts credit arithmetic after it.
+ * Numbers come from `lib/billing/config.ts`; only the framing lives here.
+ */
+
+const SIMPLE_CREDITS = BUILD_TIERS.simple.credits
+
+/** Per plan: what a founder can actually do with it this month. */
+const PLAN_GUIDANCE: Record<string, { bestFor: string; outcomes: string[] }> = {
+  free: {
+    bestFor: "Looking around first",
+    outcomes: [
+      "Plan your business with Atai and see the working plan in your own workspace",
+      `${WELCOME_BONUS_CREDITS.toLocaleString()} credits on email verification — enough to try the work, not enough to launch`,
+      "Stay signed in as long as you like; upgrade when you want it built",
+    ],
+  },
+  explorer: {
+    bestFor: "Your first offer, live",
+    outcomes: [
+      "About one simple launch a month — the build, the hosting, the web address",
+      "Take real customers: sign-in, records of their orders, and the database to hold it",
+      "Publish it on the Atai marketplace so other owners can start from your business",
+    ],
+  },
+  starter: {
+    bestFor: "A business with customers already",
+    outcomes: [
+      "Launch on your own domain, so customers and search results find you by your name",
+      "Iterate as you learn: edits to pages, offers and pricing without starting over",
+      "About six simple launches' worth of work every month, or a bigger business at a time",
+    ],
+  },
+  business: {
+    bestFor: "Running two or three businesses",
+    outcomes: [
+      "Your builds and edits go to the front of the queue",
+      "Room to launch, change and market several businesses in the same month",
+      "A support team behind your builds, not just a form",
+    ],
+  },
+  professional: {
+    bestFor: "Several businesses, all running at once",
+    outcomes: [
+      "The heaviest monthly workload we offer without a custom contract",
+      "Talk to a person directly about the businesses you are running",
+      "Enough credits to keep launching, selling and growing without watching the meter",
+    ],
+  },
+  enterprise: {
+    bestFor: "A portfolio or an organisation",
+    outcomes: [
+      "Credit volume and integrations shaped around your operation",
+      "Dedicated infrastructure, an uptime commitment and an account manager",
+      "We help your first businesses go out the door",
+    ],
+  },
+}
+
+/** What launching costs, in the size of business rather than lines of work. */
+const LAUNCH_SIZES = [
+  {
+    tierId: "simple",
+    icon: Store,
+    headline: "One offer, online this week",
+    forLine: "A shop, a service, a portfolio, a booking page — one clear thing to sell.",
+    gets: [
+      "A live website for the business, sized for phones as well as desks",
+      "A way for people to reach you, ask, or order",
+      "Hosting, HTTPS and a free Atai web address",
+      "An admin console so you can see enquiries and orders yourself",
+    ],
+  },
+  {
+    tierId: "medium",
+    icon: Users,
+    headline: "Real customers, real sales",
+    forLine: "You want people to sign in, pay, and come back — and you want to keep track of them.",
+    gets: [
+      "Customer accounts: sign up, sign in, their own area",
+      "Records of every customer, order and job, searchable",
+      "Payments, offers and pricing tiers",
+      "Dashboards so you can see sales and daily work in one screen",
+    ],
+  },
+  {
+    tierId: "complex",
+    icon: Building2,
+    headline: "A whole platform business",
+    forLine: "More than one way to earn, several moving parts, and customers on both sides.",
+    gets: [
+      "Multiple revenue streams working together",
+      "Your business can email, message and remind customers on its own",
+      "Deeper data work: catalogues, availability, matching, history",
+      "Connections to the tools you already use, run through your Atai key",
+    ],
+  },
+]
+
+const INCLUDED_WITH_EVERY_LAUNCH = [
+  { icon: Globe, title: "Hosting that stays up", body: "Your business is online with HTTPS and a global network. No server to manage, and no separate hosting bill." },
+  { icon: Wallet, title: "A way to get paid", body: "Checkout, subscriptions and payout records run through Atai Payments — no separate payment account for you to open and configure." },
+  { icon: Users, title: "Customer accounts", body: "People can sign up, sign in and come back to what is theirs." },
+  { icon: Building2, title: "Your records", body: "Customers, orders and work are stored properly, not in a spreadsheet you keep losing." },
+  { icon: Shield, title: "An admin console", body: "Every business launches with its own admin area so you can manage it without asking anyone." },
+  { icon: Coins, title: "One key for every feature", body: "AI replies, messages, maps, reminders and analytics all run on your Atai key — no jumble of vendor accounts." },
+]
+
+const FAQS = [
+  {
+    q: "Do I have to write code, or hire someone?",
+    a: "No. You describe the business you want to run. Atai's teams plan it, build it, put it online and then keep working on it with you. When your business needs a feature, it is asked for in plain words and delivered as part of the business.",
+  },
+  {
+    q: "What exactly do I have when a launch finishes?",
+    a: "A live business you can send people to: your website or product on its own web address, hosting and security already set up, customer sign-in, records of your customers and orders, a way to take payment, and an admin console so you can run all of it yourself.",
+  },
+  {
+    q: "What is an Atai Credit, really?",
+    a: "One unit of work by your Atai teams — planning, building, changing, launching, answering, writing to your customers. You are shown the credit cost before any piece of work starts, so nothing is spent quietly.",
+  },
+  {
+    q: "Do my credits run out?",
+    a: "Monthly credits from your plan are used first and expire at the end of the month. Permanent credits — the welcome bonus and any top-up packs — never expire and stay yours even if you cancel a plan.",
+  },
+  {
+    q: "What happens if I run out in the middle of something?",
+    a: "Work stops before it goes past what you can pay for, and credits reserved for a job that cannot complete are returned to you. Add credits or change plan and the work picks up where it stopped.",
+  },
+  {
+    q: "Can I bring something I already have?",
+    a: "Yes. Point Atai at a website you like or own, or bring an existing product, and it works from what is already there instead of starting from nothing.",
+  },
+  {
+    q: "Can I sell what I build?",
+    a: "Businesses you publish on the Atai marketplace can be started from by other owners. You get credited when someone does, and you can keep running your own.",
+  },
+  {
+    q: "How do I pay, and can I stop?",
+    a: "Plans are billed monthly by card through a secure checkout provider. You can change or cancel at any time, and your published business stays hosted.",
+  },
+]
+
+/**
+ * Plan copy that used to read as tooling. The live strings stay in
+ * `lib/billing/config.ts` (behind the details disclosure, and unchanged for the
+ * billing settings page); this is what a visitor reads first.
+ */
+const PLAN_JARGON_TRANSLATIONS: Record<string, string> = {
+  "500 welcome credits on email verification": "500 credits the moment you confirm your email",
+  "All generation models (crawl & scrape agents)": "Atai can study other businesses and the web around yours",
+  "Advanced site analysis": "A written read of your market before anything is built",
+  "Built-in database & infrastructure (limited)": "Your data lives somewhere safe, with room to grow",
+  "Access to the Atai workspace": "One place for the plan, the build and the running of it",
+  "Built-in code editor": "Change the business yourself when you want to",
+  "AI code fixes & implementations": "Ask for a fix and it gets made",
+  "Limited multi-section code editing": "Change several parts of the business at once",
+  "Full multi-section code editing": "Change any part of the business, as often as you need",
+  "Up to 30 parallel AI agents": "Several jobs moving at the same time, not one queue",
+  "Latest powered build models": "The best teams we have, on your work first",
+  "Incoming API key & deployment access": "Your business gets its own Atai key for its features",
+  "Full application builds (no follow-ups needed)": "A complete launch in one go, not a fragment you have to finish",
+  "Deployment system — sell & earn on marketplace": "Publish it, and earn when other owners start from it",
+  "Database management & storage": "Room for your customers, orders and history",
+  "Limited team support": "A team behind your builds",
+  "Standard team support": "A team behind your builds",
+  "Team support": "A team behind your builds",
+  "Full team support": "A dedicated team on your work",
+  "Edit code in editor or visually": "Edit it yourself — by clicking, or in the editor",
+  "Edit your code — in the editor or visually": "Edit it yourself — by clicking, or in the editor",
+  "Download source code": "Take a copy of your business with you",
+  "Download your source code": "Take a copy of your business with you",
+  "Sync with GitHub": "Keep it in sync if your team already works that way",
+  "Use your own domain": "Launch on your own web address",
+  "Parallel AI agents": "Several jobs moving at the same time, not one queue",
+  "Priority builds": "Your work goes to the front of the queue",
+  "Direct support": "Talk to a person about your business",
+  "Community support": "Ask alongside other owners",
+  "Monthly credit grants": "Credits every month",
+  "Custom volume": "Credit volume sized to your operation",
+  "Dedicated infrastructure": "Your own capacity, not a shared one",
+  "SLA-backed uptime": "An uptime commitment in writing",
+  "White-glove onboarding": "We help your first businesses go out the door",
+  "Dedicated account manager": "One person who knows your business",
+  "Custom integrations on request": "Connect the tools you already run on",
+  "Enterprise team support": "Support shaped around your team",
+}
+
+function translateFeature(feature: string): string {
+  const exact = PLAN_JARGON_TRANSLATIONS[feature]
+  if (exact) return exact
+  const grant = feature.match(/^([\d,]+) Atai Credits \/ month$/)
+  if (grant) return `${grant[1]} credits every month, for the work your teams do`
+  const everything = feature.match(/^Everything in (\w+), plus:$/)
+  if (everything) return `Everything in ${everything[1]}, plus:`
+  const volume = feature.match(/^([\d,]+)\+ Atai Credits \/ month$/)
+  if (volume) return `${volume[1]}+ credits every month`
+  return feature
+}
+
+const LAUNCHES = LAUNCH_SIZES.flatMap((size) => {
+  const tier = BUILD_TIERS[size.tierId]
+  return tier ? [{ ...size, tier, popular: tier.id === "medium" }] : []
+})
 
 export const metadata: Metadata = {
-  title: "Atai Pricing | Credits & Business Launch Plans",
+  title: "Atai Pricing | Plans to Launch and Run a Business",
   description:
-    "Choose an Atai plan to launch and run a business with your own AI team. Simple, Medium, and Complex builds with transparent credit-based pricing.",
+    "Atai plans, builds, launches and runs your business with specialized AI teams — hosting, customers, payments and an admin console included. Choose a plan or start with free credits.",
   alternates: { canonical: "/pricing" },
   openGraph: {
     type: "website",
     locale: "en_US",
     url: `${SITE_URL}/pricing`,
     siteName: "Atai",
-    title: "Atai Pricing | Credits & Business Launch Plans",
-    description: "Choose an Atai plan to launch and run a business with your own AI team. Simple, Medium, and Complex builds with transparent credit-based pricing.",
+    title: "Atai Pricing | Plans to Launch and Run a Business",
+    description:
+      "Tell Atai the business you want to run. AI teams plan it, build it, launch it and keep working on it — customers, sales and your own admin console included.",
     images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Atai Pricing" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Atai Pricing | Credits & Business Launch Plans",
-    description: "Choose an Atai plan to launch and run a business with your own AI team.",
+    title: "Atai Pricing | Plans to Launch and Run a Business",
+    description:
+      "Plans, builds and running costs explained in business terms — not tooling terms.",
     images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Atai Pricing" }],
   },
 }
@@ -79,8 +252,9 @@ const pricingStructuredData = {
   "@context": "https://schema.org",
   "@type": "Product",
   name: "Atai",
-  description: "Atai.ink is the business builder for founders: launch, run and grow a real business with an AI team — customers, sales and your own admin console included. No code.",
-  brand: { "@type": "Organization", name: "ATAI Enterprises", url: "https://atai.ink" },
+  description:
+    "Atai.ink is the business builder for founders: launch, run and grow a real business with an AI team — customers, sales and your own admin console included. No code.",
+  brand: { "@type": "Organization", name: "ATAI Enterprises", url: SITE_URL },
   offers: SUBSCRIPTION_PLANS.filter((p) => !p.custom).map((plan) => ({
     "@type": "Offer",
     name: `${plan.name} Plan`,
@@ -93,6 +267,40 @@ const pricingStructuredData = {
   })),
 }
 
+const faqStructuredData = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: FAQS.map((item) => ({
+    "@type": "Question",
+    name: item.q,
+    acceptedAnswer: { "@type": "Answer", text: item.a },
+  })),
+}
+
+function SectionNav() {
+  const links = [
+    { href: "#plans", label: "Plans" },
+    { href: "#launch", label: "What a launch costs" },
+    { href: "#included", label: "What you get" },
+    { href: "#top-ups", label: "Extra credits" },
+    { href: "#hosting", label: "Your web address" },
+    { href: "#questions", label: "Questions" },
+  ]
+  return (
+    <nav aria-label="On this page" className="mx-auto max-w-5xl px-6 pb-12">
+      <ul className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm">
+        {links.map((link) => (
+          <li key={link.href}>
+            <a href={link.href} className="text-muted-foreground underline-offset-4 transition-colors hover:text-primary hover:underline">
+              {link.label}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  )
+}
+
 export default async function PricingPage() {
   let user = null
   try {
@@ -100,94 +308,222 @@ export default async function PricingPage() {
   } catch {
     // Not logged in — show register buttons
   }
+
   return (
     <main className="min-h-screen bg-background text-foreground">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(pricingStructuredData) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqStructuredData) }} />
       <SiteHeader activePage="/pricing" variant="bordered" />
 
-      {/* Hero */}
-      <section className="mx-auto max-w-4xl px-6 pt-20 pb-16 text-center">
+      {/* Hero — what Atai does, before any numbers */}
+      <section className="mx-auto max-w-4xl px-6 pt-16 pb-10 text-center sm:pt-20">
         <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">Pricing</p>
-        <h1 className="mt-4 text-4xl font-semibold tracking-tight sm:text-5xl">
-          Run More Businesses On<br />{CREDIT_UNIT_NAME}
+        <h1 className="mt-4 text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
+          Tell us the business you want to run.
         </h1>
-        <p className="mt-5 text-lg text-muted-foreground max-w-xl mx-auto">
-          Credits power your AI team as it launches, improves and runs the business —
-          from the first idea to the first paying customer.
-          Start with {WELCOME_BONUS_CREDITS.toLocaleString()} free credits on us.
+        <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-pretty text-muted-foreground">
+          Atai&rsquo;s AI teams plan it, build it, put it online and keep working on it —
+          winning customers, taking payments and handling the daily work, so you have
+          something that earns. You pay for that work in Atai Credits.
+          {` Start with ${WELCOME_BONUS_CREDITS.toLocaleString()} free credits; no card needed.`}
         </p>
-        <div className="mt-8 flex items-center justify-center gap-3">
+        <ul className="mx-auto mt-7 flex max-w-3xl flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm text-muted-foreground">
+          {["Your own website or product", "Hosting and security set up", "Customer sign-in and records", "Take payments", "Your admin console", "No code to write"].map((item) => (
+            <li key={item} className="flex items-center gap-1.5">
+              <Check className="size-4 text-primary" />
+              {item}
+            </li>
+          ))}
+        </ul>
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <AuthTrigger view="signup" next="/pricing" className={buttonVariants({ size: "lg" }) + " h-12 px-6"}>
             Start your business <ArrowRight className="size-4" />
           </AuthTrigger>
+          <a href="#launch" className={buttonVariants({ size: "lg", variant: "outline" }) + " h-12 px-6"}>
+            What a launch costs
+          </a>
         </div>
       </section>
 
-      {/* How Credits Work */}
+      <SectionNav />
+
+      {/* The money, in three sentences */}
       <section className="border-y border-border bg-card/40">
         <div className="mx-auto max-w-4xl px-6 py-12">
-          <h2 className="text-2xl font-semibold tracking-tight text-center">How Credits Work</h2>
-          <div className="mt-8 grid gap-6 sm:grid-cols-3">
-            <div className="text-center">
-              <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <span className="font-mono text-lg font-bold">1</span>
-              </div>
-              <p className="mt-4 font-medium">Subscription Credits</p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Monthly credits from your plan. Consumed first, expire at period end.
+          <h2 className="text-center text-2xl font-semibold tracking-tight">Three things to know about the money</h2>
+          <div className="mt-8 grid gap-6 text-center sm:grid-cols-3">
+            <div>
+              <p className="font-medium">You are charged for finished work</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Every piece of work states its credit cost before it starts, and a job that
+                cannot complete gives its reserved credits back.
               </p>
             </div>
-            <div className="text-center">
-              <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <span className="font-mono text-lg font-bold">2</span>
-              </div>
-              <p className="mt-4 font-medium">Permanent Credits</p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Buy once, use forever. Never expire, consumed after subscription credits.
+            <div>
+              <p className="font-medium">A plan gives you monthly credits</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Your plan refills your credits each month. Those are used first and
+                expire when the month ends.
               </p>
             </div>
-            <div className="text-center">
-              <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <span className="font-mono text-lg font-bold">3</span>
-              </div>
-              <p className="mt-4 font-medium">{WELCOME_BONUS_CREDITS.toLocaleString()} Free Credits</p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                New users receive {WELCOME_BONUS_CREDITS.toLocaleString()} permanent credits to try Atai.
+            <div>
+              <p className="font-medium">Top-ups never expire</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Buy permanent credits whenever you need room — they stay yours,
+                even if you stop the plan.
               </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Subscription Plans */}
-      <section className="mx-auto max-w-7xl px-6 py-20">
-        <div className="text-center mb-12">
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">Subscription Plans</p>
-          <h2 className="mt-3 text-3xl font-semibold tracking-tight">Choose Your Plan</h2>
-          <p className="mt-3 text-muted-foreground">
-            Start for free — upgrade any time for monthly {CREDIT_UNIT_NAME} and more capabilities.
+      {/* Plans, framed by what you can do with them */}
+      <section id="plans" className="mx-auto max-w-5xl scroll-mt-24 px-6 py-20">
+        <div className="mb-4 text-center">
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">Plans</p>
+          <h2 className="mt-3 text-3xl font-semibold tracking-tight">Pick by how much work you need done</h2>
+          <p className="mx-auto mt-3 max-w-2xl text-muted-foreground text-pretty">
+            A simple launch is {SIMPLE_CREDITS.toLocaleString()} credits, so the plans below
+            differ mainly in how much of your business&rsquo;s work they cover each month.
+            Not sure? Start on Free, then pick a plan when you see the plan for your business.
           </p>
         </div>
 
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 items-start">
-          {SUBSCRIPTION_PLANS.filter((p) => !p.custom).map((plan) => (
+        <div className="mt-10 grid gap-5 lg:grid-cols-2">
+          {SUBSCRIPTION_PLANS.filter((plan) => !plan.custom).map((plan) => (
             <PlanCard
               key={plan.id}
               plan={plan}
               isLoggedIn={!!user}
+              bestFor={PLAN_GUIDANCE[plan.id]?.bestFor}
+              outcomes={PLAN_GUIDANCE[plan.id]?.outcomes}
+              translateFeature={translateFeature}
             />
+          ))}
+        </div>
+
+        {(() => {
+          const enterprise = SUBSCRIPTION_PLANS.find((plan) => plan.custom)
+          if (!enterprise) return null
+          return (
+            <div className="mt-5">
+              <PlanCard
+                plan={enterprise}
+                isLoggedIn={!!user}
+                bestFor={PLAN_GUIDANCE[enterprise.id]?.bestFor}
+                outcomes={PLAN_GUIDANCE[enterprise.id]?.outcomes}
+                translateFeature={translateFeature}
+              />
+            </div>
+          )
+        })()}
+      </section>
+
+      {/* What launching costs */}
+      <section id="launch" className="scroll-mt-24 border-y border-border bg-card/40">
+        <div className="mx-auto max-w-5xl px-6 py-20">
+          <div className="mb-12 text-center">
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">Launching and changing it</p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight">How much business are you starting?</h2>
+            <p className="mx-auto mt-3 max-w-2xl text-muted-foreground text-pretty">
+              Credits are spent when your Atai teams work on the business — launching it,
+              changing it, getting customers. Bigger businesses take more of their work.
+            </p>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-3">
+            {LAUNCHES.map(({ tier, icon: Icon, headline, forLine, gets, popular }) => (
+              <div
+                key={tier.id}
+                className={`relative flex flex-col rounded-xl border p-6 ${popular ? "border-primary/50 bg-card shadow-lg shadow-primary/5" : "border-border bg-card"}`}
+              >
+                {popular && (
+                  <div className="absolute -top-3 left-6 rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground">
+                    Most owners start here
+                  </div>
+                )}
+
+                <div className="flex items-center gap-3">
+                  <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10">
+                    <Icon className="size-5 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold">{tier.label}</h3>
+                    <p className="text-sm text-muted-foreground">{headline}</p>
+                  </div>
+                </div>
+
+                <p className="mt-4 text-sm leading-6 text-pretty text-muted-foreground">{forLine}</p>
+
+                <div className="mt-5">
+                  <span className="text-3xl font-bold">{tier.credits.toLocaleString()}</span>
+                  <span className="ml-2 text-muted-foreground">{CREDIT_UNIT_NAME}</span>
+                </div>
+
+                <ul className="mt-6 flex-1 space-y-3">
+                  {gets.map((item) => (
+                    <li key={item} className="flex items-start gap-2 text-sm">
+                      <Check className="mt-0.5 size-4 shrink-0 text-primary" />
+                      <span className="text-muted-foreground text-pretty">{item}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <AuthTrigger
+                  view="signup"
+                  next="/pricing"
+                  className={`mt-6 block w-full text-center py-2.5 rounded-lg text-sm font-medium transition-colors ${popular
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                    : "border border-border hover:bg-accent"
+                    }`}
+                >
+                  Build this kind of business
+                </AuthTrigger>
+              </div>
+            ))}
+          </div>
+
+          <p className="mx-auto mt-8 max-w-3xl text-center text-sm leading-6 text-muted-foreground text-pretty">
+            Publishing takes 500 credits on top of the build, and starting from a
+            business someone already published can cost far less than building your own.
+          </p>
+        </div>
+      </section>
+
+      {/* What is already included, whatever your plan */}
+      <section id="included" className="mx-auto max-w-5xl scroll-mt-24 px-6 py-20">
+        <div className="mb-12 text-center">
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">In the box</p>
+          <h2 className="mt-3 text-3xl font-semibold tracking-tight">Every business launches with</h2>
+          <p className="mx-auto mt-3 max-w-2xl text-muted-foreground text-pretty">
+            This is the part people usually forget to ask about: with most software you buy
+            a tool and then still pay for hosting, a database, email, payments and an
+            admin area. With Atai it comes with the business.
+          </p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {INCLUDED_WITH_EVERY_LAUNCH.map(({ icon: Icon, title, body }) => (
+            <div key={title} className="rounded-xl border border-border bg-card p-5">
+              <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10">
+                <Icon className="size-4 text-primary" />
+              </div>
+              <p className="mt-3 font-semibold">{title}</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground text-pretty">{body}</p>
+            </div>
           ))}
         </div>
       </section>
 
-      {/* Permanent Credit Packs */}
-      <section className="border-y border-border bg-card/40">
+      {/* Top-ups */}
+      <section id="top-ups" className="scroll-mt-24 border-y border-border bg-card/40">
         <div className="mx-auto max-w-5xl px-6 py-20">
-          <div className="text-center mb-12">
-            <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">Permanent Credits</p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight">Buy Once, Use Forever</h2>
-            <p className="mt-3 text-muted-foreground">
-              Permanent credits never expire and remain available after subscription cancellation.
+          <div className="mb-10 text-center">
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">Extra credits</p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight">Run short in the middle of a month?</h2>
+            <p className="mx-auto mt-3 max-w-2xl text-muted-foreground text-pretty">
+              Buy permanent credits and keep them. They are spent only after your monthly
+              ones, so nothing you pay for is wasted.
             </p>
           </div>
 
@@ -195,8 +531,7 @@ export default async function PricingPage() {
             {PERMANENT_CREDIT_PACKS.map((pack) => (
               <div
                 key={pack.id}
-                className={`rounded-xl border bg-card p-5 ${pack.popular ? "border-primary/50 shadow-lg shadow-primary/5" : "border-border"
-                  }`}
+                className={`rounded-xl border bg-card p-5 ${pack.popular ? "border-primary/50 shadow-lg shadow-primary/5" : "border-border"}`}
               >
                 {pack.popular && (
                   <div className="mb-3 inline-block rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
@@ -204,7 +539,7 @@ export default async function PricingPage() {
                   </div>
                 )}
                 <p className="text-2xl font-bold">{pack.credits.toLocaleString()}</p>
-                <p className="mt-1 text-sm text-muted-foreground">{CREDIT_UNIT_NAME}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{CREDIT_UNIT_NAME}, yours for good</p>
                 <p className="mt-3 text-xl font-semibold">{formatUSD(pack.priceUSD)}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   ${(pack.priceUSD / pack.credits).toFixed(4)} per credit
@@ -215,7 +550,7 @@ export default async function PricingPage() {
                     productId={pack.id}
                     className="mt-4 w-full bg-background text-foreground border border-border hover:bg-accent"
                   >
-                    Buy Now
+                    Add these credits
                   </CheckoutButton>
                 ) : (
                   <AuthTrigger
@@ -223,7 +558,7 @@ export default async function PricingPage() {
                     next="/pricing"
                     className="mt-4 block w-full text-center py-2 rounded-lg text-sm font-medium border border-border hover:bg-accent transition-colors"
                   >
-                    Get Started
+                    Get started first
                   </AuthTrigger>
                 )}
               </div>
@@ -232,272 +567,150 @@ export default async function PricingPage() {
         </div>
       </section>
 
-      {/* Build Tier Pricing — sized to the business, not a toy project */}
-      <section className="mx-auto max-w-5xl px-6 py-20">
-        <div className="text-center mb-12">
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">Launches &amp; Upgrades</p>
-          <h2 className="mt-3 text-3xl font-semibold tracking-tight">Choose Your Build Size</h2>
-          <p className="mt-3 text-muted-foreground">
-            Credits are consumed when Atai's team works on your business — launching it, changing it, growing it.
+      {/* Where customers find you */}
+      <section id="hosting" className="mx-auto max-w-5xl scroll-mt-24 px-6 py-20">
+        <div className="mb-12 text-center">
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">Your web address</p>
+          <h2 className="mt-3 text-3xl font-semibold tracking-tight">An Atai address, or your own name</h2>
+          <p className="mx-auto mt-3 max-w-2xl text-muted-foreground text-pretty">
+            You can go live on an address we give you in seconds, or put the business on a
+            domain you own. Both are hosted, secured and fast either way.
           </p>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-3">
-          {TIERS.map((tier) => (
-            <div
-              key={tier.name}
-              className={`relative flex flex-col rounded-xl border p-6 ${tier.popular
-                ? "border-primary/50 bg-card shadow-lg shadow-primary/5"
-                : "border-border bg-card"
-                }`}
-            >
-              {tier.popular && (
-                <div className="absolute -top-3 left-6 rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground">
-                  Most Popular
-                </div>
-              )}
-
-              <div className="flex items-center gap-3">
-                <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10">
-                  <tier.icon className="size-5 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-lg">{tier.name}</h3>
-                  <p className="text-sm text-muted-foreground">{tier.description}</p>
-                </div>
+        <div className="grid gap-6 lg:grid-cols-2">
+          <div className="relative flex flex-col rounded-xl border-2 border-primary/30 bg-card p-6">
+            <div className="absolute -top-3 left-6 rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground">
+              Fastest way live
+            </div>
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10">
+                <Globe className="size-5 text-primary" />
               </div>
-
-              <div className="mt-6">
-                <span className="text-3xl font-bold">{tier.credits}</span>
-                <span className="ml-2 text-muted-foreground">{CREDIT_UNIT_NAME}</span>
+              <div>
+                <h3 className="text-lg font-semibold">A free Atai address</h3>
+                <p className="text-sm text-muted-foreground">Live the moment the build is done</p>
               </div>
+            </div>
 
-              <ul className="mt-6 flex-1 space-y-3">
-                {tier.features.map((feature) => (
-                  <li key={feature} className="flex items-start gap-2 text-sm">
-                    <Check className="size-4 text-primary mt-0.5 shrink-0" />
-                    <span className="text-muted-foreground">{feature}</span>
-                  </li>
-                ))}
-              </ul>
+            <div className="mb-5 rounded-lg bg-muted/50 p-3">
+              <p className="font-mono text-sm break-all">yourbusiness.totalum-project.com</p>
+            </div>
 
-              <AuthTrigger
-                view="signup"
-                next="/pricing"
-                className={`mt-6 block w-full text-center py-2.5 rounded-lg text-sm font-medium transition-colors ${tier.popular
-                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                  : "border border-border hover:bg-accent"
-                  }`}
-              >
-                Get Started
+            <ul className="space-y-2 text-sm">
+              {[
+                "Nothing to set up — no domain to buy, no settings to copy out",
+                "Security and fast loading handled for you",
+                "Hosting costs nothing extra, for as long as the business is yours",
+                "Send the link to a customer or your WhatsApp status straight away",
+                "Move to your own domain later without rebuilding",
+              ].map((item) => (
+                <li key={item} className="flex items-start gap-2">
+                  <Check className="mt-0.5 size-4 shrink-0 text-primary" />
+                  <span className="text-muted-foreground text-pretty">{item}</span>
+                </li>
+              ))}
+            </ul>
+
+            <div className="mt-auto pt-5">
+              <p className="mb-3 text-sm"><span className="font-medium">Publishing your build</span> <span className="float-right font-mono">500 {CREDIT_UNIT_NAME}</span></p>
+              <AuthTrigger view="signup" next="/pricing" className="block w-full text-center py-2.5 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+                Start free
               </AuthTrigger>
             </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ─── Hosting Comparison ────────────────────────────────────── */}
-      <section className="border-y border-border bg-card/40">
-        <div className="mx-auto max-w-5xl px-6 py-20">
-          <div className="text-center mb-12">
-            <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">Hosting Options</p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight">Free Subdomain vs Custom Domain</h2>
-            <p className="mt-3 text-muted-foreground max-w-xl mx-auto">
-              Once your business is built, publish it to a free subdomain or connect your own domain.
-              Both options cost 500 credits and include HTTPS, CDN, and lifetime hosting.
-            </p>
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-2">
-            {/* Free Subdomain */}
-            <div className="relative flex flex-col rounded-xl border-2 border-primary/30 bg-card p-6">
-              <div className="absolute -top-3 left-6 rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground">
-                Recommended
+          <div className="relative flex flex-col rounded-xl border border-border bg-card p-6">
+            <div className="absolute -top-3 left-6 rounded-full border border-border bg-background px-3 py-1 text-xs font-medium">
+              From the Starter plan
+            </div>
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex size-10 items-center justify-center rounded-lg bg-muted">
+                <LinkIcon className="size-5 text-muted-foreground" />
               </div>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10">
-                  <Globe className="size-5 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-lg">Free Subdomain</h3>
-                  <p className="text-sm text-muted-foreground">Zero setup required</p>
-                </div>
-              </div>
-
-              <div className="rounded-lg bg-muted/50 p-3 mb-5">
-                <p className="font-mono text-sm text-foreground">yourapp.totalum-project.com</p>
-              </div>
-
-              <div className="space-y-2 mb-5">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Benefits</p>
-                <ul className="space-y-2">
-                  {[
-                    "Free forever — no hosting fees, ever",
-                    "Instant deploy — no DNS configuration",
-                    "Auto HTTPS & global CDN included",
-                    "Lifetime hosting at no extra cost",
-                    "Perfect for prototyping & demos",
-                    "Share with anyone instantly",
-                  ].map((item) => (
-                    <li key={item} className="flex items-start gap-2 text-sm">
-                      <Check className="size-4 text-green-500 mt-0.5 shrink-0" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="mt-auto pt-5">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-medium">Deployment Cost</span>
-                  <span className="font-mono text-sm">500 {CREDIT_UNIT_NAME}</span>
-                </div>
-                <AuthTrigger
-                  view="signup"
-                  next="/pricing"
-                  className="block w-full text-center py-2.5 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-                >
-                  Get Started Free
-                </AuthTrigger>
+              <div>
+                <h3 className="text-lg font-semibold">A domain you own</h3>
+                <p className="text-sm text-muted-foreground">Your name on every page and email</p>
               </div>
             </div>
 
-            {/* Custom Domain */}
-            <div className="relative flex flex-col rounded-xl border border-border bg-card p-6">
-              <div className="absolute -top-3 left-6 rounded-full border border-border bg-background px-3 py-1 text-xs font-medium">
-                Advanced
-              </div>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="flex size-10 items-center justify-center rounded-lg bg-muted">
-                  <LinkIcon className="size-5 text-muted-foreground" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-lg">Custom Domain</h3>
-                  <p className="text-sm text-muted-foreground">Use your own domain</p>
-                </div>
-              </div>
-
-              <div className="rounded-lg bg-muted/50 p-3 mb-5">
-                <p className="font-mono text-sm text-muted-foreground">app.yourdomain.com</p>
-              </div>
-
-              <div className="space-y-2 mb-5">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Benefits</p>
-                <ul className="space-y-2">
-                  {[
-                    "Professional branding with your own domain",
-                    "Better SEO — your domain builds authority",
-                    "Full control over your web identity",
-                    "Auto HTTPS setup — no certificate management",
-                    "Ideal for production apps & businesses",
-                    "Build trust with customers via your brand",
-                  ].map((item) => (
-                    <li key={item} className="flex items-start gap-2 text-sm">
-                      <Check className="size-4 text-green-500 mt-0.5 shrink-0" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="mt-auto pt-5">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-medium">Deployment Cost</span>
-                  <span className="font-mono text-sm">500 {CREDIT_UNIT_NAME}</span>
-                </div>
-                <AuthTrigger
-                  view="signup"
-                  next="/pricing"
-                  className="block w-full text-center py-2.5 rounded-lg text-sm font-medium border border-border hover:bg-accent transition-colors"
-                >
-                  Get Started
-                </AuthTrigger>
-              </div>
+            <div className="mb-5 rounded-lg bg-muted/50 p-3">
+              <p className="font-mono text-sm text-muted-foreground break-all">www.yourbusiness.com</p>
             </div>
-          </div>
 
-          {/* Feature comparison table */}
-          <div className="mt-12 overflow-hidden rounded-xl border border-border">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/40">
-                  <th className="px-5 py-3.5 text-left font-medium text-muted-foreground">Feature</th>
-                  <th className="px-5 py-3.5 text-center font-medium">Free Subdomain</th>
-                  <th className="px-5 py-3.5 text-center font-medium">Custom Domain</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  { feature: "Setup time", subdomain: "Instant", custom: "Minutes + DNS" },
-                  { feature: "DNS configuration", subdomain: "None required", custom: "Manual setup" },
-                  { feature: "HTTPS / SSL", subdomain: "Auto-included", custom: "Auto-included" },
-                  { feature: "Global CDN", subdomain: "Included", custom: "Included" },
-                  { feature: "Hosting cost", subdomain: "Free forever", custom: "Free 6 months, then paid" },
-                  { feature: "Custom branding", subdomain: false, custom: true },
-                  { feature: "SEO domain authority", subdomain: false, custom: true },
-                  { feature: "Professional appearance", subdomain: "Basic", custom: "Full branding" },
-                  { feature: "Deployment cost", subdomain: "500 credits", custom: "500 credits" },
-                  { feature: "Can add/remove anytime", subdomain: true, custom: true },
-                ].map((row, i) => (
-                  <tr key={row.feature} className={i % 2 === 0 ? "" : "bg-muted/20"}>
-                    <td className="px-5 py-3 text-foreground font-medium">{row.feature}</td>
-                    <td className="px-5 py-3 text-center">
-                      {typeof row.subdomain === "boolean" ? (
-                        row.subdomain ? (
-                          <Check className="size-4 text-green-500 mx-auto" />
-                        ) : (
-                          <X className="size-4 text-muted-foreground/40 mx-auto" />
-                        )
-                      ) : (
-                        <span className="text-foreground">{row.subdomain}</span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3 text-center">
-                      {typeof row.custom === "boolean" ? (
-                        row.custom ? (
-                          <Check className="size-4 text-green-500 mx-auto" />
-                        ) : (
-                          <X className="size-4 text-muted-foreground/40 mx-auto" />
-                        )
-                      ) : (
-                        <span className="text-foreground">{row.custom}</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <ul className="space-y-2 text-sm">
+              {[
+                "Customers remember one name, not a long address they have to save",
+                "Search engines and your own emails carry your brand, not ours",
+                "Security certificates set up for you",
+                "We walk you through the few settings your domain provider asks for",
+                "First six months of hosting included, then it is a line in your plan",
+              ].map((item) => (
+                <li key={item} className="flex items-start gap-2">
+                  <Check className="mt-0.5 size-4 shrink-0 text-primary" />
+                  <span className="text-muted-foreground text-pretty">{item}</span>
+                </li>
+              ))}
+            </ul>
+
+            <div className="mt-auto pt-5">
+              <p className="mb-3 text-sm"><span className="font-medium">Publishing your build</span> <span className="float-right font-mono">500 {CREDIT_UNIT_NAME}</span></p>
+              <AuthTrigger view="signup" next="/pricing" className="block w-full text-center py-2.5 rounded-lg text-sm font-medium border border-border hover:bg-accent transition-colors">
+                Get started
+              </AuthTrigger>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="border-y border-border bg-card/40">
-        <div className="mx-auto max-w-4xl px-6 py-16 text-center">
-          <h2 className="text-2xl font-semibold tracking-tight">
-            Ready to run something real?
-          </h2>
-          <p className="mt-3 text-muted-foreground">
-            Start with {WELCOME_BONUS_CREDITS.toLocaleString()} free credits and let your AI team take it from the first idea to the first customer.
-          </p>
-          <div className="mt-6 flex items-center justify-center gap-3">
-            <AuthTrigger view="signup" next="/pricing" className={buttonVariants({ size: "lg" }) + " h-12 px-6"}>
-              Start free <ArrowRight className="size-4" />
-            </AuthTrigger>
+      {/* Questions owners actually ask */}
+      <section id="questions" className="scroll-mt-24 border-y border-border bg-card/40">
+        <div className="mx-auto max-w-3xl px-6 py-20">
+          <div className="mb-10 flex items-center justify-center gap-2 text-center">
+            <HelpCircle className="size-5 text-primary" />
+            <h2 className="text-3xl font-semibold tracking-tight">Questions worth asking before you pay</h2>
           </div>
+          <div className="divide-y divide-border rounded-xl border border-border bg-card">
+            {FAQS.map((item) => (
+              <details key={item.q} className="group px-5 py-4">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-medium marker:hidden">
+                  <span className="text-pretty">{item.q}</span>
+                  <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+                </summary>
+                <p className="mt-3 text-sm leading-6 text-muted-foreground text-pretty">{item.a}</p>
+              </details>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section className="mx-auto max-w-4xl px-6 py-16 text-center">
+        <div className="flex justify-center">
+          <Rocket className="size-6 text-primary" />
+        </div>
+        <h2 className="mt-4 text-2xl font-semibold tracking-tight">The first step costs nothing</h2>
+        <p className="mx-auto mt-3 max-w-xl text-muted-foreground text-pretty">
+          Tell Atai what you want to run. You get {WELCOME_BONUS_CREDITS.toLocaleString()} credits,
+          a real plan for the business, and a clear price for launching it before you spend anything.
+        </p>
+        <div className="mt-6 flex items-center justify-center gap-3">
+          <AuthTrigger view="signup" next="/pricing" className={buttonVariants({ size: "lg" }) + " h-12 px-6"}>
+            Start free <ArrowRight className="size-4" />
+          </AuthTrigger>
         </div>
       </section>
 
       {/* Related pages — cross-links for navigation and SEO */}
       <section className="border-t border-border bg-muted/30">
         <div className="mx-auto max-w-5xl px-6 py-12 lg:px-10">
-          <p className="mb-4 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Learn more</p>
+          <p className="mb-4 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Before you decide</p>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              { href: "/docs", icon: BookOpen, label: "Documentation", desc: "Guides to launching and running a business with Atai", color: "text-primary", bg: "bg-primary/10" },
-              { href: "/sdk", icon: Code2, label: "SDK & API", desc: "Runtime API reference — @atai-group/sdk", color: "text-cyan-600 dark:text-cyan-400", bg: "bg-cyan-500/10" },
-              { href: "/developers", icon: Zap, label: "Developers", desc: "Atai infrastructure for your own projects", color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-500/10" },
-              { href: "/about", icon: LinkIcon, label: "About Atai", desc: "Our mission and story", color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-500/10" },
+              { href: "/start", icon: Rocket, label: "Start a business", desc: "Tell Atai the idea and see the plan", color: "text-primary", bg: "bg-primary/10" },
+              { href: "/docs", icon: BookOpen, label: "Documentation", desc: "How launching and running works, step by step", color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-500/10" },
+              { href: "/about", icon: Users, label: "Who Atai is for", desc: "First-time owners, small businesses and teams", color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-500/10" },
+              { href: "/founder", icon: Building2, label: "Our founder's story", desc: "Why Atai was built for owners, not engineers", color: "text-cyan-600 dark:text-cyan-400", bg: "bg-cyan-500/10" },
             ].map(({ href, icon: Icon, label, desc, color, bg }) => (
               <Link key={href} href={href} className="group flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 transition-all hover:border-primary/40 hover:shadow-md">
                 <div className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${bg}`}>

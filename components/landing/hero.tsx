@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowRight } from "lucide-react"
+import { ArrowRight, BookOpen } from "lucide-react"
 import { buttonVariants } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { HeroProductStack } from "@/components/landing/product-shot"
@@ -59,6 +59,13 @@ export function LandingHero({
               See how Atai works
             </a>
           </div>
+          <Link
+            href="/resources"
+            className="mt-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <BookOpen className="size-3.5" />
+            Browse the resource library — guides, tutorials, roadmaps, documents, and videos
+          </Link>
         </div>
 
         <HeroProductStack className="lg:self-start lg:mt-6" />

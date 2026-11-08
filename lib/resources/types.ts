@@ -23,7 +23,38 @@ export const RESOURCE_TYPES = [
 
 export type ResourceType = (typeof RESOURCE_TYPES)[number]
 
+export const RESOURCE_FORMATS = [
+  "article",
+  "tutorial",
+  "roadmap",
+  "document",
+  "image",
+  "video",
+  "link",
+] as const
+
+export type ResourceFormat = (typeof RESOURCE_FORMATS)[number]
+
+export const FORMAT_LABEL: Record<ResourceFormat, string> = {
+  article: "Article",
+  tutorial: "Tutorial",
+  roadmap: "Roadmap",
+  document: "Document",
+  image: "Image",
+  video: "Video",
+  link: "External link",
+}
+
 export type ResourceDifficulty = "beginner" | "intermediate" | "advanced"
+
+/** A binary resource (PDF, deck, image, document) stored off-site. */
+export type ResourceFile = {
+  url: string
+  name: string
+  mimeType: string
+  size: number
+  provider: "imagekit" | "external"
+}
 
 export type ResourceBlock =
   | { type: "p"; text: string }
@@ -47,9 +78,21 @@ export type Resource = {
   featured?: boolean
   related: string[]
   body: ResourceBlock[]
+  /** Optional presentation fields used by admin-managed resources. */
+  format?: ResourceFormat
+  contentMarkdown?: string
+  file?: ResourceFile
+  imageUrl?: string
+  youtubeUrl?: string
+  externalUrl?: string
+  seoTitle?: string
+  seoDescription?: string
+  keywords?: string[]
+  source?: "editorial" | "admin"
 }
 
-export type ResourceSummary = Omit<Resource, "body"> & {
+/** Client-facing summary — deliberately omits the full markdown body. */
+export type ResourceSummary = Omit<Resource, "body" | "contentMarkdown"> & {
   href: string
   searchText: string
 }

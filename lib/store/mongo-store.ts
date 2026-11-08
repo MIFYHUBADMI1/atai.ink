@@ -1,6 +1,6 @@
 ﻿import type { DataStore } from "@/lib/store/store"
 import { cryptoId } from "@/lib/store/id"
-import { usersCol, projectsCol, buildRunsCol } from "@/lib/db/collections"
+import { usersCol, projectsCol, buildRunsCol, projectAttachmentsCol } from "@/lib/db/collections"
 import { apiKeysCol } from "@/lib/db/runtime-collections"
 import { logger } from "@/lib/logging/logger"
 import type { MirrorProject, BuildRun, CreditTransaction, ProjectEvent, ConversationMessage, DeploymentHistoryEntry, ProjectState } from "@/lib/types/project"
@@ -553,6 +553,9 @@ export class MongoStore implements DataStore {
         }
         const runsResult = await runsCol.deleteMany({ mirrorProjectId: id }, { session })
         logger.info("store.deleteProject", "cascaded build run delete", { id, deletedBuildRuns: runsResult.deletedCount })
+        const attachmentsCol = await projectAttachmentsCol()
+        const attachmentsResult = await attachmentsCol.deleteMany({ projectId: id }, { session })
+        logger.info("store.deleteProject", "cascaded attachment delete", { id, deletedAttachments: attachmentsResult.deletedCount })
         deleted = true
       })
       logger.info("store.deleteProject", "result", { id, deleted })

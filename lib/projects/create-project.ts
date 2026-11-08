@@ -2,6 +2,7 @@ import { store, cryptoId } from "@/lib/store/store"
 import { fail } from "@/lib/api/respond"
 import { checkRateLimit } from "@/lib/auth/rate-limit"
 import { startProjectPipeline } from "@/lib/projects/pipeline-recovery"
+import { saveProjectAttachments } from "@/lib/projects/attachments"
 import { normalizeUrl } from "@/lib/integrations/firecrawl/service"
 import type { MirrorProject, ProjectPreferences, UserPipelineMode } from "@/lib/types/project"
 
@@ -20,6 +21,7 @@ export type CreateProjectInput = {
   userRequest?: string
   idempotencyKey?: string
   skipAnalysis?: boolean
+  attachments?: Array<{ name: string; content: string; size?: number }>
 }
 
 const IDEMPOTENCY_WINDOW_MS = 10 * 60 * 1000
@@ -73,6 +75,24 @@ async function findRecentDuplicate(userId: string, match: { idea?: string; sourc
     if (match.github && p.name === match.github) return true
     return false
   })
+}
+
+// Stage composer attachments for the project's first build. clear-then-insert
+// keeps a double-submit from doubling the file set.
+async function stageAttachments(projectId: string, userId: string, attachments: CreateProjectInput["attachments"]) {
+  if (!attachments?.length) return
+  const { clearProjectAttachments } = await import("@/lib/projects/attachments")
+  await clearProjectAttachments(projectId).catch(() => undefined)
+  const saved = await saveProjectAttachments(projectId, userId, attachments)
+  if (saved.length) {
+    await store.appendEvent(projectId, {
+      id: cryptoId(),
+      at: Date.now(),
+      level: "info",
+      stage: "create",
+      message: `${saved.length} attached file${saved.length === 1 ? "" : "s"} will be shared with the builder when the build starts.`,
+    })
+  }
 }
 
 export async function createUserProject(userId: string, body: CreateProjectInput) {
@@ -152,6 +172,7 @@ export async function createUserProject(userId: string, body: CreateProjectInput
       createdAt: Date.now(),
       updatedAt: Date.now(),
     })
+    await stageAttachments(project.id, userId, body.attachments)
     if (!body.skipAnalysis) void startProjectPipeline(project.id)
     return { project, reused: false }
   }
@@ -186,6 +207,7 @@ export async function createUserProject(userId: string, body: CreateProjectInput
       const { saveCreateIdempotency } = await import("@/lib/start/pending-store")
       await saveCreateIdempotency(userId, idempotencyKey, project.id)
     }
+    await stageAttachments(project.id, userId, body.attachments)
     if (!body.skipAnalysis) void startProjectPipeline(project.id)
     return { project, reused: false }
   }
@@ -205,6 +227,7 @@ export async function createUserProject(userId: string, body: CreateProjectInput
     const { saveCreateIdempotency } = await import("@/lib/start/pending-store")
     await saveCreateIdempotency(userId, idempotencyKey, project.id)
   }
+  await stageAttachments(project.id, userId, body.attachments)
   if (!body.skipAnalysis) void startProjectPipeline(project.id)
   return { project, reused: false }
 }
