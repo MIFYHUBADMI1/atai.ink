@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { postJson, patchJson, deleteJson, jsonFetcher, useSession, useProjectActivity } from "@/lib/client/api"
 import { useBuildCosts } from "@/lib/client/build-costs"
+import { useCofounderPanel } from "@/components/cofounder/cofounder-panel"
 import { ensureProtocol, cn } from "@/lib/utils"
 import { toast } from "sonner"
 
@@ -360,6 +361,10 @@ export function EditWorkspace({ projectId, projectName, initialState }: EditWork
         {/* Status card — always visible */}
         <StatusCard state={agentStatus} credits={credits} developmentUrl={developmentUrl} />
 
+        {/* Co-founder — plan-aware help that prepares edit instructions the
+          founder approves; same panel as the header, no separate chat. */}
+        <CofounderCard />
+
         {/* Sidebar content */}
         {sidebarPanel === "prompt" && (
           <PromptPanel
@@ -453,6 +458,29 @@ function StatusCard({ state, credits, developmentUrl }: { state: string; credits
           </a>
         )}
       </div>
+    </div>
+  )
+}
+
+// ─── Co-founder affordance ──────────────────────────────────────
+
+function CofounderCard() {
+  const cofounder = useCofounderPanel()
+  return (
+    <div className="rounded-xl border border-primary/25 bg-primary/5 p-4">
+      <div className="flex items-center gap-2">
+        <Sparkles className="size-3.5 text-primary" aria-hidden />
+        <p className="font-mono text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+          Co-founder
+        </p>
+      </div>
+      <p className="mt-2 text-xs leading-5 text-muted-foreground">
+        Not sure what to change? Your co-founder knows this app&apos;s plan and can prepare an edit instruction for you to approve.
+      </p>
+      <Button onClick={() => cofounder.open()} variant="outline" size="sm" className="mt-3 w-full gap-1.5">
+        <Sparkles className="size-3" aria-hidden />
+        Ask your co-founder
+      </Button>
     </div>
   )
 }

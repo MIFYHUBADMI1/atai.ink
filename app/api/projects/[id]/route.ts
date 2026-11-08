@@ -17,6 +17,7 @@ import {
 import { decisionForProposal } from "@/lib/analysis/cofounder"
 import type { PlanProposal, PlanFinding } from "@/lib/types/plan-analysis"
 import type { MirrorProject, ProjectEvent } from "@/lib/types/project"
+import { planIsLocked } from "@/lib/types/project"
 
 /** Validated plan-section update request (accepted AI proposal or manual
  * section edit from the Collaborate workspace). The section allow-list and
@@ -106,6 +107,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       sectionUpdate?: SectionUpdateRequest
       /** Durable dismissal of a cached analysis proposal. */
       dismissProposalId?: string
+    }
+
+    // ── Built archive: plan content is immutable once the application exists ──
+    // A plan edit here can no longer reach the built app, so accepting it would
+    // silently diverge the plan from what was built. build_failed stays
+    // editable — a retry re-sends the whole plan to the builder.
+    if (
+      (body.sectionUpdate !== undefined || body.specification !== undefined || body.understanding !== undefined) &&
+      planIsLocked(project.state)
+    ) {
+      return fail(
+        "PLAN_LOCKED",
+        "This application is built, so its plan is read-only here. Use the Edit workspace to change the built application.",
+        409,
+      )
     }
 
     // ── Dismiss a cached analysis proposal (rejection must persist) ──

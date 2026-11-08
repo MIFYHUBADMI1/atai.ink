@@ -36,7 +36,7 @@ export default async function DatabasePage({ params }: { params: Promise<{ proje
                       Source code
                     </Link>
                     <Link href={`/project/${project.id}/edit`} className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-all hover:bg-primary/20">
-                      Edit application
+                      Edit app
                     </Link>
                   </>
                 )}

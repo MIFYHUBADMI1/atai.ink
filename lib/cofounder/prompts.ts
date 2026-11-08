@@ -54,6 +54,8 @@ export function buildAgentContextBlock(input: {
     state: string
     idea?: string
     planHealthPercent?: number
+    planBrief?: string
+    hasBuiltApp?: boolean
     buildState?: string
     deployedUrl?: string
   }
@@ -77,6 +79,17 @@ export function buildAgentContextBlock(input: {
         p.planHealthPercent !== undefined ? `- Plan health: ${p.planHealthPercent}%` : "",
         p.buildState ? `- Build state: ${p.buildState}` : "",
         p.deployedUrl ? `- Live at: ${p.deployedUrl}` : "",
+        ...(p.planBrief
+          ? [
+              `- The plan this project was built from (authoritative — ground every suggestion in it):`,
+              ...p.planBrief.split("\n").map((l) => `  ${l}`),
+            ]
+          : []),
+        ...(p.hasBuiltApp
+          ? [
+              `- The application is BUILT: the plan above is a read-only archive of what it was built from. When the founder wants changes to the built application, prepare them with request_followup_edit (an edit instruction to the builder) — never offer to rewrite plan sections, and never claim the plan edit alone changes the live app.`,
+            ]
+          : []),
       ]
         .filter(Boolean)
         .join("\n"),

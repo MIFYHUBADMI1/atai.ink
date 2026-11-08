@@ -46,7 +46,7 @@ export function workspaceProjectNav(projectId: string): AtaiNavItem[] {
     { href: `${root}/progress`, label: "Team progress", icon: ListChecks, kind: "link" },
     { href: `${root}/collaborate`, label: "Collaborate", icon: Sparkles, kind: "link" },
     { href: `${root}/plan`, label: "Plan", icon: FileText, kind: "link" },
-    { href: `${root}/edit`, label: "Edit plan", icon: Pencil, kind: "link" },
+    { href: `${root}/edit`, label: "Edit app", icon: Pencil, kind: "link" },
     { href: `${root}/source`, label: "Source", icon: Code2, kind: "link" },
     { href: `${root}/runtime`, label: "Runtime", icon: Server, kind: "link" },
     { href: `${root}/database`, label: "Database", icon: Database, kind: "link" },

@@ -2,6 +2,8 @@ import "server-only"
 import { store } from "@/lib/store/store"
 import { getAvailableCredits, getBalance } from "@/lib/billing/credit-service"
 import { computePlanHealth, PLAN_SECTIONS, isPlaceholderValue } from "@/lib/analysis/plan-sections"
+import { buildPlanBrief } from "@/lib/analysis/cofounder"
+import { planIsLocked } from "@/lib/types/project"
 import type {
   CofounderBuildSummary,
   CofounderCreditCosts,
@@ -105,6 +107,12 @@ export async function buildActiveProjectBrief(
   state: string
   idea?: string
   planHealthPercent?: number
+  /** One line per plan section — the content the application was built from,
+   * so co-founder suggestions are grounded in the real plan. */
+  planBrief?: string
+  /** True once the built application exists: the plan is an archive and
+   * change requests must flow to the builder, not back into plan sections. */
+  hasBuiltApp?: boolean
   buildState?: string
   deployedUrl?: string
 } | null> {
@@ -118,6 +126,8 @@ export async function buildActiveProjectBrief(
     state: project.state,
     ...(project.idea ? { idea: project.idea.slice(0, 300) } : {}),
     ...(spec ? { planHealthPercent: computePlanHealth(spec).percent } : {}),
+    ...(spec ? { planBrief: buildPlanBrief(spec) } : {}),
+    ...(planIsLocked(project.state) ? { hasBuiltApp: true } : {}),
     ...(project.state === "building" || project.state === "deploying" ? { buildState: project.state } : {}),
     ...(project.deployment?.productionUrl ? { deployedUrl: project.deployment.productionUrl } : {}),
   }

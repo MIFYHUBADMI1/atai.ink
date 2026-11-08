@@ -9,7 +9,7 @@ import { TotalumError } from "@/lib/integrations/totalum/errors"
 import { validateProjectId } from "@/lib/projects/project-id"
 import { initializeProjectInfrastructure } from "@/lib/infrastructure/service"
 import { getInfrastructurePlan } from "@/lib/infrastructure/plans"
-import { buildInitialBuildPrompt } from "@/lib/analysis/prompt-builder"
+import { buildFollowupAgentPrompt, buildInitialBuildPrompt } from "@/lib/analysis/prompt-builder"
 import { getBuildCost } from "@/lib/billing/build-auth"
 import { getDeploymentCosts } from "@/lib/billing/runtime-config"
 import {
@@ -22,6 +22,7 @@ import {
 import { decisionForProposal } from "@/lib/analysis/cofounder"
 import { ApplicationSpecificationSchema } from "@/lib/types/specification"
 import type { MirrorProject, BuildRun, ProjectEvent } from "@/lib/types/project"
+import { FOLLOWUP_PROMPT_MAX } from "@/lib/types/project"
 import type { PlanProposal } from "@/lib/types/plan-analysis"
 
 /**
@@ -198,6 +199,9 @@ export interface SendFollowupResult {
   buildRunId?: string
   tier?: string
   creditsCharged?: number
+  /** Present on INSUFFICIENT_CREDITS so REST can keep its structured 402 body. */
+  required?: number
+  available?: number
 }
 
 export async function sendProjectFollowup(userId: string, projectId: string, prompt: string): Promise<SendFollowupResult> {
@@ -217,6 +221,14 @@ export async function sendProjectFollowup(userId: string, projectId: string, pro
   const trimmed = prompt.trim()
   if (trimmed.length < 2) {
     return { ok: false, status: 422, code: "VALIDATION", message: "Please describe the change you want." }
+  }
+  if (trimmed.length > FOLLOWUP_PROMPT_MAX) {
+    return {
+      ok: false,
+      status: 422,
+      code: "VALIDATION",
+      message: "Edit instructions are limited to 12,000 characters — split large changes into separate instructions.",
+    }
   }
   if (!isTotalumConfigured()) {
     return { ok: false, status: 503, code: "PROVIDER_NOT_CONFIGURED", message: "The application builder isn't connected yet." }
@@ -251,7 +263,7 @@ export async function sendProjectFollowup(userId: string, projectId: string, pro
   if (available < creditsNeeded) {
     await store.updateBuildRun(run.id, { status: "failed", error: "insufficient credits" })
     await store.updateProject(projectId, { state: project.state })
-    return { ok: false, status: 402, code: "INSUFFICIENT_CREDITS", message: `You need ${creditsNeeded.toLocaleString()} credits for this edit (${tier} tier). Available: ${available.toLocaleString()}.` }
+    return { ok: false, status: 402, code: "INSUFFICIENT_CREDITS", required: creditsNeeded, available, message: `You need ${creditsNeeded.toLocaleString()} credits for this edit (${tier} tier). Available: ${available.toLocaleString()}.` }
   }
 
   const reserved = await reserveCredits({
@@ -264,12 +276,12 @@ export async function sendProjectFollowup(userId: string, projectId: string, pro
   if (!reserved) {
     await store.updateBuildRun(run.id, { status: "failed", error: "insufficient credits" })
     await store.updateProject(projectId, { state: project.state })
-    return { ok: false, status: 402, code: "INSUFFICIENT_CREDITS", message: `You need ${creditsNeeded.toLocaleString()} credits for this edit (${tier} tier). Please top up and try again.` }
+    return { ok: false, status: 402, code: "INSUFFICIENT_CREDITS", required: creditsNeeded, available, message: `You need ${creditsNeeded.toLocaleString()} credits for this edit (${tier} tier). Please top up and try again.` }
   }
 
   const previousState = project.state
   try {
-    await runAgent(project.totalumProjectId, trimmed)
+    await runAgent(project.totalumProjectId, buildFollowupAgentPrompt(trimmed))
     await store.updateBuildRun(run.id, { status: "running" })
     await store.updateProject(projectId, { state: "building" })
     return { ok: true, status: 200, code: "OK", buildRunId: run.id, tier, creditsCharged: creditsNeeded }

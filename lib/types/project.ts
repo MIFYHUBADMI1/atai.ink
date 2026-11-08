@@ -24,6 +24,31 @@ export type ProjectState =
   | "deployment_failed"
   | "pending_plan"
 
+/**
+ * States where the built application exists (or is being produced): the plan is
+ * a read-only archive because editing it here can no longer reach the built
+ * app — changes go through the follow-up edit flow. build_failed is
+ * deliberately excluded: a retry re-sends the whole plan
+ * (retryProjectStep → startProjectBuild), so the plan must stay editable until
+ * the build succeeds.
+ */
+export const PLAN_LOCKED_STATES: ReadonlySet<ProjectState> = new Set([
+  "building",
+  "deploying",
+  "ready",
+  "build_complete",
+  "deployment_failed",
+])
+
+export function planIsLocked(state: ProjectState): boolean {
+  return PLAN_LOCKED_STATES.has(state)
+}
+
+/** Character cap for one follow-up edit instruction to the builder — shared
+ * by the REST route, the Edit workspace and the Co-founder tool so all three
+ * enforce the same limit. */
+export const FOLLOWUP_PROMPT_MAX = 12_000
+
 /** Bookkeeping for an analysis/planning run — lets the workspace show how many
  * attempts have happened and detect a run that died without reporting. */
 export interface ProjectPipelineRecovery {

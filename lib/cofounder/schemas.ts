@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { FOLLOWUP_PROMPT_MAX } from "@/lib/types/project"
 
 /**
  * Zod input schemas for every Co-founder tool. The registry converts these to
@@ -179,7 +180,7 @@ export const requestBuildSchema = z.object({
 
 export const requestFollowupEditSchema = z.object({
   projectId: z.string().min(1).max(80),
-  prompt: z.string().min(2).max(12000),
+  prompt: z.string().min(2).max(FOLLOWUP_PROMPT_MAX),
 }).strip()
 
 export const requestDeploySchema = z.object({

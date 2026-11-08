@@ -84,7 +84,7 @@ export function ProjectActions({ project, isBuilt }: ProjectActionsProps) {
           </Tool>
         ) : null}
         <Tool href={`/project/${project.id}/edit`} icon={PenLine} tone="accent">
-          Edit plan
+          Edit app
         </Tool>
         {isBuilt ? (
           <Tool href={`/project/${project.id}/source`} icon={Code2}>

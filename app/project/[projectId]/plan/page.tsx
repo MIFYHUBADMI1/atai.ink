@@ -379,7 +379,7 @@ export default async function ProjectPlanPage({ params }: { params: Promise<{ pr
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               <Link href={`/project/${project.id}/edit`} className={PRIMARY_BTN}>
                 <Pencil className="size-4" />
-                Edit plan
+                Edit app
               </Link>
               <Link href={`/project/${project.id}`} className={GHOST_BTN}>
                 Open workspace

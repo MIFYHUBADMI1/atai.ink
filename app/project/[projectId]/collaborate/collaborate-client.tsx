@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo, useCallback, type KeyboardEvent as ReactKeyboardEvent } from "react"
 import { createPortal } from "react-dom"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { CofounderMarkdown } from "@/components/cofounder/markdown"
@@ -35,7 +36,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import type { Project, ProjectEvent } from "@/lib/types/project"
+import { planIsLocked, type Project, type ProjectEvent } from "@/lib/types/project"
 import type { ProjectChat, ProjectChatSummary } from "@/lib/types/collab-chat"
 import type { ApplicationSpecification } from "@/lib/types/specification"
 import { buildJourneySteps } from "@/lib/workspace/workspace-view-model"
@@ -2725,6 +2726,7 @@ function InsightsPanel({
   onAnalysisUpdated,
   research,
   onAddressGap,
+  readOnly = false,
 }: {
   spec: ApplicationSpecification
   analysis: PlanAnalysis | null
@@ -2740,6 +2742,9 @@ function InsightsPanel({
   research: ResearchFindings | null
   /** Hand a gap prompt to the co-founder's composer. */
   onAddressGap: (prompt: string) => void
+  /** Plan-archive mode (built app): findings stay readable, but nothing here
+   * may start a paid analysis or route into the co-founder's edit loop. */
+  readOnly?: boolean
 }) {
   const health = useMemo(() => computePlanHealth(spec), [spec])
 
@@ -2827,7 +2832,7 @@ function InsightsPanel({
             {analysis.nextBestAction.why && (
               <p className="mt-1 text-xs leading-5 text-muted-foreground">{analysis.nextBestAction.why}</p>
             )}
-            {nbaSection && getPlanSection(nbaSection) && (
+            {nbaSection && getPlanSection(nbaSection) && !readOnly && (
               <button
                 onClick={() => onWorkOn(nbaSection as PlanSectionId)}
                 className="mt-3 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
@@ -2884,12 +2889,14 @@ function InsightsPanel({
                   )}
                   <div className="mt-1.5 flex items-center justify-between gap-2">
                     <span className="text-[10px] uppercase tracking-widest text-muted-foreground/80">{c.group}</span>
-                    <button
-                      onClick={() => onAddressGap(c.prompt)}
-                      className="inline-flex min-h-8 items-center text-[11px] font-medium text-primary hover:underline"
-                    >
-                      Work on this →
-                    </button>
+                    {!readOnly && (
+                      <button
+                        onClick={() => onAddressGap(c.prompt)}
+                        className="inline-flex min-h-8 items-center text-[11px] font-medium text-primary hover:underline"
+                      >
+                        Work on this →
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -2904,7 +2911,7 @@ function InsightsPanel({
           <h3 className="font-mono text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
             AI found
           </h3>
-          {analysis && (
+          {analysis && !readOnly && (
             <button
               onClick={onRefresh}
               disabled={analyzing || !isOwner}
@@ -2920,7 +2927,7 @@ function InsightsPanel({
             <p className="text-sm text-muted-foreground">
               No analysis yet. I&apos;ll review your plan and flag what needs attention.
             </p>
-            {isOwner && (
+            {isOwner && !readOnly && (
               <button
                 onClick={() => onAnalyze(false)}
                 disabled={analyzing}
@@ -2969,7 +2976,7 @@ function InsightsPanel({
                   </div>
                 ),
             )}
-            {visibleProposals.length > 0 && (
+            {!readOnly && visibleProposals.length > 0 && (
               <div className="rounded-xl border border-primary/25 bg-primary/5 p-3">
                 <p className="text-xs font-medium text-foreground">
                   This analysis includes {visibleProposals.length} suggested update{visibleProposals.length > 1 ? "s" : ""}.
@@ -3369,6 +3376,10 @@ export function CollaborateClient({
     })
   }, [])
   const [projectState, setProjectState] = useState(initialProject.state)
+  // Once the application exists, this page reads as a plan archive: sections
+  // render read-only and the co-founder's plan-proposal loop stands down.
+  const planLocked = planIsLocked(projectState)
+  const canEditPlan = isOwner && !planLocked
   const [pipelineError, setPipelineError] = useState<string | null>(initialProject.error ?? null)
   const [pipelineNonce, setPipelineNonce] = useState(0)
   const [retryingPipeline, setRetryingPipeline] = useState(false)
@@ -3984,8 +3995,9 @@ export function CollaborateClient({
         : null}
       {/* Auto-complete button — portaled into the page header, where it takes
           the full width of its own row on phones and sits inline from sm up.
-          Visible while the founder owns the workspace and a run isn't active. */}
-      {isOwner && autoEstimate && autoEstimate.missingSections.length > 0 && !runActive && headerSlots.actions
+          Visible while the founder owns the workspace, the plan is still
+          editable, and a run isn't active. */}
+      {isOwner && !planLocked && autoEstimate && autoEstimate.missingSections.length > 0 && !runActive && headerSlots.actions
         ? createPortal(
           <button
             onClick={startAutoComplete}
@@ -4017,6 +4029,25 @@ export function CollaborateClient({
           headerSlots.actions,
         )
         : null}
+      {/* Built archive notice — the plan fed the build; further changes happen
+          on the Edit workspace, not here. */}
+      {planLocked && isOwner ? (
+        <div className="shrink-0 border-b border-border bg-card/60">
+          <div className="mx-auto flex w-full max-w-7xl flex-col gap-2.5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6 lg:px-10">
+            <p className="min-w-0 text-xs leading-5 text-muted-foreground">
+              <span className="font-medium text-foreground">Your application is built.</span>{" "}
+              This page is now a read-only copy of the plan it was built from — to change the built application, use the Edit workspace.
+            </p>
+            <Link
+              href={`/project/${projectId}/edit`}
+              className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              <PenLine className="size-3.5 shrink-0" aria-hidden />
+              Open Edit workspace
+            </Link>
+          </div>
+        </div>
+      ) : null}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Desktop: 3 areas — plan (left), AI (center, dominant), insights
           (right). Tablets stay in the tab flow below so all three are reachable
@@ -4090,7 +4121,7 @@ export function CollaborateClient({
               <SectionDetail
                 spec={spec}
                 sectionId={activeSection}
-                canEdit={isOwner}
+                canEdit={canEditPlan}
                 onSave={saveSection}
                 draft={drafts[activeSection] ?? ""}
                 onDraftChange={(value) => setDraft(activeSection, value)}
@@ -4107,6 +4138,19 @@ export function CollaborateClient({
                   setActiveSection(null)
                   setChatWithFocus(false)
                 }}
+              />
+            </div>
+          ) : planLocked ? (
+            // Built archive: the plan-reading default is the exact brief the
+            // builder received — not the co-founder, whose plan-editing loop
+            // has done its job once the build started.
+            <div className="collab-scroll min-h-0 flex-1 overflow-y-auto">
+              <BuilderReviewPanel
+                spec={spec}
+                understanding={initialProject.understanding}
+                preferences={initialProject.preferences}
+                founderIdea={initialProject.idea}
+                artifacts={artifacts}
               />
             </div>
           ) : (
@@ -4146,6 +4190,7 @@ export function CollaborateClient({
             onAnalysisUpdated={setAnalysis}
             research={researchFindings}
             onAddressGap={addressGap}
+            readOnly={planLocked}
           />
         </aside>
 
@@ -4176,7 +4221,14 @@ export function CollaborateClient({
             <div className="flex shrink-0 border-b border-border bg-card" role="tablist" aria-label="Workspace views">
               {([
                 { v: "plan", label: "My Plan", Icon: ClipboardList },
-                { v: "chat", label: "Co-Founder", Icon: Sparkles },
+                // Built archive: the chat tab becomes a plan brief — the
+                // co-founder's plan-editing loop has done its job once the
+                // build started.
+                {
+                  v: "chat",
+                  label: planLocked ? "Brief" : "Co-Founder",
+                  Icon: planLocked ? FileText : Sparkles,
+                },
                 { v: "insights", label: "Insights", Icon: Lightbulb },
               ] as const).map(({ v, label, Icon }) => (
                 <button
@@ -4257,7 +4309,7 @@ export function CollaborateClient({
                       <SectionDetail
                         spec={spec}
                         sectionId={activeSection}
-                        canEdit={isOwner}
+                        canEdit={canEditPlan}
                         onSave={saveSection}
                         draft={drafts[activeSection] ?? ""}
                         onDraftChange={(value) => setDraft(activeSection, value)}
@@ -4270,6 +4322,18 @@ export function CollaborateClient({
                           setChatWithFocus(false)
                         }}
                       />
+                    ) : planLocked ? (
+                      // Built archive: the brief the builder received replaces
+                      // the co-founder as this tab's default view.
+                      <div className="collab-scroll min-h-0 flex-1 overflow-y-auto">
+                        <BuilderReviewPanel
+                          spec={spec}
+                          understanding={initialProject.understanding}
+                          preferences={initialProject.preferences}
+                          founderIdea={initialProject.idea}
+                          artifacts={artifacts}
+                        />
+                      </div>
                     ) : (
                       <ChatPanel
                         projectId={projectId}
@@ -4312,6 +4376,7 @@ export function CollaborateClient({
                     onAnalysisUpdated={setAnalysis}
                     research={researchFindings}
                     onAddressGap={addressGap}
+                    readOnly={planLocked}
                   />
                 </div>
               )}
