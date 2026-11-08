@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { CofounderMarkdown } from "@/components/cofounder/markdown"
 import type { GrowthOverview, NumberMetric } from "@/lib/marketing/growth-overview"
 
 /**
@@ -141,32 +142,46 @@ export function GrowthOverviewView({ overview }: { overview: GrowthOverview }) {
         </div>
       </section>
 
-      {/* B3 — AI-generated plans (never executed) */}
+      {/* B3 — AI-generated plans (never executed), rendered in full */}
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold tracking-tight">Growth plans Atai has drafted</h2>
         <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-          These documents were written by Atai&apos;s planner during analysis. They are <span className="text-foreground">planning
-          context</span> — publishing, campaigns, and optimizations have not been run for you.
+          These documents were written by Atai&apos;s planner during analysis and are <span className="text-foreground">planning
+          context</span> — publishing, campaigns, and optimizations have not been run for you. Read them, edit them in
+          the plan, and put them to work.
         </p>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {whatAtaiKnows.aiPlanDocuments.map((doc) => (
-            <div key={doc.id} className={`min-w-0 rounded-2xl border p-4 sm:p-5 ${doc.present ? "border-border bg-card" : "border-dashed border-border bg-transparent"}`}>
-              <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+        {whatAtaiKnows.aiPlanDocuments
+          .filter((doc) => doc.present)
+          .map((doc) => (
+            <div key={doc.id} className="flex min-w-0 flex-col gap-2 rounded-2xl border border-border bg-card p-4 sm:p-5">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                 <p className="min-w-0 break-words text-sm font-medium">{doc.label}</p>
-                {doc.present ? (
-                  <span className="shrink-0 whitespace-nowrap rounded-full bg-muted px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="whitespace-nowrap rounded-full bg-muted px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
                     AI draft · not executed
                   </span>
-                ) : (
-                  <span className="shrink-0 whitespace-nowrap font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">not drafted</span>
-                )}
+                  <Link href={`/project/${overview.projectId}/plan`} className="whitespace-nowrap text-xs font-medium text-primary hover:underline">
+                    Open in plan →
+                  </Link>
+                </div>
               </div>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                {doc.present ? `${doc.characterCount.toLocaleString()} characters in your plan.` : "The planner has not produced this yet."}
-              </p>
+              <div className="min-w-0">
+                <CofounderMarkdown>{doc.text}</CofounderMarkdown>
+              </div>
             </div>
           ))}
-        </div>
+        {whatAtaiKnows.aiPlanDocuments.some((doc) => !doc.present) ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {whatAtaiKnows.aiPlanDocuments
+              .filter((doc) => !doc.present)
+              .map((doc) => (
+                <div key={doc.id} className="flex min-w-0 flex-col gap-1 rounded-2xl border border-dashed border-border bg-transparent p-4 sm:p-5">
+                  <p className="min-w-0 break-words text-sm font-medium">{doc.label}</p>
+                  <p className="text-xs leading-5 text-muted-foreground">The planner has not produced this yet.</p>
+                </div>
+              ))}
+          </div>
+        ) : null}
       </section>
 
       {/* B4 — Measurements */}

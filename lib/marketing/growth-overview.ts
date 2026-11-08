@@ -104,6 +104,12 @@ export interface AiPlanDocument {
   present: boolean
   characterCount: number
   /**
+   * The full drafted text when present ("" otherwise) — the founder's own
+   * plan, rendered verbatim on the market page. Never truncated here; the
+   * co-founder tool projection drops it to keep transcripts small.
+   */
+  text: string
+  /**
    * ALWAYS `ai_generated_planning_context` with `executed: false`: this text
    * was produced by Atai's planner during analysis. Its presence never means
    * any campaign, posting, or optimization was run.
@@ -365,6 +371,7 @@ export function readAiPlanDocuments(project: MirrorProject): AiPlanDocument[] {
       label,
       present,
       characterCount: present ? text.length : 0,
+      text: present ? text : "",
       origin: "ai_generated_planning_context" as const,
       executed: false as const,
     }
