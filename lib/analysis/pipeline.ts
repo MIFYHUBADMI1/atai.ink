@@ -2,8 +2,9 @@ import "server-only"
 import { store, cryptoId } from "@/lib/store/store"
 import { logger } from "@/lib/logging/logger"
 import { crawlWebsite, crawlWebsiteDeep, isFirecrawlConfigured } from "@/lib/integrations/firecrawl/service"
-import { launchProject, isTotalumConfigured } from "@/lib/integrations/totalum/service"
+import { launchProject, isProjectIdAvailable, isTotalumConfigured } from "@/lib/integrations/totalum/service"
 import { TotalumError } from "@/lib/integrations/totalum/errors"
+import type { LaunchProjectResponse } from "@/lib/integrations/totalum/types"
 import { initializeProjectInfrastructure } from "@/lib/infrastructure/service"
 import { getInfrastructurePlan } from "@/lib/infrastructure/plans"
 import { chargeScrapeCredits, chargePlanCredits, chargeDeepCrawlCredits, reserveCredits, refundReservation, getTierCost, classifyComplexity, hasSufficientCredits, getScrapeCost, getDeepCrawlCost } from "@/lib/credits/credits"
@@ -64,6 +65,47 @@ export async function markPipelineFailure(
     },
   })
   await store.appendEvent(projectId, event(phase === "understand" ? "analyze" : "specify", logMessage, "error"))
+}
+
+/**
+ * A launch that dies on our side is ambiguous: our acknowledgement timeout, a
+ * dropped reply, or an unreadable response body does NOT mean Totalum rejected
+ * the launch — the build may already be live. Totalum owns the truth, so before
+ * refunding or failing anything, poll it for the requested project id.
+ */
+const AMBIGUOUS_LAUNCH_CODES: ReadonlySet<TotalumError["code"]> = new Set([
+  "SERVER_NOT_READY",
+  "PROVIDER_UNREACHABLE",
+  "UNKNOWN",
+])
+
+async function reconcileAmbiguousLaunch(
+  requestedProjectId: string,
+  error: unknown,
+): Promise<LaunchProjectResponse | null> {
+  const ambiguous = !(error instanceof TotalumError) || AMBIGUOUS_LAUNCH_CODES.has(error.code)
+  if (!ambiguous) return null
+  logger.warn("pipeline.autoBuild", "launch acknowledgement lost — asking Totalum whether the build started", {
+    requestedProjectId,
+    code: error instanceof TotalumError ? error.code : (error as Error)?.name,
+    message: (error as Error)?.message,
+  })
+  // The abort may have raced Totalum's own processing, so one "not found" is
+  // not final — re-check once on a short delay before conceding failure.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 2_000))
+    try {
+      if (!(await isProjectIdAvailable(requestedProjectId))) {
+        return { projectId: requestedProjectId }
+      }
+    } catch (pollError) {
+      logger.warn("pipeline.autoBuild", "reconciliation poll failed", {
+        requestedProjectId,
+        message: (pollError as Error).message,
+      })
+    }
+  }
+  return null
 }
 
 /**
@@ -137,11 +179,18 @@ export async function autoLaunchBuild(projectId: string) {
 
     await store.appendEvent(projectId, event("build", "🏗️ Assembling the construction crew (AI agents, APIs, databases)..."))
 
-    const launch = await launchProject({
-      projectId: project.requestedProjectId,
-      prompt,
-      maxInfrastructureCreditsPerMonth: infraCap,
-    })
+    let launch: LaunchProjectResponse
+    try {
+      launch = await launchProject({
+        projectId: project.requestedProjectId,
+        prompt,
+        maxInfrastructureCreditsPerMonth: infraCap,
+      })
+    } catch (launchError) {
+      const reconciled = await reconcileAmbiguousLaunch(project.requestedProjectId, launchError)
+      if (!reconciled) throw launchError
+      launch = reconciled
+    }
     if (launch.projectId !== project.requestedProjectId) {
       throw new TotalumError("PROJECT_ID_UNAVAILABLE")
     }
