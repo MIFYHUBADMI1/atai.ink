@@ -760,8 +760,8 @@ export interface ContentItemDoc {
   plannedAt?: number
   /** Set on an alternative generated from this item (not a version chain). */
   variantOf?: string
-  /** Set when a one-click kit generated this asset (e.g. the launch kit). */
-  kit?: "launch"
+  /** Set when a one-click kit generated this asset (launch kit, ads bench, competitor snapshot). */
+  kit?: "launch" | "ads" | "competition"
   /** Stable slot id inside the kit; the newest item per slot fronts the kit view. */
   kitSlot?: string
   createdAt: number
@@ -934,5 +934,34 @@ export interface CampaignHistoryDoc {
   changedBy: string
   reason?: string
   createdAt: number
+}
+
+// ─── First-party product analytics (runtime `analytics` capability) ──────────
+
+/**
+ * One tracked product-analytics event from a generated application. Events are
+ * scoped to the project behind the authenticated runtime API key (never client
+ * input) and auto-purged after the retention window via a TTL index on
+ * `expiresAt`. `properties` holds bounded, scalar app data only — never
+ * credentials or raw request payloads.
+ */
+export interface AnalyticsEventDoc {
+  _id?: ObjectId
+  /** Project the event belongs to — from the API key identity, server-derived. */
+  projectId: string
+  /** Runtime environment of the key that recorded the event. */
+  environment: "development" | "production"
+  /** Provider-neutral event name (e.g. "page_view", "signup", "add_to_cart"). */
+  name: string
+  /** Stable anonymous visitor identifier supplied by the app, when present. */
+  visitorId?: string
+  /** Bounded scalar event properties (safe app data; credential-like keys dropped). */
+  properties?: Record<string, string | number | boolean>
+  /** When the event occurred (epoch ms; client-supplied, clamped server-side). */
+  timestamp: number
+  /** When the runtime persisted the event (epoch ms; server clock). */
+  recordedAt: number
+  /** TTL expiry — Mongo auto-deletes the event after the retention window. */
+  expiresAt: Date
 }
 

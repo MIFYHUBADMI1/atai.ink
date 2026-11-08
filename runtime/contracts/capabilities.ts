@@ -47,6 +47,9 @@ export const CAPABILITY_IDS = [
   // Data & files
   "db",
   "storage",
+  // First-party product analytics — event tracking + retention summaries for
+  // generated apps, scoped to the project behind the API key.
+  "analytics",
   // Commerce & comms
   "payments",
   "auth",

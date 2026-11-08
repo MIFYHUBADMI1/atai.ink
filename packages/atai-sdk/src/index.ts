@@ -26,6 +26,7 @@ export { CalendarCapability } from "./capabilities/calendar.js"
 export { VectorsCapability } from "./capabilities/vectors.js"
 export { DatabaseCapability } from "./capabilities/database.js"
 export { PaymentsCapability } from "./capabilities/payments.js"
+export { AnalyticsCapability } from "./capabilities/analytics.js"
 export { HealthCapability } from "./capabilities/health.js"
 
 // Normalized error surface.
@@ -75,6 +76,13 @@ export type {
   DbDeleteResult,
   PaymentsCreateCheckoutInput,
   PaymentsCreateCheckoutResult,
+  AnalyticsEventInput,
+  AnalyticsTrackInput,
+  AnalyticsTrackResult,
+  AnalyticsSummaryInput,
+  AnalyticsSummaryResult,
+  AnalyticsTopEvent,
+  AnalyticsDailyBucket,
   AtaiHealthResult,
 } from "./types.js"
 

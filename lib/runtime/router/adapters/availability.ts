@@ -62,6 +62,9 @@ const REQUIRED_ENV_VARS: Record<string, readonly string[]> = {
   "calendar": ["CALCOM_API_KEY"],
   "vectors": ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_VECTORIZE_INDEX"],
   "db": ["TOTALUM_API_KEY"],
+  // First-party analytics runs on Atai's own MongoDB — no external provider
+  // credential is required, so it is always configured on a deployed runtime.
+  "analytics": [],
   "payments": ["DODO_PAYMENTS_API_KEY"],
 }
 

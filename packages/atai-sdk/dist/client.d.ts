@@ -25,6 +25,7 @@ import { CalendarCapability } from "./capabilities/calendar.js";
 import { VectorsCapability } from "./capabilities/vectors.js";
 import { DatabaseCapability } from "./capabilities/database.js";
 import { PaymentsCapability } from "./capabilities/payments.js";
+import { AnalyticsCapability } from "./capabilities/analytics.js";
 import { HealthCapability } from "./capabilities/health.js";
 import type { AtaiConfig } from "./types.js";
 export declare class Atai {
@@ -50,6 +51,8 @@ export declare class Atai {
     readonly db: DatabaseCapability;
     /** Atai payments capability (`payments` operations). */
     readonly payments: PaymentsCapability;
+    /** Atai analytics capability (`analytics` operations). */
+    readonly analytics: AnalyticsCapability;
     /** Atai health capability (connectivity/credential status check). */
     readonly health: HealthCapability;
     constructor(config: AtaiConfig);

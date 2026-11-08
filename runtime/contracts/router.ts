@@ -84,6 +84,9 @@ export const RUNTIME_OPERATIONS = [
   "speak",
   "transcribe",
   "visionInput",
+  // First-party product analytics — record events and read retention summaries.
+  "track",
+  "summary",
 ] as const
 
 export type RuntimeOperation = (typeof RUNTIME_OPERATIONS)[number]
@@ -131,6 +134,9 @@ export const CAPABILITY_OPERATIONS: Record<string, readonly RuntimeOperation[] |
   "calendar": ["listBookings", "createBooking"],
   "vectors": ["upsert", "search", "delete"],
   "db": ["query", "create", "edit", "delete"],
+  // First-party analytics: generated apps record events; the founder (and,
+  // with consent, the co-founder) reads project-scoped retention summaries.
+  "analytics": ["track", "summary"],
   "payments": ["createCheckout", "createSubscription", "listPayments", "listPayouts"],
   // Test-only capability proving the router end-to-end (mock adapter).
   test: ["echo"],

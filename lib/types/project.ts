@@ -265,6 +265,16 @@ export interface MirrorProject {
    * no HTTP request to refuse in that flow, so the shortfall is recorded here
    * and the credit gate turns it into the same top-up overlay. */
   creditBlock?: ProjectCreditBlock
+  /** Founder opt-in for the co-founder to read this project's product
+   * analytics (events the built app reports via atai.analytics). Absent or
+   * enabled:false means OFF — insights are never read without consent. */
+  analyticsConsent?: ProjectAnalyticsConsent
+}
+
+/** Per-project founder permission for co-founder analytics insights. */
+export interface ProjectAnalyticsConsent {
+  enabled: boolean
+  updatedAt: number
 }
 
 /** A credit shortfall raised by a run with no request to answer. Safe numbers

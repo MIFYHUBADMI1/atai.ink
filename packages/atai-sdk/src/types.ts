@@ -512,3 +512,58 @@ export interface PaymentsPayoutListItem {
 export interface PaymentsListPayoutsResult {
   payouts: PaymentsPayoutListItem[]
 }
+
+// ─── Analytics capability (mirrors `analytics`/`track`, `analytics`/`summary`) ──
+
+/** One product-analytics event recorded by the application. */
+export interface AnalyticsEventInput {
+  /** Provider-neutral event name (e.g. "page_view", "signup", "add_to_cart"). */
+  name: string
+  /** Stable anonymous visitor identifier (e.g. a localStorage id), when known. */
+  visitorId?: string
+  /** Bounded scalar app data attached to the event (no secrets, no nested objects). */
+  properties?: Record<string, string | number | boolean>
+  /** When the event occurred (epoch ms). Defaults to server time when omitted. */
+  timestamp?: number
+}
+
+/** Input for `atai.analytics.track()` — a batch of 1–100 events. */
+export interface AnalyticsTrackInput {
+  events: AnalyticsEventInput[]
+}
+
+export interface AnalyticsTrackResult {
+  /** How many events the runtime persisted. */
+  accepted: number
+}
+
+/** Input for `atai.analytics.summary()`. */
+export interface AnalyticsSummaryInput {
+  /** Look-back window in days (1–90). Defaults to 7. */
+  windowDays?: number
+}
+
+export interface AnalyticsTopEvent {
+  name: string
+  count: number
+}
+
+export interface AnalyticsDailyBucket {
+  /** UTC calendar day (YYYY-MM-DD). */
+  date: string
+  events: number
+  visitors: number
+}
+
+/** Normalized retention/activity summary for the project behind the API key. */
+export interface AnalyticsSummaryResult {
+  windowDays: number
+  /** Start of the window (epoch ms). */
+  since: number
+  totalEvents: number
+  uniqueVisitors: number
+  returningVisitors: number
+  newVisitors: number
+  topEvents: AnalyticsTopEvent[]
+  daily: AnalyticsDailyBucket[]
+}

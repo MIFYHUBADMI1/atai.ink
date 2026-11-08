@@ -98,6 +98,7 @@ export type ToolResultType =
   | "account_summary"
   | "credit_costs"
   | "growth_overview"
+  | "product_analytics"
   | "seo_audit"
   | "marketing_content"
   | "marketing_content_list"

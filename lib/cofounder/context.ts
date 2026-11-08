@@ -115,6 +115,9 @@ export async function buildActiveProjectBrief(
   hasBuiltApp?: boolean
   buildState?: string
   deployedUrl?: string
+  /** Founder's per-project permission for the co-founder to read product
+   * analytics (default false). Lets the model know before it calls the tool. */
+  analyticsConsentEnabled?: boolean
 } | null> {
   const project = await store.getProject(projectId)
   if (!project || project.userId !== userId) return null
@@ -130,6 +133,7 @@ export async function buildActiveProjectBrief(
     ...(planIsLocked(project.state) ? { hasBuiltApp: true } : {}),
     ...(project.state === "building" || project.state === "deploying" ? { buildState: project.state } : {}),
     ...(project.deployment?.productionUrl ? { deployedUrl: project.deployment.productionUrl } : {}),
+    analyticsConsentEnabled: project.analyticsConsent?.enabled === true,
   }
 }
 

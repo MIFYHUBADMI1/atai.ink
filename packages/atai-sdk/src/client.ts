@@ -27,6 +27,7 @@ import { CalendarCapability } from "./capabilities/calendar.js"
 import { VectorsCapability } from "./capabilities/vectors.js"
 import { DatabaseCapability } from "./capabilities/database.js"
 import { PaymentsCapability } from "./capabilities/payments.js"
+import { AnalyticsCapability } from "./capabilities/analytics.js"
 import { HealthCapability } from "./capabilities/health.js"
 import type { AtaiConfig } from "./types.js"
 
@@ -64,6 +65,9 @@ export class Atai {
   /** Atai payments capability (`payments` operations). */
   public readonly payments: PaymentsCapability
 
+  /** Atai analytics capability (`analytics` operations). */
+  public readonly analytics: AnalyticsCapability
+
   /** Atai health capability (connectivity/credential status check). */
   public readonly health: HealthCapability
 
@@ -82,6 +86,7 @@ export class Atai {
     this.vectors = new VectorsCapability(resolved)
     this.db = new DatabaseCapability(resolved)
     this.payments = new PaymentsCapability(resolved)
+    this.analytics = new AnalyticsCapability(resolved)
     this.health = new HealthCapability(resolved)
   }
 }

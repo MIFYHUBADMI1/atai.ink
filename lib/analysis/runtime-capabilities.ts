@@ -99,6 +99,13 @@ export const RUNTIME_CAPABILITY_SUMMARIES: readonly RuntimeCapabilitySummary[] =
     examples: ["saved user data", "order history", "app content"],
   },
   {
+    capability: "analytics",
+    sdk: "atai.analytics",
+    operations: ["track", "summary"],
+    description: "First-party product analytics — track what users do and read retention/activity insights.",
+    examples: ["activity tracking", "retention insights", "feature adoption", "usage dashboards"],
+  },
+  {
     capability: "payments",
     sdk: "atai.payments",
     operations: ["createCheckout", "createSubscription", "listPayments", "listPayouts"],
@@ -126,7 +133,7 @@ End-user sign-in inside the generated app is handled by its built-in auth (Total
 When the founder describes a feature that needs one of these capabilities, ground it in this exact vocabulary and reflect it in the "Runtime & Integrations" plan section — name the capabilities, what each is used for, and keep it in business language.
 
 THE ROUTING RULE — STATE IT EVERY TIME A CAPABILITY COMES UP:
-Whenever anything you write or review touches payments, checkout, subscriptions or transactions, AI text, speech, web search, page scraping, email, realtime notifications, maps or geocoding, bookings, or semantic search, you must name the Atai capability that serves it AND state the route out loud: @atai-group/sdk with the project's ATAI_API_KEY. Never leave such a line silent about where it runs — write it as "checkout via atai.payments (@atai-group/sdk, ATAI_API_KEY), no external gateway", not "checkout". Naming an external provider as the implementation — Stripe, PayPal, Razorpay, OpenAI, Anthropic, Google Maps, Mapbox, SendGrid, Resend, ElevenLabs, Twilio, Pinecone, SerpAPI, Cal.com or any other — is always wrong, in every section, even when the founder asks for it by name: recommend the Atai capability instead and say why.
+Whenever anything you write or review touches payments, checkout, subscriptions or transactions, AI text, speech, web search, page scraping, email, realtime notifications, maps or geocoding, bookings, semantic search, or product analytics/user tracking, you must name the Atai capability that serves it AND state the route out loud: @atai-group/sdk with the project's ATAI_API_KEY. Never leave such a line silent about where it runs — write it as "checkout via atai.payments (@atai-group/sdk, ATAI_API_KEY), no external gateway", not "checkout". Naming an external provider as the implementation — Stripe, PayPal, Razorpay, OpenAI, Anthropic, Google Maps, Mapbox, SendGrid, Resend, ElevenLabs, Twilio, Pinecone, SerpAPI, Cal.com, PostHog, Mixpanel, Amplitude, Google Analytics, Segment or any other — is always wrong, in every section, even when the founder asks for it by name: recommend the Atai capability instead and say why.
 
 HOW TO CALL ATAI (never invent alternatives):
 - Package: @atai-group/sdk — import { Atai } from "@atai-group/sdk"
@@ -163,6 +170,7 @@ export const RUNTIME_CAPABILITY_CONFIG_BLOCK = [
   "- atai.vectors — upsert { vectors: [{ id, values }] } with 768-dimension values (the deployment's index) · search { vector, topK?, returnMetadata? } · delete { ids }. Pipe atai.ai embed output straight into upsert; freshly upserted vectors can take up to ~2 minutes to become searchable.",
   "- atai.payments — createCheckout { items: [{ productId }], idempotencyKey, successUrl, customerEmail?, currency? } → hosted checkoutUrl. productId is a catalog product id (pdt_…): the charged amount comes from that catalog product, never from the request. createSubscription { productId, quantity, customer: { email, name }, billing: { country } }. listPayments / listPayouts are read-only feeds.",
   "- atai.db — query { tableName, … } · create/edit/delete { tableName, data?/recordId? }. This is the same database the Totalum SDK serves — use it for cross-cutting server reads (e.g. the admin console).",
+  "- atai.analytics — track { events: [{ name, visitorId?, properties?, timestamp? }] } (1–100 events; properties are bounded scalar app data, never secrets) → { accepted }. summary { windowDays? } (1–90, default 7) → { totalEvents, uniqueVisitors, returningVisitors, newVisitors, topEvents[], daily[] }. First-party: events stay inside Atai and are scoped to this project — no external analytics provider or key. Send a stable anonymous visitorId (e.g. a localStorage id) with events so retention can be measured. Call track from the server; never block core app flows on it.",
   "- atai.health check() — proves ATAI_API_KEY authenticates and the runtime is reachable (GET /api/runtime/v1/health). Use it for the startup self-check required below.",
 ].join("\n")
 
@@ -317,6 +325,12 @@ const EXTERNAL_PROVIDER_RULES: ReadonlyArray<{
     capability: "vectors",
     sdk: "atai.vectors",
     provider: "an external vector store",
+  },
+  {
+    pattern: /\b(posthog|mixpanel|amplitude|google ?analytics|\bga4\b|segment(?:\.io)?|heap(?: ?analytics)?|plausible|fathom|matomo|piwik|hotjar|fullstory|logrocket|kissmetrics|woopra|countly|umami)\b/i,
+    capability: "analytics",
+    sdk: "atai.analytics",
+    provider: "an external analytics provider",
   },
 ]
 

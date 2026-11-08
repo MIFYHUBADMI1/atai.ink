@@ -9,6 +9,7 @@ import { registerCalComAdapter } from "./calcom"
 import { registerCloudflareAdapter } from "./cloudflare"
 import { registerTotalumAdapter } from "./totalum"
 import { registerDodoAdapter } from "./dodo"
+import { registerAnalyticsAdapter } from "./analytics"
 
 /**
  * Atai Runtime — production adapter registration (server-only).
@@ -40,5 +41,6 @@ export function registerAllRuntimeAdapters(): void {
   registerCloudflareAdapter()
   registerTotalumAdapter()
   registerDodoAdapter()
+  registerAnalyticsAdapter()
   registered = true
 }

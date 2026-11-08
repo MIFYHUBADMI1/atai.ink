@@ -247,6 +247,24 @@ export async function resolveRuntimePrice(params: {
     }
   }
 
+  // First-party product analytics is free telemetry: recording events and
+  // reading summaries never debits credits. An explicit zero price (not a
+  // missing config) so it works on every deployment without an admin rule;
+  // an admin rule above can still override it per operation if ever needed.
+  if (params.capability === "analytics") {
+    return {
+      chargeable: true,
+      source: "legacy",
+      fixedCredits: 0,
+      snapshot: {
+        pricingVersion: RUNTIME_PRICING_VERSION,
+        pricingSource: "legacy",
+        mode: "fixed_per_request",
+        credits: 0,
+      },
+    }
+  }
+
   // 3. Unpriced capability/operation — deny BEFORE provider execution.
   throw new RuntimePricingUnconfiguredError()
 }

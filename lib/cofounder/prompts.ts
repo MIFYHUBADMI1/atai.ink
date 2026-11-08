@@ -58,6 +58,7 @@ export function buildAgentContextBlock(input: {
     hasBuiltApp?: boolean
     buildState?: string
     deployedUrl?: string
+    analyticsConsentEnabled?: boolean
   }
   recentProjects?: Array<{ id: string; name: string; state: string; updatedAt: number }>
 }): string {
@@ -79,6 +80,7 @@ export function buildAgentContextBlock(input: {
         p.planHealthPercent !== undefined ? `- Plan health: ${p.planHealthPercent}%` : "",
         p.buildState ? `- Build state: ${p.buildState}` : "",
         p.deployedUrl ? `- Live at: ${p.deployedUrl}` : "",
+        `- Product analytics permission: ${p.analyticsConsentEnabled ? "GRANTED — you may read it with get_product_analytics" : "NOT granted — ask the founder to enable it on the Intelligence page before reading usage; never guess numbers"}`,
         ...(p.planBrief
           ? [
               `- The plan this project was built from (authoritative — ground every suggestion in it):`,

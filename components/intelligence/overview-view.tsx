@@ -6,6 +6,7 @@ import type {
 } from "@/lib/intelligence/overview"
 import { metricStateLabel } from "@/lib/intelligence/overview"
 import type { NumberMetric } from "@/lib/intelligence/metric-trust"
+import { AnalyticsConsentToggle } from "@/components/intelligence/analytics-consent-toggle"
 
 /**
  * Application Intelligence Overview presentation (Phase 1). Pure render of the
@@ -90,6 +91,15 @@ export function IntelligenceOverviewView({ overview }: { overview: IntelligenceO
           </p>
         </div>
         <span className={`self-start rounded-full px-3 py-1 text-xs font-medium ${deployment.className}`}>{deployment.label}</span>
+      </div>
+
+      {/* Founder permission for co-founder analytics insights */}
+      <div className="pb-2">
+        <AnalyticsConsentToggle
+          projectId={overview.projectId}
+          initialEnabled={overview.analyticsConsent.enabled}
+          featureAvailable={overview.analyticsFeatureAvailable}
+        />
       </div>
 
       {/* Measured today */}

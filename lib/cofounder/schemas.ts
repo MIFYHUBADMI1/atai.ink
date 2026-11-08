@@ -31,6 +31,11 @@ export const growthOverviewSchema = z.object({
   projectId: z.string().min(1).max(80),
 }).strip()
 
+export const productAnalyticsSchema = z.object({
+  projectId: z.string().min(1).max(80),
+  windowDays: z.number().int().min(1).max(90).optional(),
+}).strip()
+
 export const runSeoAuditSchema = z.object({
   projectId: z.string().min(1).max(80),
 }).strip()

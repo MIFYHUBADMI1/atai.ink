@@ -31,6 +31,7 @@ import {
   getCreditCostsTool,
 } from "./tools/navigation"
 import { getGrowthOverviewTool } from "./tools/growth"
+import { getProductAnalyticsTool } from "./tools/analytics"
 import { runSeoAuditTool } from "./tools/seo"
 import {
   generateMarketingCopyTool,
@@ -70,6 +71,9 @@ const REGISTRY: readonly ToolDefinition[] = [
   getCreditCostsTool,
   // READ — growth overview (Phase 2; read-only projection of trusted data)
   getGrowthOverviewTool,
+  // READ — product analytics insights (first-party analytics capability; gated
+  // by the operator flag AND the founder's per-project consent, default OFF)
+  getProductAnalyticsTool,
   // READ — growth task list (Phase 5; read-only projection of the founder's own tasks)
   listGrowthTasksTool,
   // READ — campaign list (Phase 6; read-only projection of the founder's own campaign plans)

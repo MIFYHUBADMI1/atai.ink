@@ -78,6 +78,7 @@ export const FALLBACK_CAPABILITY_OPERATIONS: Record<string, readonly string[]> =
   calendar: ["listBookings", "createBooking"],
   vectors: ["upsert", "search", "delete"],
   db: ["query", "create", "edit", "delete"],
+  analytics: ["track", "summary"],
   payments: ["createCheckout", "createSubscription", "listPayments", "listPayouts"],
 }
 
@@ -98,6 +99,7 @@ export const CAPABILITY_LABELS: Record<string, string> = {
   calendar: "Scheduling (Cal.com)",
   vectors: "Vector storage",
   db: "App database",
+  analytics: "Product analytics",
   payments: "Payments",
 }
 
@@ -138,6 +140,8 @@ export const OPERATION_LABELS: Record<string, string> = {
   createSubscription: "Create subscription",
   listPayments: "List payments",
   listPayouts: "List payouts",
+  track: "Track events",
+  summary: "Summary",
 }
 
 /** Rail grouping. Capabilities the server reports that aren't listed land in "More". */
@@ -150,7 +154,7 @@ export const CAPABILITY_GROUPS: { id: string; label: string; members: readonly s
   { id: "web", label: "Web", members: ["search.web", "web.scrape"] },
   { id: "comms", label: "Messaging", members: ["email", "notifications"] },
   { id: "geo", label: "Location", members: ["maps", "calendar"] },
-  { id: "data", label: "Data", members: ["vectors", "db"] },
+  { id: "data", label: "Data", members: ["vectors", "db", "analytics"] },
   { id: "commerce", label: "Commerce", members: ["payments"] },
 ]
 
@@ -281,6 +285,13 @@ export function sampleInputs(): Record<string, string> {
     "db/create": j({ tableName: "customers", data: { name: "Ada Tester", email: DEMO_EMAIL } }),
     "db/edit": j({ tableName: "customers", recordId: "<record id>", data: { name: "Ada Tester (edited)" } }),
     "db/delete": j({ tableName: "customers", recordId: "<record id>" }),
+    "analytics/track": j({
+      events: [
+        { name: "page_view", visitorId: "demo-visitor-1", properties: { page: "/pricing" } },
+        { name: "signup", visitorId: "demo-visitor-1", properties: { plan: "explorer" } },
+      ],
+    }),
+    "analytics/summary": j({ windowDays: 7 }),
     "payments/createCheckout": j({
       items: [{ productId: "pdt_0NmxWCnTidDQjIl0YqkqV", name: "Explorer Plan", quantity: 1 }],
       idempotencyKey: `demo-checkout-${Date.now()}`,
@@ -339,6 +350,10 @@ export const REQUEST_HINTS: Record<string, string> = {
   "db/create": "tableName + a data object — writes a new record to your project's database.",
   "db/edit": "tableName, recordId, and a data object of fields to update.",
   "db/delete": "tableName + recordId — permanently removes the record.",
+  "analytics/track":
+    "events[] (1–100) of { name, visitorId?, properties?, timestamp? }. First-party: events are stored inside Atai and scoped to your project — no external analytics key. Send a stable anonymous visitorId so retention can be measured; properties stay bounded scalar app data (no secrets). Free.",
+  "analytics/summary":
+    "Read-only retention/activity summary for your project. Optional windowDays (1–90, default 7) → totalEvents, uniqueVisitors, returningVisitors, newVisitors, topEvents[] and a daily[] series.",
   "payments/createCheckout":
     "Dodo bills catalog products only: each item needs a productId (pdt_… — the sample uses the test-mode Explorer product; list yours with the SDK or dashboard). price/name are informational; the charged amount comes from the product. → hosted checkoutUrl (test mode by default).",
   "payments/createSubscription": "Real recurring charge: productId, quantity, customer {email,name}, billing {country}.",
@@ -358,4 +373,5 @@ export const SIDE_EFFECT_OPERATIONS = new Set([
   "db/delete",
   "vectors/upsert",
   "vectors/delete",
+  "analytics/track",
 ])

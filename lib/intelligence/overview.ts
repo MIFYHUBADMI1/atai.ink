@@ -37,6 +37,8 @@ import {
 } from "@/lib/marketing/growth-overview"
 import { clampRange, summarizeProjectUsage } from "@/lib/runtime/control/analytics"
 import { ensureRuntimeIndexes, runtimeUsageCol } from "@/lib/db/runtime-collections"
+import { readAnalyticsConsent } from "@/lib/analytics/consent"
+import { isAnalyticsInsightsEnabledForUser } from "@/lib/analytics/feature-flags"
 import type { MirrorProject } from "@/lib/types/project"
 import type { UserDoc } from "@/lib/types/db"
 
@@ -278,6 +280,10 @@ export interface IntelligenceOverview {
   sections: IntelligenceSection[]
   nextSteps: string[]
   trustNotes: string[]
+  /** Founder's per-project permission for the co-founder to read product
+   * analytics, plus whether the capability is enabled for this account. */
+  analyticsConsent: { enabled: boolean; updatedAt: number }
+  analyticsFeatureAvailable: boolean
 }
 
 export interface IntelligenceOverviewInput {
@@ -316,7 +322,7 @@ function deriveNextSteps(deployment: SiteAvailability): string[] {
   return steps.slice(0, 3)
 }
 
-export async function getIntelligenceOverview({ project }: IntelligenceOverviewInput): Promise<IntelligenceOverview> {
+export async function getIntelligenceOverview({ user, project }: IntelligenceOverviewInput): Promise<IntelligenceOverview> {
   const now = Date.now()
   const window = clampRange(now - WINDOW_MS, now)
 
@@ -376,6 +382,8 @@ export async function getIntelligenceOverview({ project }: IntelligenceOverviewI
     sections: intelligenceSections(),
     nextSteps: deriveNextSteps(deployment),
     trustNotes: TRUST_NOTES,
+    analyticsConsent: readAnalyticsConsent(project),
+    analyticsFeatureAvailable: isAnalyticsInsightsEnabledForUser(user.id),
   }
 }
 

@@ -1,5 +1,5 @@
 import { getDb } from "@/lib/db/mongodb"
-import type { UserDoc, SessionDoc, VerificationTokenDoc, RateLimitDoc, ProjectAssetDoc, ProjectAttachmentDoc, ProviderUsageDoc, TopUpDoc, PublishEventDoc, ReferralDoc, DocFeedbackDoc, WebhookEventDoc, PlanningRunDoc, ProjectLikeDoc, UserFollowDoc, ProjectForkDoc, ProjectGitHubDoc, SeoAuditDoc, ContentItemDoc, BrandProfileDoc, GrowthTaskDoc, GrowthTaskHistoryDoc, CampaignDoc, CampaignHistoryDoc } from "@/lib/types/db"
+import type { UserDoc, SessionDoc, VerificationTokenDoc, RateLimitDoc, ProjectAssetDoc, ProjectAttachmentDoc, ProviderUsageDoc, TopUpDoc, PublishEventDoc, ReferralDoc, DocFeedbackDoc, WebhookEventDoc, PlanningRunDoc, ProjectLikeDoc, UserFollowDoc, ProjectForkDoc, ProjectGitHubDoc, SeoAuditDoc, ContentItemDoc, BrandProfileDoc, GrowthTaskDoc, GrowthTaskHistoryDoc, CampaignDoc, CampaignHistoryDoc, AnalyticsEventDoc } from "@/lib/types/db"
 import type {
   FeatureRequestDoc,
   FeatureRequestInternalNoteDoc,
@@ -216,6 +216,15 @@ export async function cofounderPendingActionsCol() {
 /** Project-scoped co-founder conversation threads (Collaborate workspace). */
 export async function projectChatsCol() {
   return (await getDbCached()).collection<ProjectChatMongoDoc>("project_chats")
+}
+
+/**
+ * First-party product analytics events (runtime `analytics` capability).
+ * Project-scoped by the authenticated API key; a TTL index on `expiresAt`
+ * auto-purges events after the retention window. Link-only by projectId.
+ */
+export async function analyticsEventsCol() {
+  return (await getDbCached()).collection<AnalyticsEventDoc>("analytics_events")
 }
 
 // ─── Type Definitions for Firecrawl Cache ────────────────────────────────────
@@ -532,6 +541,17 @@ async function runEnsureIndexes(): Promise<void> {
     campaigns.createIndex({ userId: 1, createdAt: -1 }),
     campaignHistory.createIndex({ id: 1 }, { unique: true, sparse: true, name: "campaign_history_id_unique" }),
     campaignHistory.createIndex({ campaignId: 1, createdAt: -1 }),
+  ])
+
+  // Product analytics events (runtime `analytics`). Summary reads scan a
+  // project's events inside a time window; top-event reads filter by name.
+  // The TTL index auto-purges events after the retention window (90 days).
+  const analyticsEvents = await analyticsEventsCol()
+  await batchedIndexCreation([
+    analyticsEvents.createIndex({ projectId: 1, timestamp: -1 }, { name: "analytics_events_project_time" }),
+    analyticsEvents.createIndex({ projectId: 1, name: 1, timestamp: -1 }, { name: "analytics_events_project_name_time" }),
+    analyticsEvents.createIndex({ projectId: 1, visitorId: 1, timestamp: -1 }, { name: "analytics_events_project_visitor_time" }),
+    analyticsEvents.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
   ])
 
   // Social / explore indexes
