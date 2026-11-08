@@ -760,6 +760,10 @@ export interface ContentItemDoc {
   plannedAt?: number
   /** Set on an alternative generated from this item (not a version chain). */
   variantOf?: string
+  /** Set when a one-click kit generated this asset (e.g. the launch kit). */
+  kit?: "launch"
+  /** Stable slot id inside the kit; the newest item per slot fronts the kit view. */
+  kitSlot?: string
   createdAt: number
   updatedAt: number
 }

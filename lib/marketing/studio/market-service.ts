@@ -182,6 +182,11 @@ async function creditsForRequest(requestId: string): Promise<number> {
 export interface GenerateMarketInput extends MarketBrief {
   userId: string
   projectId: string
+  /** Optional library title override (defaults to the kind's label). */
+  title?: string
+  /** One-click kit stamping. Kit services only — the studio route never sets these. */
+  kit?: "launch"
+  kitSlot?: string
 }
 
 export interface MarketCallView {
@@ -362,7 +367,7 @@ export async function generateMarketContent(input: GenerateMarketInput): Promise
     kind: "marketing_asset",
     template: "market_studio",
     status: "draft",
-    title: marketTitle(input.kind, project.name),
+    title: input.title?.trim().slice(0, 200) || marketTitle(input.kind, project.name),
     body,
     version: 1,
     origin: "ai_generated_marketing_content",
@@ -372,6 +377,8 @@ export async function generateMarketContent(input: GenerateMarketInput): Promise
     ...(media ? { media } : {}),
     runtime,
     brief: toBriefDoc(brief),
+    ...(input.kit ? { kit: input.kit } : {}),
+    ...(input.kitSlot ? { kitSlot: input.kitSlot } : {}),
     createdAt: now,
     updatedAt: now,
   }

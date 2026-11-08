@@ -1,11 +1,13 @@
 import Link from "next/link"
 import { DashboardShell } from "@/components/dashboard/dashboard-shell"
 import { GrowthOverviewView } from "@/components/marketing/growth-overview-view"
+import { LaunchKitPanel } from "@/components/marketing/launch-kit-panel"
 import { SeoAuditPanel } from "@/components/marketing/seo-audit-panel"
 import { ProjectComingSoon } from "@/components/workspace/project-coming-soon"
 import { getCurrentUser } from "@/lib/auth/session"
 import { getGrowthOverview } from "@/lib/marketing/growth-overview"
-import { isGrowthOverviewEnabledForUser, isSeoAuditEnabledForUser } from "@/lib/marketing/feature-flags"
+import { isGrowthOverviewEnabledForUser, isMarketStudioEnabled, isSeoAuditEnabledForUser } from "@/lib/marketing/feature-flags"
+import { getLaunchKitPanelData } from "@/lib/marketing/launch-kit-panel-data"
 import { getSeoAuditAffordability } from "@/lib/marketing/seo/credits"
 import { getLatestSeoAudit } from "@/lib/marketing/seo/service"
 import { requireOwnedProject } from "@/lib/workspace/require-owned-project"
@@ -41,6 +43,9 @@ export default async function ProjectMarketPage({ params }: { params: Promise<{ 
   // Read-only assembly: no credits charged for viewing this page.
   const overview = await getGrowthOverview({ user, project })
 
+  const studioEnabled = isMarketStudioEnabled()
+  const launchKit = studioEnabled ? await getLaunchKitPanelData(user.id, project.id) : null
+
   const seoEnabled = isSeoAuditEnabledForUser(user.id)
   const deployed = project.deployment?.status === "success" && Boolean(project.deployment?.productionUrl)
   const seoAffordability = seoEnabled ? await getSeoAuditAffordability(user.id) : null
@@ -51,6 +56,14 @@ export default async function ProjectMarketPage({ params }: { params: Promise<{ 
       {/* One responsive content column for the whole page: phone gutters,
           comfortable desktop measure, and consistent spacing between blocks. */}
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 pb-12 pt-6 sm:gap-8 sm:px-6 sm:pt-8 lg:px-8 lg:pb-16">
+        {launchKit && (
+          <LaunchKitPanel
+            projectId={project.id}
+            slots={launchKit.slots}
+            creditsAvailable={launchKit.creditsAvailable}
+            textReady={launchKit.textReady}
+          />
+        )}
         <GrowthOverviewView overview={overview} />
         <Link
           href={`/project/${project.id}/studio`}
