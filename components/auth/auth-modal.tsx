@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/dialog"
 import { AuthPanel } from "@/components/auth/auth-panel"
 import { useAuthModal } from "@/components/auth/auth-context"
+import { takePendingStart } from "@/lib/auth/client-intent"
+import { useClientStore } from "@/lib/store/client-store"
 
 function focusComposer() {
   const el = document.querySelector<HTMLTextAreaElement>(".lp-composer textarea")
@@ -27,6 +29,11 @@ export function AuthModal() {
         if (!open) {
           closeAuth()
           window.setTimeout(focusComposer, 0)
+          // A modal dismissed without signing in must not leave the start
+          // intent armed: the pending start would otherwise auto-run on the
+          // next /start visit. After a successful sign-in the session is
+          // already set here, so the continuation stays intact.
+          if (!useClientStore.getState().session) takePendingStart()
         }
       }}
     >

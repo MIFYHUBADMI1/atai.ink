@@ -1,4 +1,4 @@
-import { getCurrentUser } from "@/lib/auth/session"
+import { getCurrentUser, requireUser } from "@/lib/auth/session"
 import { ok, fail, handleRouteError } from "@/lib/api/respond"
 import {
   savePendingStartServer,
@@ -19,12 +19,15 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const user = await getCurrentUser()
+    // Pending starts only matter after authentication; refusing anonymous
+    // writes keeps visitors from seeding server-side state. The client keeps
+    // its sessionStorage copy, which is what carries the OAuth/email handoff.
+    const user = await requireUser()
     const body = (await req.json().catch(() => ({}))) as PendingStart
     if (!body?.prompt?.trim() || !body.href?.startsWith("/") || body.href.startsWith("//")) {
       return fail("VALIDATION", "A valid pending start is required.", 422)
     }
-    await savePendingStartServer(body, user?.id)
+    await savePendingStartServer(body, user.id)
     return ok({ saved: true })
   } catch (e) {
     return handleRouteError("api.start.pending.save", e)

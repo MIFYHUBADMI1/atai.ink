@@ -32,6 +32,7 @@ import {
 import { useAuthModal } from "@/components/auth/auth-provider"
 import { useSession } from "@/lib/client/api"
 import { savePendingStart } from "@/lib/auth/client-intent"
+import { useClientStore } from "@/lib/store/client-store"
 import {
   detectIntentChips,
   detectStartMode,
@@ -251,7 +252,7 @@ export function LandingComposer({
   className?: string
 } = {}) {
   const router = useRouter()
-  const { session } = useSession()
+  const { session, refresh: refreshSession } = useSession()
   const { openAuth } = useAuthModal()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const nameConfirmedRef = useRef(false)
@@ -674,7 +675,7 @@ export function LandingComposer({
     }
   }
 
-  function startPending(nextMode: StartMode, savedTitle: string) {
+  async function startPending(nextMode: StartMode, savedTitle: string) {
     const saved = promptForStart(nextMode, prompt)
     const continueHref = "/start"
     // Only attachments whose content actually survived the read make the trip;
@@ -698,7 +699,16 @@ export function LandingComposer({
     setFiles([])
     trackStartSubmitted({ method: nextMode, surface, authenticated: Boolean(session) })
     setSubmitting(true)
-    if (!session) {
+    let authed = Boolean(session)
+    if (!authed) {
+      // The landing page can submit before the session probe resolves; ask the
+      // server once before showing the sign-in modal so a signed-in founder is
+      // never asked to authenticate (and an unauthenticated one can never ride
+      // a stale "signed in" state past this gate on a retry).
+      await refreshSession()
+      authed = Boolean(useClientStore.getState().session)
+    }
+    if (!authed) {
       // Both are dialogs — close the name popup before the sign-in modal opens.
       setNameDialogOpen(false)
       openAuth("signup", { next: continueHref, prompt: saved })
@@ -717,7 +727,7 @@ export function LandingComposer({
     }
     nameConfirmedRef.current = true
     setNameDialogOpen(false)
-    startPending(mode, title.trim())
+    void startPending(mode, title.trim())
   }
 
   function submit() {
@@ -734,7 +744,7 @@ export function LandingComposer({
       setNameDialogOpen(true)
       return
     }
-    startPending(mode, title.trim())
+    void startPending(mode, title.trim())
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLElement>) {
