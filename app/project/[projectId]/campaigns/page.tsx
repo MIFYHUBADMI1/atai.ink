@@ -22,7 +22,7 @@ export default async function ProjectCampaignsPage({ params }: { params: Promise
   const project = await requireOwnedProject(projectId, `/project/${projectId}/campaigns`)
   const user = await getCurrentUser()
 
-  if (!user || !isCampaignsEnabledForUser(user.id)) {
+  if (!user || !isCampaignsEnabledForUser(user.id, user.featurePreferences)) {
     return (
       <ProjectComingSoon
         projectId={project.id}
@@ -30,6 +30,7 @@ export default async function ProjectCampaignsPage({ params }: { params: Promise
         kicker="Plan & track"
         title={`Campaigns for ${project.name}`}
         description="This is where you will plan and track marketing campaigns for this project. The experience is not available yet."
+        action={{ href: "/settings/features", label: "Turn on campaign planning" }}
       />
     )
   }

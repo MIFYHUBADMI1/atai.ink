@@ -47,6 +47,21 @@ export interface CreditBucket {
   createdAt: number
 }
 
+/**
+ * Founder-owned switches for the optional Market & Grow features. These are
+ * the FOUNDER's choices, flipped from /settings/features — the operator's env
+ * kill switches still gate everything above them, and pricing/credit costs
+ * stay entirely admin-controlled.
+ */
+export interface FeaturePreferences {
+  /** Crawl-based SEO visibility audits (credit-charging per run). */
+  seoAudit?: boolean
+  /** Growth tasks list with AI-proposed, founder-approved tasks (free). */
+  growthTasks?: boolean
+  /** Plan-only campaign planning surface (free, never executes). */
+  campaigns?: boolean
+}
+
 export interface UserDoc {
   _id: ObjectId
   id: string // string mirror of _id for callers that expect a string id
@@ -80,6 +95,8 @@ export interface UserDoc {
   creditBuckets?: CreditBucket[]
   isAdmin?: boolean
   onboarding?: UserOnboarding
+  /** Founder-owned feature switches — see FeaturePreferences. */
+  featurePreferences?: FeaturePreferences
   suspended?: boolean
   suspendedAt?: number
   suspendedReason?: string

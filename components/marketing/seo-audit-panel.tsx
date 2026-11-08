@@ -63,7 +63,11 @@ export function SeoAuditPanel({ projectId, state }: { projectId: string; state: 
       <section className="flex min-w-0 flex-col gap-3">
         <h2 className="text-lg font-semibold tracking-tight">SEO visibility</h2>
         <p className="rounded-2xl border border-dashed border-border bg-transparent p-4 text-sm leading-6 text-muted-foreground sm:p-5">
-          SEO audits are not enabled for this account yet.
+          SEO visibility audits are switched off. You choose which features live in your workspace —{" "}
+          <Link href="/settings/features" className="font-medium text-primary hover:underline">
+            turn them on in Settings
+          </Link>
+          .
         </p>
       </section>
     )

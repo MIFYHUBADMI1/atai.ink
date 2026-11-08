@@ -18,6 +18,7 @@ import type { ToolDefinition, PrepareOutcome, ToolOutcome, ToolContext } from ".
 import { runSeoAuditSchema } from "../schemas"
 import { ownedProject } from "./projects"
 import { isSeoAuditEnabledForUser } from "@/lib/marketing/feature-flags"
+import { readFeaturePreferences } from "@/lib/marketing/feature-preferences"
 import { getSeoAuditCost, getSeoAuditAffordability, chargeSeoAuditCredits, refundSeoAuditCredits, type SeoRefundOutcome } from "@/lib/marketing/seo/credits"
 import { scopedIntentKey } from "@/lib/billing/operation-identity"
 import { runSeoAudit, markSeoAuditRefund } from "@/lib/marketing/seo/service"
@@ -53,8 +54,9 @@ export const runSeoAuditTool: ToolDefinition = {
   async prepare(input, ctx): Promise<PrepareOutcome> {
     try {
       const parsed = runSeoAuditSchema.parse(input)
-      if (!isSeoAuditEnabledForUser(ctx.user.id)) {
-        return { ok: false, error: { code: "FEATURE_DISABLED", message: "SEO audits aren't available for this account yet.", fatal: true } }
+      const prefs = await readFeaturePreferences(ctx.user.id)
+      if (!isSeoAuditEnabledForUser(ctx.user.id, prefs)) {
+        return { ok: false, error: { code: "FEATURE_DISABLED", message: "SEO visibility audits are switched off. The founder can turn them on in Settings → Feature switches.", fatal: true } }
       }
       if (!isFirecrawlConfigured()) {
         return { ok: false, error: { code: "FIRECRAWL_UNAVAILABLE", message: "The website analyzer isn't connected right now.", fatal: true } }
@@ -92,8 +94,9 @@ export const runSeoAuditTool: ToolDefinition = {
     try {
       const parsed = runSeoAuditSchema.parse(input)
       projectId = parsed.projectId
-      if (!isSeoAuditEnabledForUser(ctx.user.id)) {
-        return { success: false, error: { code: "FEATURE_DISABLED", message: "SEO audits aren't available for this account.", fatal: true } }
+      const prefs = await readFeaturePreferences(ctx.user.id)
+      if (!isSeoAuditEnabledForUser(ctx.user.id, prefs)) {
+        return { success: false, error: { code: "FEATURE_DISABLED", message: "SEO visibility audits are switched off. The founder can turn them on in Settings → Feature switches.", fatal: true } }
       }
       const gate = await requireDeployedProject(ctx, parsed.projectId)
       if (!gate.ok) {

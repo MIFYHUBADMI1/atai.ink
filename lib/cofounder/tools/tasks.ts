@@ -23,6 +23,7 @@ import type { ToolDefinition, PrepareOutcome, ToolOutcome } from "../types"
 import { proposeGrowthTaskSchema, listGrowthTasksSchema } from "../schemas"
 import { ownedProject } from "./projects"
 import { isGrowthTasksEnabledForUser } from "@/lib/marketing/feature-flags"
+import { readFeaturePreferences } from "@/lib/marketing/feature-preferences"
 import { createGrowthTask, listTasks } from "@/lib/marketing/tasks/service"
 import { logger } from "@/lib/logging/logger"
 
@@ -36,8 +37,9 @@ export const proposeGrowthTaskTool: ToolDefinition = {
   async prepare(input, ctx): Promise<PrepareOutcome> {
     try {
       const parsed = proposeGrowthTaskSchema.parse(input)
-      if (!isGrowthTasksEnabledForUser(ctx.user.id)) {
-        return { ok: false, error: { code: "FEATURE_DISABLED", message: "Growth tasks aren't available for this account yet.", fatal: true } }
+      const prefs = await readFeaturePreferences(ctx.user.id)
+      if (!isGrowthTasksEnabledForUser(ctx.user.id, prefs)) {
+        return { ok: false, error: { code: "FEATURE_DISABLED", message: "Growth tasks are switched off. The founder can turn them on in Settings → Feature switches.", fatal: true } }
       }
       const project = await ownedProject(ctx, parsed.projectId)
       if (!project) {
@@ -67,8 +69,9 @@ export const proposeGrowthTaskTool: ToolDefinition = {
     try {
       // The approval endpoint re-passes the ORIGINAL stored parameters.
       const parsed = proposeGrowthTaskSchema.parse(input)
-      if (!isGrowthTasksEnabledForUser(ctx.user.id)) {
-        return { success: false, error: { code: "FEATURE_DISABLED", message: "Growth tasks aren't available for this account.", fatal: true } }
+      const prefs = await readFeaturePreferences(ctx.user.id)
+      if (!isGrowthTasksEnabledForUser(ctx.user.id, prefs)) {
+        return { success: false, error: { code: "FEATURE_DISABLED", message: "Growth tasks are switched off. The founder can turn them on in Settings → Feature switches.", fatal: true } }
       }
       const project = await ownedProject(ctx, parsed.projectId)
       if (!project) {
@@ -117,8 +120,9 @@ export const listGrowthTasksTool: ToolDefinition = {
   async execute(input, ctx) {
     try {
       const parsed = listGrowthTasksSchema.parse(input)
-      if (!isGrowthTasksEnabledForUser(ctx.user.id)) {
-        return { success: false, error: { code: "FEATURE_DISABLED", message: "Growth tasks aren't available for this account yet.", fatal: true } }
+      const prefs = await readFeaturePreferences(ctx.user.id)
+      if (!isGrowthTasksEnabledForUser(ctx.user.id, prefs)) {
+        return { success: false, error: { code: "FEATURE_DISABLED", message: "Growth tasks are switched off. The founder can turn them on in Settings → Feature switches.", fatal: true } }
       }
       const project = await ownedProject(ctx, parsed.projectId)
       if (!project) {

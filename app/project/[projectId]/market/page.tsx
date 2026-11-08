@@ -46,7 +46,7 @@ export default async function ProjectMarketPage({ params }: { params: Promise<{ 
   const studioEnabled = isMarketStudioEnabled()
   const launchKit = studioEnabled ? await getLaunchKitPanelData(user.id, project.id) : null
 
-  const seoEnabled = isSeoAuditEnabledForUser(user.id)
+  const seoEnabled = isSeoAuditEnabledForUser(user.id, user.featurePreferences)
   const deployed = project.deployment?.status === "success" && Boolean(project.deployment?.productionUrl)
   const seoAffordability = seoEnabled ? await getSeoAuditAffordability(user.id) : null
   const seoLatest = seoEnabled ? await getLatestSeoAudit(project.id) : null

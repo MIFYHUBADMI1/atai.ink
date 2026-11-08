@@ -7,12 +7,15 @@ export function ProjectComingSoon({
   kicker,
   title,
   description,
+  action,
 }: {
   projectId: string
   projectName: string
   kicker: string
   title: string
   description: string
+  /** Optional next step for the founder, e.g. turn the feature on in settings. */
+  action?: { href: string; label: string }
 }) {
   return (
     <DashboardShell title={projectName} projectId={projectId}>
@@ -23,6 +26,14 @@ export function ProjectComingSoon({
         <p className="rounded-2xl border border-border bg-card p-5 text-sm leading-6 text-muted-foreground">
           This is specific to this business. It is on the way — nothing here is simulated.
         </p>
+        {action ? (
+          <Link
+            href={action.href}
+            className="inline-flex w-fit items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            {action.label}
+          </Link>
+        ) : null}
         <Link href={`/project/${projectId}`} className="inline-flex w-fit text-sm font-medium text-primary hover:underline">
           ← Workspace
         </Link>

@@ -24,6 +24,7 @@ import type { ToolDefinition, PrepareOutcome, ToolOutcome } from "../types"
 import { proposeCampaignSchema, listCampaignsSchema } from "../schemas"
 import { ownedProject } from "./projects"
 import { isCampaignsEnabledForUser } from "@/lib/marketing/feature-flags"
+import { readFeaturePreferences } from "@/lib/marketing/feature-preferences"
 import { createCampaign, listCampaigns } from "@/lib/marketing/campaigns/service"
 import { logger } from "@/lib/logging/logger"
 
@@ -37,8 +38,9 @@ export const proposeCampaignTool: ToolDefinition = {
   async prepare(input, ctx): Promise<PrepareOutcome> {
     try {
       const parsed = proposeCampaignSchema.parse(input)
-      if (!isCampaignsEnabledForUser(ctx.user.id)) {
-        return { ok: false, error: { code: "FEATURE_DISABLED", message: "Campaigns aren't available for this account yet.", fatal: true } }
+      const prefs = await readFeaturePreferences(ctx.user.id)
+      if (!isCampaignsEnabledForUser(ctx.user.id, prefs)) {
+        return { ok: false, error: { code: "FEATURE_DISABLED", message: "Campaign planning is switched off. The founder can turn it on in Settings → Feature switches.", fatal: true } }
       }
       const project = await ownedProject(ctx, parsed.projectId)
       if (!project) {
@@ -67,8 +69,9 @@ export const proposeCampaignTool: ToolDefinition = {
     try {
       // The approval endpoint re-passes the ORIGINAL stored parameters.
       const parsed = proposeCampaignSchema.parse(input)
-      if (!isCampaignsEnabledForUser(ctx.user.id)) {
-        return { success: false, error: { code: "FEATURE_DISABLED", message: "Campaigns aren't available for this account.", fatal: true } }
+      const prefs = await readFeaturePreferences(ctx.user.id)
+      if (!isCampaignsEnabledForUser(ctx.user.id, prefs)) {
+        return { success: false, error: { code: "FEATURE_DISABLED", message: "Campaign planning is switched off. The founder can turn it on in Settings → Feature switches.", fatal: true } }
       }
       const project = await ownedProject(ctx, parsed.projectId)
       if (!project) {
@@ -115,8 +118,9 @@ export const listCampaignsTool: ToolDefinition = {
   async execute(input, ctx) {
     try {
       const parsed = listCampaignsSchema.parse(input)
-      if (!isCampaignsEnabledForUser(ctx.user.id)) {
-        return { success: false, error: { code: "FEATURE_DISABLED", message: "Campaigns aren't available for this account yet.", fatal: true } }
+      const prefs = await readFeaturePreferences(ctx.user.id)
+      if (!isCampaignsEnabledForUser(ctx.user.id, prefs)) {
+        return { success: false, error: { code: "FEATURE_DISABLED", message: "Campaign planning is switched off. The founder can turn it on in Settings → Feature switches.", fatal: true } }
       }
       const project = await ownedProject(ctx, parsed.projectId)
       if (!project) {

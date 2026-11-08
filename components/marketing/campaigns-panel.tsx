@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { Loader2, Megaphone, Plus, Pause, Play, Check, X, Link2, Copy } from "lucide-react"
@@ -164,7 +165,11 @@ export function CampaignsPanel({ projectId, state }: { projectId: string; state:
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold tracking-tight">Campaigns</h2>
         <p className="rounded-2xl border border-dashed border-border bg-transparent p-5 text-sm leading-6 text-muted-foreground">
-          Campaigns are not enabled for this account yet.
+          Campaign planning is switched off.{" "}
+          <Link href="/settings/features" className="font-medium text-primary hover:underline">
+            Turn it on in Settings
+          </Link>{" "}
+          if you want it in your workspace.
         </p>
       </section>
     )

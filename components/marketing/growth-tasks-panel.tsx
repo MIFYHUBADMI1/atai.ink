@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { Loader2, ListChecks, Plus, Check, RotateCcw, Sparkles } from "lucide-react"
@@ -134,7 +135,11 @@ export function GrowthTasksPanel({ projectId, state }: { projectId: string; stat
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold tracking-tight">Growth tasks</h2>
         <p className="rounded-2xl border border-dashed border-border bg-transparent p-5 text-sm leading-6 text-muted-foreground">
-          Growth tasks are not enabled for this account yet.
+          Growth tasks are switched off.{" "}
+          <Link href="/settings/features" className="font-medium text-primary hover:underline">
+            Turn them on in Settings
+          </Link>{" "}
+          if you want this list in your workspace.
         </p>
       </section>
     )

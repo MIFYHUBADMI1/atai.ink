@@ -90,7 +90,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const ownership = await checkProjectOwnership(user.id, id)
     if (!ownership.ok) return fail("UNAUTHORIZED_PROJECT_ACCESS", "We couldn't find this project.", 404)
 
-    if (!isCampaignsEnabledForUser(user.id)) {
+    if (!isCampaignsEnabledForUser(user.id, user.featurePreferences)) {
       return ok({ enabled: false, campaigns: [] })
     }
 
@@ -111,8 +111,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const ownership = await checkProjectOwnership(user.id, id)
     if (!ownership.ok) return fail("UNAUTHORIZED_PROJECT_ACCESS", "We couldn't find this project.", 404)
 
-    if (!isCampaignsEnabledForUser(user.id)) {
-      return fail("FEATURE_DISABLED", "Campaigns aren't available for this account yet.", 403)
+    if (!isCampaignsEnabledForUser(user.id, user.featurePreferences)) {
+      return fail("FEATURE_DISABLED", "Campaign planning is switched off. Turn it on in Settings → Feature switches.", 403)
     }
 
     const parsed = CreateSchema.safeParse(await req.json().catch(() => ({})))
@@ -147,8 +147,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const ownership = await checkProjectOwnership(user.id, id)
     if (!ownership.ok) return fail("UNAUTHORIZED_PROJECT_ACCESS", "We couldn't find this project.", 404)
 
-    if (!isCampaignsEnabledForUser(user.id)) {
-      return fail("FEATURE_DISABLED", "Campaigns aren't available for this account yet.", 403)
+    if (!isCampaignsEnabledForUser(user.id, user.featurePreferences)) {
+      return fail("FEATURE_DISABLED", "Campaign planning is switched off. Turn it on in Settings → Feature switches.", 403)
     }
 
     const parsed = PatchSchema.safeParse(await req.json().catch(() => ({})))

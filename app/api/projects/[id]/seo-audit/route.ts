@@ -41,7 +41,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const ownership = await checkProjectOwnership(user.id, id)
     if (!ownership.ok) return fail("UNAUTHORIZED_PROJECT_ACCESS", "We couldn't find this project.", 404)
 
-    if (!isSeoAuditEnabledForUser(user.id)) {
+    if (!isSeoAuditEnabledForUser(user.id, user.featurePreferences)) {
       return ok({ enabled: false, latest: null })
     }
     const latest = await getLatestSeoAudit(id)
@@ -95,8 +95,8 @@ async function post(req: Request, { params }: { params: Promise<{ id: string }> 
     const ownership = await checkProjectOwnership(user.id, id)
     if (!ownership.ok) return fail("UNAUTHORIZED_PROJECT_ACCESS", "We couldn't find this project.", 404)
 
-    if (!isSeoAuditEnabledForUser(user.id)) {
-      return fail("FEATURE_DISABLED", "SEO audits aren't available for this account yet.", 403)
+    if (!isSeoAuditEnabledForUser(user.id, user.featurePreferences)) {
+      return fail("FEATURE_DISABLED", "SEO visibility audits are switched off. Turn them on in Settings → Feature switches.", 403)
     }
     if (!isFirecrawlConfigured()) {
       return fail("FIRECRAWL_UNAVAILABLE", "The website analyzer isn't connected right now.", 503)

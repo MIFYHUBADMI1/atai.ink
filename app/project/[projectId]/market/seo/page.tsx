@@ -24,7 +24,7 @@ export default async function ProjectSeoVisibilityPage({ params }: { params: Pro
   const project = await requireOwnedProject(projectId, `/project/${projectId}/market/seo`)
   const user = await getCurrentUser()
 
-  if (!user || !isSeoAuditEnabledForUser(user.id)) {
+  if (!user || !isSeoAuditEnabledForUser(user.id, user.featurePreferences)) {
     return (
       <ProjectComingSoon
         projectId={project.id}
@@ -32,6 +32,7 @@ export default async function ProjectSeoVisibilityPage({ params }: { params: Pro
         kicker="SEO & visibility"
         title={`Visibility for ${project.name}`}
         description="This view will show what Atai can observe about your site's on-page search readiness. It is not available yet."
+        action={{ href: "/settings/features", label: "Turn on SEO visibility audits" }}
       />
     )
   }

@@ -23,7 +23,7 @@ export default async function ProjectTasksPage({ params }: { params: Promise<{ p
   const project = await requireOwnedProject(projectId, `/project/${projectId}/tasks`)
   const user = await getCurrentUser()
 
-  if (!user || !isGrowthTasksEnabledForUser(user.id)) {
+  if (!user || !isGrowthTasksEnabledForUser(user.id, user.featurePreferences)) {
     return (
       <ProjectComingSoon
         projectId={project.id}
@@ -31,6 +31,7 @@ export default async function ProjectTasksPage({ params }: { params: Promise<{ p
         kicker="Plan & execute"
         title={`Growth tasks for ${project.name}`}
         description="This is where you will turn next steps into a manageable task list and track what you've done. The experience is not available yet."
+        action={{ href: "/settings/features", label: "Turn on growth tasks" }}
       />
     )
   }

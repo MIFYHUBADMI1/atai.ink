@@ -1,6 +1,7 @@
 import "server-only"
 import { createHash } from "crypto"
 import { logger } from "@/lib/logging/logger"
+import type { FeaturePreferences } from "@/lib/types/db"
 
 /**
  * Feature flags for the marketing / growth workspace.
@@ -59,17 +60,50 @@ function clampPercent(value: number): number {
   return Math.min(100, Math.max(0, value))
 }
 
+/** The founder's explicit switch for a feature, when they have set one.
+ * `undefined` means they never touched it — fall back to rollout behavior. */
+function preferenceFor(prefs: FeaturePreferences | undefined, key: keyof FeaturePreferences): boolean | undefined {
+  if (!prefs || typeof prefs[key] !== "boolean") return undefined
+  return prefs[key]
+}
+
+/** Operator emergency-off helpers. When an env kill switch is set to false,
+ * the feature is unreachable for everyone — the founder's switch cannot
+ * re-enable it (and the settings page locks the toggle honestly). */
+export function isSeoAuditEnvBlocked(): boolean {
+  const hard = process.env.SEO_AUDIT_ENABLED
+  return hard === "false" || hard === "0"
+}
+
+export function isGrowthTasksEnvBlocked(): boolean {
+  const hard = process.env.GROWTH_TASKS_ENABLED
+  return hard === "false" || hard === "0"
+}
+
+export function isCampaignsEnvBlocked(): boolean {
+  const hard = process.env.CAMPAIGNS_ENABLED
+  return hard === "false" || hard === "0"
+}
+
 /**
- * SEO audit flag (Phase 3 — W2). Same convention as the growth-overview flag,
- * but the DEFAULT IS OFF: a crawl-based, credit-charging capability should not
- * be reachable until an operator explicitly enables it (SEO_AUDIT_ENABLED=true)
- * or opts a cohort in via SEO_AUDIT_ROLLOUT_PERCENT. When off, the API route
- * and the `run_seo_audit` tool both refuse loudly — no half-built surface.
+ * SEO audit flag (Phase 3 — W2). Resolution order:
+ *   1. `SEO_AUDIT_ENABLED=false` → hard off for everyone (operator kill switch).
+ *   2. The founder's own switch (`featurePreferences.seoAudit`) — on or off at
+ *      their accord, flipped from /settings/features. This is the intended
+ *      default path: the feature is OFF until the founder turns it on.
+ *   3. `SEO_AUDIT_ENABLED=true` → hard on for anyone who hasn't opted out.
+ *   4. Otherwise `SEO_AUDIT_ROLLOUT_PERCENT` governs (default 0).
+ * When off, the API route and the `run_seo_audit` tool both refuse loudly —
+ * no half-built surface.
  */
-export function isSeoAuditEnabledForUser(userId: string): boolean {
+export function isSeoAuditEnabledForUser(userId: string, prefs?: FeaturePreferences): boolean {
+  if (isSeoAuditEnvBlocked()) return false
+
+  const pref = preferenceFor(prefs, "seoAudit")
+  if (pref !== undefined) return pref
+
   const hard = process.env.SEO_AUDIT_ENABLED
   if (hard === "true" || hard === "1") return true
-  if (hard === "false" || hard === "0") return false
 
   const raw = process.env.SEO_AUDIT_ROLLOUT_PERCENT
   const percent = raw === undefined ? 0 : clampPercent(parseInt(raw, 10))
@@ -123,19 +157,21 @@ export function isMarketStudioEnabled(): boolean {
 }
 
 /**
- * Growth tasks flag (Phase 5 — W4). Same convention and SAME default-OFF
- * posture as the Studio/SEO flags: an AI-proposed, founder-approvable write
- * surface is unreachable until an operator opts in (GROWTH_TASKS_ENABLED=true)
- * or opens a cohort via GROWTH_TASKS_ROLLOUT_PERCENT. When off, the tasks route
- * falls back to the exact coming-soon experience and the `propose_growth_task` /
- * `list_growth_tasks` tools refuse loudly — no half-built surface. Note: unlike
- * Studio/SEO, tasks are FREE (no credits); the flag gates capability reachability,
- * not billing.
+ * Growth tasks flag (Phase 5 — W4). Resolution order mirrors the SEO flag:
+ * env kill switch → the founder's own switch (featurePreferences.growthTasks,
+ * flipped from /settings/features — the intended default path, OFF until they
+ * turn it on) → operator hard-on → rollout percent (default 0). When off, the
+ * tasks route falls back to the exact coming-soon experience and the
+ * `propose_growth_task` / `list_growth_tasks` tools refuse loudly — no
+ * half-built surface. Note: unlike Studio/SEO, tasks are FREE (no credits);
+ * the flag gates capability reachability, not billing.
  */
-export function isGrowthTasksEnabledForUser(userId: string): boolean {
+export function isGrowthTasksEnabledForUser(userId: string, prefs?: FeaturePreferences): boolean {
+  if (isGrowthTasksEnvBlocked()) return false
+  const pref = preferenceFor(prefs, "growthTasks")
+  if (pref !== undefined) return pref
   const hard = process.env.GROWTH_TASKS_ENABLED
   if (hard === "true" || hard === "1") return true
-  if (hard === "false" || hard === "0") return false
 
   const raw = process.env.GROWTH_TASKS_ROLLOUT_PERCENT
   const percent = raw === undefined ? 0 : clampPercent(parseInt(raw, 10))
@@ -147,19 +183,21 @@ export function isGrowthTasksEnabledForUser(userId: string): boolean {
 }
 
 /**
- * Campaigns flag (Phase 6 — W5). Same convention and SAME default-OFF posture
- * as the tasks/Studio/SEO flags: an AI-proposed, founder-approvable write
- * surface is unreachable until an operator opts in (CAMPAIGNS_ENABLED=true) or
- * opens a cohort via CAMPAIGNS_ROLLOUT_PERCENT. When off, the campaigns route
- * falls back to the exact coming-soon experience and the `propose_campaign` /
- * `list_campaigns` tools refuse loudly — no half-built surface. Campaigns are
- * FREE and PLAN-ONLY (no execution, no spend, no scheduler); the flag gates
- * capability reachability, not billing.
+ * Campaigns flag (Phase 6 — W5). Resolution order mirrors the SEO flag:
+ * env kill switch → the founder's own switch (featurePreferences.campaigns,
+ * flipped from /settings/features — the intended default path, OFF until they
+ * turn it on) → operator hard-on → rollout percent (default 0). When off, the
+ * campaigns route falls back to the exact coming-soon experience and the
+ * `propose_campaign` / `list_campaigns` tools refuse loudly — no half-built
+ * surface. Campaigns are FREE and PLAN-ONLY (no execution, no spend, no
+ * scheduler); the flag gates capability reachability, not billing.
  */
-export function isCampaignsEnabledForUser(userId: string): boolean {
+export function isCampaignsEnabledForUser(userId: string, prefs?: FeaturePreferences): boolean {
+  if (isCampaignsEnvBlocked()) return false
+  const pref = preferenceFor(prefs, "campaigns")
+  if (pref !== undefined) return pref
   const hard = process.env.CAMPAIGNS_ENABLED
   if (hard === "true" || hard === "1") return true
-  if (hard === "false" || hard === "0") return false
 
   const raw = process.env.CAMPAIGNS_ROLLOUT_PERCENT
   const percent = raw === undefined ? 0 : clampPercent(parseInt(raw, 10))

@@ -23,7 +23,7 @@ export async function GET(
     const ownership = await checkProjectOwnership(user.id, id)
     if (!ownership.ok) return fail("UNAUTHORIZED_PROJECT_ACCESS", "We couldn't find this project.", 404)
 
-    if (!isSeoAuditEnabledForUser(user.id)) {
+    if (!isSeoAuditEnabledForUser(user.id, user.featurePreferences)) {
       return ok({ enabled: false, audit: null })
     }
 

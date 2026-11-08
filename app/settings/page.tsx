@@ -35,6 +35,20 @@ export default async function SettingsPage() {
               <Link href="/settings/billing" className="inline-block font-mono text-xs text-primary hover:underline">View history →</Link>
             </div>
           </div>
+          <Link
+            href="/settings/features"
+            className="group flex items-center justify-between gap-4 border border-border bg-card p-6 transition-colors hover:border-primary/30 hover:bg-accent/40 md:col-span-2"
+          >
+            <div className="min-w-0">
+              <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Market &amp; grow</p>
+              <h2 className="mt-3 text-lg font-medium">Feature switches</h2>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                SEO audits, growth tasks, and campaign planning stay off until you turn them on. Decide which ones
+                live in your workspace — flips apply immediately.
+              </p>
+            </div>
+            <span className="font-mono text-xs text-primary transition-all group-hover:translate-x-0.5">→</span>
+          </Link>
         </section>
         {user.isAdmin ? (
           <section className="border border-border bg-card p-6">
