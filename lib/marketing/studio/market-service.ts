@@ -185,7 +185,7 @@ export interface GenerateMarketInput extends MarketBrief {
   /** Optional library title override (defaults to the kind's label). */
   title?: string
   /** One-click kit stamping. Kit services only — the studio route never sets these. */
-  kit?: "launch"
+  kit?: "launch" | "ads" | "competition"
   kitSlot?: string
 }
 
