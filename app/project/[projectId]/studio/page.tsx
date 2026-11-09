@@ -41,11 +41,11 @@ export default async function ProjectStudioPage({
   searchParams,
 }: {
   params: Promise<{ projectId: string }>
-  searchParams: Promise<{ tab?: string }>
+  searchParams: Promise<{ tab?: string; item?: string }>
 }) {
   const { projectId } = await params
-  const { tab: rawTab } = await searchParams
-  const tab: StudioTab = isStudioTab(rawTab) ? rawTab : "home"
+  const { tab: rawTab, item: rawItem } = await searchParams
+  const tab: StudioTab = isStudioTab(rawTab) ? rawTab : rawItem ? "library" : "home"
 
   const project = await requireOwnedProject(projectId, `/project/${projectId}/studio`)
   const user = await getCurrentUser()
@@ -238,7 +238,7 @@ export default async function ProjectStudioPage({
         ) : tab === "create" ? (
           <MarketStudio projectId={project.id} projectName={project.name} enabled />
         ) : tab === "library" ? (
-          <StudioLibrary projectId={project.id} />
+          <StudioLibrary projectId={project.id} initialItemId={rawItem} />
         ) : tab === "calendar" ? (
           <StudioCalendar projectId={project.id} />
         ) : (

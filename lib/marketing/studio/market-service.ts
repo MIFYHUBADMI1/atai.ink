@@ -187,6 +187,8 @@ export interface GenerateMarketInput extends MarketBrief {
   /** One-click kit stamping. Kit services only — the studio route never sets these. */
   kit?: "launch" | "ads" | "competition"
   kitSlot?: string
+  /** Founder's raw kit inputs (e.g. the ads bench offer/audience) persisted for prefill. */
+  kitInput?: Record<string, string>
 }
 
 export interface MarketCallView {
@@ -208,6 +210,8 @@ export interface MarketContentView {
   createdAt: number
   updatedAt: number
   media?: MarketAssetMedia
+  /** Founder's raw kit inputs, present on kit-stamped items that carry them. */
+  kitInput?: Record<string, string>
   runtime: {
     keySource: "project_api_key" | "workspace"
     keyLabel: string
@@ -379,6 +383,7 @@ export async function generateMarketContent(input: GenerateMarketInput): Promise
     brief: toBriefDoc(brief),
     ...(input.kit ? { kit: input.kit } : {}),
     ...(input.kitSlot ? { kitSlot: input.kitSlot } : {}),
+    ...(input.kitInput ? { kitInput: input.kitInput } : {}),
     createdAt: now,
     updatedAt: now,
   }
@@ -705,6 +710,7 @@ function toView(doc: ContentItemDoc, options: { includeMedia: boolean }): Market
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
     ...(media ? { media } : {}),
+    ...(doc.kitInput ? { kitInput: doc.kitInput } : {}),
     runtime: {
       keySource: doc.runtime?.keySource ?? "workspace",
       keyLabel: doc.runtime?.keyLabel ?? "Workspace session",

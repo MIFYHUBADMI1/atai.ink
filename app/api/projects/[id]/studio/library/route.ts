@@ -6,6 +6,7 @@ import {
   LIBRARY_DEFAULT_LIMIT,
   LIBRARY_KINDS,
   LIBRARY_STATUSES,
+  getContentItem,
   searchContentItems,
 } from "@/lib/marketing/studio/library"
 
@@ -23,6 +24,7 @@ const QuerySchema = z.object({
   planned: z.enum(["any", "planned", "unplanned"]).optional(),
   limit: z.coerce.number().int().min(1).max(50).optional(),
   cursor: z.string().min(1).max(200).optional(),
+  contentId: z.string().min(1).max(80).optional(),
 })
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -39,12 +41,22 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       planned: url.searchParams.get("planned") ?? undefined,
       limit: url.searchParams.get("limit") ?? undefined,
       cursor: url.searchParams.get("cursor") ?? undefined,
+      contentId: url.searchParams.get("contentId") ?? undefined,
     })
     if (!parsed.success) return fail("VALIDATION", "That library filter is invalid.", 422)
+    const { contentId, ...filters } = parsed.data
+
+    // Single-item read (deep links, media fetch): the full projection including
+    // the media blob, scoped to this project like every other library read.
+    if (contentId) {
+      const item = await getContentItem(id, contentId)
+      if (!item) return fail("NOT_FOUND", "We couldn't find that draft.", 404)
+      return ok({ item: presentContentItem(item) })
+    }
 
     const { items, nextCursor } = await searchContentItems(id, {
-      ...parsed.data,
-      limit: parsed.data.limit ?? LIBRARY_DEFAULT_LIMIT,
+      ...filters,
+      limit: filters.limit ?? LIBRARY_DEFAULT_LIMIT,
     })
 
     return ok({

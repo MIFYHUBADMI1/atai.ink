@@ -25,6 +25,11 @@ import { clean } from "./market-content"
 export { ADS_KIT_SLOTS }
 export type { AdsKitSlot }
 
+export interface AdsKitItemInput {
+  offer: string
+  audience?: string
+}
+
 export interface AdsKitItemView {
   id: string
   title: string
@@ -34,6 +39,12 @@ export interface AdsKitItemView {
   createdAt: number
   /** Present only in freshly generated items (list reads omit media blobs). */
   media?: MarketContentView["media"]
+  /** The founder's raw bench inputs persisted with the item, for prefill on return. */
+  input?: AdsKitItemInput
+  /** True when a stored image exists and can be fetched through the per-item read. */
+  hasMedia: boolean
+  /** The media was too large to persist — nothing viewable exists for this item. */
+  mediaNotPersisted?: boolean
 }
 
 export interface AdsKitSlotView {
@@ -69,6 +80,7 @@ export async function generateAdsKitSlot(input: {
     targetUsers: spec?.targetUsers,
     siteUrl:
       input.project.deployment?.status === "success" ? input.project.deployment?.productionUrl : undefined,
+    ownerGoals: input.ownerGoals ?? null,
   })
 
   return generateMarketContent({
@@ -79,6 +91,7 @@ export async function generateAdsKitSlot(input: {
     title: slot.title,
     kit: "ads",
     kitSlot: slot.slot,
+    kitInput: input.audience ? { offer, audience: input.audience } : { offer },
     ...(slot.tone ? { tone: slot.tone } : {}),
     ...(slot.channel ? { channel: slot.channel } : {}),
     ...(slot.aspectRatio ? { aspectRatio: slot.aspectRatio } : {}),
@@ -88,6 +101,9 @@ export async function generateAdsKitSlot(input: {
 }
 
 function toItemView(doc: ContentItemDoc, kind: AdsKitSlot["kind"]): AdsKitItemView {
+  const raw = doc.kitInput
+  const offer = typeof raw?.offer === "string" && raw.offer ? raw.offer : undefined
+  const audience = typeof raw?.audience === "string" && raw.audience ? raw.audience : undefined
   return {
     id: doc.id,
     title: doc.title,
@@ -95,6 +111,20 @@ function toItemView(doc: ContentItemDoc, kind: AdsKitSlot["kind"]): AdsKitItemVi
     kind,
     creditsCharged: doc.creditsCharged ?? 0,
     createdAt: doc.createdAt,
+    // List reads exclude the dataUrl blob; the bench fetches it per item.
+    ...(doc.media
+      ? {
+          media: {
+            kind: doc.media.kind,
+            ...(doc.media.jobId ? { jobId: doc.media.jobId } : {}),
+            ...(doc.media.status ? { status: doc.media.status } : {}),
+            ...(doc.media.notPersisted ? { notPersisted: true } : {}),
+          } as MarketContentView["media"],
+        }
+      : {}),
+    ...(offer ? { input: { offer, ...(audience ? { audience } : {}) } } : {}),
+    hasMedia: Boolean(doc.media?.kind),
+    ...(doc.media?.notPersisted ? { mediaNotPersisted: true } : {}),
   }
 }
 

@@ -1,9 +1,10 @@
 "use client"
 
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
-import { Check, Copy, ImageIcon, Loader2, Megaphone, RefreshCw, Square, TriangleAlert } from "lucide-react"
+import { Check, Copy, Download, ImageIcon, Loader2, Megaphone, RefreshCw, Square, TriangleAlert } from "lucide-react"
 import { postNdjson } from "@/lib/client/api"
+import { downloadDataUrl } from "@/lib/client/download"
 
 export interface AdsBenchItem {
   id: string
@@ -13,6 +14,12 @@ export interface AdsBenchItem {
   creditsCharged: number
   createdAt: number
   media?: { kind: "image" | "audio" | "video"; dataUrl?: string; jobId?: string; status?: string; notPersisted?: boolean }
+  /** The founder's raw bench inputs persisted with the item (prefill on return). */
+  input?: { offer: string; audience?: string }
+  /** True when the stored item has viewable media the bench can fetch. */
+  hasMedia?: boolean
+  /** The media was too large to persist — nothing viewable exists for this item. */
+  mediaNotPersisted?: boolean
 }
 
 export interface AdsBenchSlotView {
@@ -29,6 +36,88 @@ const MAX_OFFER = 600
 const MAX_AUDIENCE = 300
 
 /**
+ * One ad creative image. Fresh generations carry the blob inline; drafts loaded
+ * from the bench store only a media flag, so the blob is fetched per item from
+ * the studio's per-item read (same endpoint the Studio library uses).
+ */
+function SlotImage({ projectId, item, alt }: { projectId: string; item: AdsBenchItem; alt: string }) {
+  const inline = item.media?.dataUrl && !item.media.notPersisted ? item.media : null
+  const notPersisted = Boolean(item.mediaNotPersisted || item.media?.notPersisted)
+  const [fetched, setFetched] = useState<{ dataUrl: string } | null>(null)
+  const [failed, setFailed] = useState(false)
+  const fetchable = Boolean(item.hasMedia) && !notPersisted && !inline
+  const loading = fetchable && !fetched && !failed
+
+  useEffect(() => {
+    if (!fetchable) return
+    let cancelled = false
+    setFailed(false)
+    const controller = new AbortController()
+    fetch(`/api/projects/${encodeURIComponent(projectId)}/market/studio?contentId=${encodeURIComponent(item.id)}`, {
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const json = await response.json()
+        const dataUrl = json?.data?.media?.dataUrl
+        if (!response.ok || !json?.ok || typeof dataUrl !== "string" || !dataUrl) {
+          throw new Error("media unavailable")
+        }
+        if (!cancelled) setFetched({ dataUrl })
+      })
+      .catch(() => !cancelled && setFailed(true))
+    return () => {
+      cancelled = true
+      controller.abort()
+    }
+  }, [projectId, item.id, fetchable])
+
+  const shown = inline?.dataUrl ?? fetched?.dataUrl ?? null
+
+  if (notPersisted) {
+    return (
+      <p className="mt-3 flex items-center gap-2 rounded-xl border border-dashed border-border px-3 py-3 text-xs text-muted-foreground">
+        <ImageIcon className="size-3.5" aria-hidden /> This creative was too large to store — regenerate it to get a
+        viewable image.
+      </p>
+    )
+  }
+
+  if (shown) {
+    return (
+      <div className="mt-3 flex flex-col items-start gap-2">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={shown}
+          alt={alt}
+          className="max-h-80 w-auto max-w-full self-stretch rounded-xl border border-border object-contain"
+        />
+        <button
+          type="button"
+          onClick={() => void downloadDataUrl(shown, `ad-creative-${item.id}`).catch(() => {})}
+          className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted"
+        >
+          <Download className="size-3" aria-hidden /> Download image
+        </button>
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <p className="mt-3 flex items-center gap-2 rounded-xl border border-dashed border-border px-3 py-3 text-xs text-muted-foreground">
+        <Loader2 className="size-3.5 animate-spin" aria-hidden /> Loading your saved creative…
+      </p>
+    )
+  }
+
+  return (
+    <p className="mt-3 flex items-center gap-2 rounded-xl border border-dashed border-border px-3 py-3 text-xs text-muted-foreground">
+      <ImageIcon className="size-3.5" aria-hidden /> Creative saved — open it in the Studio below to view the image.
+    </p>
+  )
+}
+
+/**
  * The Ads page bench: the founder describes the offer once, then each
  * ad-relevant piece is drafted through the studio pipeline. Every piece is a
  * draft in the content library — nothing is published, uploaded, or run on any
@@ -40,16 +129,18 @@ export function AdsBench({
   creditsAvailable: initialCredits,
   textReady,
   imageReady,
+  initialInput,
 }: {
   projectId: string
   slots: AdsBenchSlotView[]
   creditsAvailable: number | null
   textReady: boolean
   imageReady: boolean
+  initialInput: { offer: string; audience?: string } | null
 }) {
   const [slots, setSlots] = useState(initialSlots)
-  const [offer, setOffer] = useState("")
-  const [audience, setAudience] = useState("")
+  const [offer, setOffer] = useState(initialInput?.offer ?? "")
+  const [audience, setAudience] = useState(initialInput?.audience ?? "")
   const [selected, setSelected] = useState<string[]>(initialSlots.map((slot) => slot.slot))
   const [running, setRunning] = useState<string[] | null>(null)
   const [failures, setFailures] = useState<Record<string, string>>({})
@@ -324,18 +415,7 @@ export function AdsBench({
               {slot.item && !active && (
                 <>
                   {isImage ? (
-                    slot.item.media?.dataUrl ? (
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      <img
-                        src={slot.item.media.dataUrl}
-                        alt={`${slot.label} — AI-drafted ad creative`}
-                        className="mt-3 max-h-80 w-auto max-w-full rounded-xl border border-border object-contain"
-                      />
-                    ) : (
-                      <p className="mt-3 flex items-center gap-2 rounded-xl border border-dashed border-border px-3 py-3 text-xs text-muted-foreground">
-                        <ImageIcon className="size-3.5" aria-hidden /> Creative saved — open it in the Studio to view the image.
-                      </p>
-                    )
+                    <SlotImage projectId={projectId} item={slot.item} alt={`${slot.label} — AI-drafted ad creative`} />
                   ) : (
                     <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-foreground">{slot.item.body}</p>
                   )}
@@ -362,7 +442,7 @@ export function AdsBench({
                     )}
                     <span className="text-[10px] text-muted-foreground">AI draft — you place and run the ad yourself</span>
                     <Link
-                      href={`/project/${projectId}/studio`}
+                      href={`/project/${projectId}/studio?tab=library&item=${encodeURIComponent(slot.item.id)}`}
                       className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
                     >
                       Open in Studio <span aria-hidden>→</span>

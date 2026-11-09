@@ -127,6 +127,8 @@ async function post(req: Request, { params }: { params: Promise<{ id: string }> 
                 creditsCharged: item.creditsCharged,
                 createdAt: item.createdAt,
                 ...(item.media ? { media: item.media } : {}),
+                ...(item.kitInput ? { input: item.kitInput } : {}),
+                hasMedia: Boolean(item.media?.dataUrl),
               },
             })
           } catch (e) {

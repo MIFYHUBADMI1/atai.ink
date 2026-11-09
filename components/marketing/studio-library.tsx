@@ -1,11 +1,12 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { Copy, Loader2, Search, Sparkles, Trash2 } from "lucide-react"
+import { Copy, Download, Loader2, Search, Sparkles, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { REFINEMENT_ACTIONS, REFINEMENT_LABELS, REFINEMENT_NEEDS, type RefinementAction } from "@/lib/marketing/studio/refinement-options"
+import { downloadDataUrl } from "@/lib/client/download"
 import type { ContentItemView } from "@/lib/marketing/studio/present"
 
 /**
@@ -32,8 +33,10 @@ function fromLocalInput(value: string): number | null {
   return Number.isFinite(ms) ? ms : null
 }
 
-export function StudioLibrary({ projectId }: { projectId: string }) {
+export function StudioLibrary({ projectId, initialItemId }: { projectId: string; initialItemId?: string }) {
   const router = useRouter()
+  // Deep links (?item=) select one draft once; later reloads behave normally.
+  const pendingItemRef = useRef<string | undefined>(initialItemId)
   const [items, setItems] = useState<ContentItemView[]>([])
   const [cursor, setCursor] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -71,17 +74,35 @@ export function StudioLibrary({ projectId }: { projectId: string }) {
     let cancelled = false
     setLoading(true)
     load()
-      .then((data) => {
+      .then(async (data) => {
         if (cancelled) return
         setItems(data.items)
         setCursor(data.nextCursor)
+
+        const wanted = pendingItemRef.current
+        if (!wanted) return
+        pendingItemRef.current = undefined
+        const inList = data.items.find((item) => item.id === wanted)
+        if (inList) {
+          open(inList)
+          return
+        }
+        try {
+          const response = await fetch(
+            `/api/projects/${encodeURIComponent(projectId)}/studio/library?contentId=${encodeURIComponent(wanted)}`,
+          )
+          const json = await response.json()
+          if (!cancelled && response.ok && json?.ok && json.data?.item) open(json.data.item as ContentItemView)
+        } catch {
+          // The deep-linked draft is gone or unreachable — the list stays usable.
+        }
       })
       .catch((e) => !cancelled && toast.error(e instanceof Error ? e.message : "Couldn't load the library."))
       .finally(() => !cancelled && setLoading(false))
     return () => {
       cancelled = true
     }
-  }, [load])
+  }, [load, projectId])
 
   async function loadMore() {
     if (!cursor) return
@@ -416,6 +437,24 @@ export function StudioLibrary({ projectId }: { projectId: string }) {
                 v{selected.version} · {selected.kind} · AI draft, not published
               </span>
             </div>
+
+            {selected.kind === "image" && selected.media?.kind === "image" && selected.media.dataUrl ? (
+              <div className="flex flex-col items-start gap-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={selected.media.dataUrl}
+                  alt={`${selected.title} — saved creative`}
+                  className="max-h-80 w-auto max-w-full self-stretch rounded-xl border border-border object-contain"
+                />
+                <button
+                  type="button"
+                  onClick={() => void downloadDataUrl(selected.media!.dataUrl!, `creative-${selected.id}`).catch(() => {})}
+                  className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted"
+                >
+                  <Download className="size-3" aria-hidden /> Download image
+                </button>
+              </div>
+            ) : null}
 
             <label className="text-sm font-medium" htmlFor="draft-title">
               Title

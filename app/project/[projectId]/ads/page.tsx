@@ -55,6 +55,7 @@ export default async function ProjectAdsPage({ params }: { params: Promise<{ pro
           creditsAvailable={bench.creditsAvailable}
           textReady={bench.textReady}
           imageReady={bench.imageReady}
+          initialInput={bench.initialInput}
         />
       </div>
     </DashboardShell>

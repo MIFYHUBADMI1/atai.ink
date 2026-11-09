@@ -783,6 +783,9 @@ export interface ContentItemDoc {
   kit?: "launch" | "ads" | "competition"
   /** Stable slot id inside the kit; the newest item per slot fronts the kit view. */
   kitSlot?: string
+  /** The founder's raw kit inputs (e.g. the ads bench offer/audience), kept so the
+   * bench can prefill them on return. Bounded strings only; never provider output. */
+  kitInput?: Record<string, string>
   createdAt: number
   updatedAt: number
 }

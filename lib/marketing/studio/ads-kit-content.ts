@@ -14,6 +14,7 @@
  */
 
 import type { MarketChannel, MarketContentKind, MarketTone } from "./market-content"
+import type { OwnerGoals } from "@/lib/marketing/growth-overview"
 
 export type AdsKitId = "ads"
 
@@ -122,6 +123,8 @@ export interface AdsKitContextInput {
   positioning?: string
   targetUsers?: string[]
   siteUrl?: string
+  /** The founder's onboarding goals — steer the copy toward where they want the business to go. */
+  ownerGoals?: OwnerGoals | null
 }
 
 /** Total character budget for the assembled context. The per-slot ask plus
@@ -153,13 +156,22 @@ export function buildAdsKitContext(input: AdsKitContextInput): string {
   const descriptionBody = snippet(input.description, 180)
   const positioningBody = snippet(input.positioning, 400)
 
+  const goalParts = [input.ownerGoals?.businessGoal, input.ownerGoals?.destination]
+    .map((part) => snippet(part, 90))
+    .filter(Boolean)
+  const goalBody = goalParts.length > 0 ? goalParts.join(" — aiming for: ") : ""
+
   // In KEEP priority — the loop drops from the end when space runs out.
-  const backing: Array<{ key: "audience" | "description" | "positioning" | "users"; text: string }> = [
+  const backing: Array<{ key: "audience" | "description" | "goal" | "positioning" | "users"; text: string }> = [
     audienceBody ? { key: "audience", text: `${AUDIENCE_PREFIX}${audienceBody}` } : null,
     descriptionBody ? { key: "description", text: `What it is: ${descriptionBody}` } : null,
+    goalBody ? { key: "goal", text: `Founder's goal: ${goalBody}` } : null,
     positioningBody ? { key: "positioning", text: `Positioning from the plan: ${positioningBody}` } : null,
     users.length > 0 ? { key: "users", text: `Target users: ${users.join("; ")}` } : null,
-  ].filter((entry): entry is { key: "audience" | "description" | "positioning" | "users"; text: string } => entry !== null)
+  ].filter(
+    (entry): entry is { key: "audience" | "description" | "goal" | "positioning" | "users"; text: string } =>
+      entry !== null,
+  )
 
   let budget = CONTEXT_BUDGET - essentialLength
   const kept: string[] = []
