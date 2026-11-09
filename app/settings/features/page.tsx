@@ -8,10 +8,13 @@ import {
   isCampaignsEnvBlocked,
   isGrowthTasksEnabledForUser,
   isGrowthTasksEnvBlocked,
+  isLessonsEnabledForUser,
+  isLessonsEnvBlocked,
   isSeoAuditEnabledForUser,
   isSeoAuditEnvBlocked,
 } from "@/lib/marketing/feature-flags"
 import { getSeoAuditAffordability } from "@/lib/marketing/seo/credits"
+import { getLessonsPackAffordability } from "@/lib/lessons/credits"
 
 /**
  * Founder-owned feature switches. The operator (admin) keeps pricing and the
@@ -34,9 +37,18 @@ export default async function SettingsFeaturesPage() {
     seoCost = null
   }
 
+  let lessonsCost: number | null = null
+  try {
+    const { cost } = await getLessonsPackAffordability(user.id)
+    lessonsCost = cost
+  } catch {
+    lessonsCost = null
+  }
+
   const seoBlocked = isSeoAuditEnvBlocked()
   const tasksBlocked = isGrowthTasksEnvBlocked()
   const campaignsBlocked = isCampaignsEnvBlocked()
+  const lessonsBlocked = isLessonsEnvBlocked()
   const lockedNote =
     "Temporarily unavailable on this deployment. Your switch is kept, but the feature can't be turned on right now."
 
@@ -71,6 +83,19 @@ export default async function SettingsFeaturesPage() {
       blocked: campaignsBlocked,
       blockedNote: lockedNote,
       enabled: isCampaignsEnabledForUser(user.id, prefs),
+    },
+    {
+      key: "lessons",
+      title: "Business lessons",
+      description:
+        "A stage-aware curriculum for your business: the core lessons every founder needs, lessons published by Atai, and AI-written personal lessons that read where your business actually stands — what is done, what remains, and how to move forward. Generation can be refreshed whenever your business moves.",
+      costNote:
+        lessonsCost !== null
+          ? `Each personal lesson pack costs ${lessonsCost} credit${lessonsCost === 1 ? "" : "s"} from your balance. The core curriculum is free.`
+          : "Personal lesson packs cost credits at the current rate. The core curriculum is free.",
+      blocked: lessonsBlocked,
+      blockedNote: lockedNote,
+      enabled: isLessonsEnabledForUser(user.id, prefs),
     },
   ]
 

@@ -12,6 +12,8 @@ import type { CofounderConversationMongoDoc, PendingActionRecord } from "@/lib/c
 import type { ProjectChatMongoDoc } from "@/lib/types/collab-chat"
 import type { CreditLedgerEntry, BuildAuthorization, PaymentRecord, SubscriptionRecord } from "@/lib/billing/billing-types"
 import type { ResourceDoc } from "@/lib/resources/admin-types"
+import type { LessonDoc } from "@/lib/lessons/admin-types"
+import type { GeneratedLessonDoc } from "@/lib/lessons/types"
 
 /** Cache the Db reference across hot reloads so we don't re-resolve per call. */
 const globalForDb = globalThis as unknown as {
@@ -77,6 +79,24 @@ export async function docFeedbackCol() {
 }
 export async function resourcesCol() {
   return (await getDbCached()).collection<ResourceDoc & { _id?: unknown }>("resources")
+}
+
+/**
+ * Operator-published business lessons (/admin/lessons). Global founder-facing
+ * library entries, stage-tagged and merged over the in-code core curriculum.
+ * The core curriculum stays in code — these documents are ADDITIONS.
+ */
+export async function lessonsCol() {
+  return (await getDbCached()).collection<LessonDoc & { _id?: unknown }>("lessons")
+}
+
+/**
+ * Per-project AI lesson packs (`business_lessons`). Ownership-scoped by
+ * userId + projectId; a run inserts a new versioned pack and archives the
+ * previous active one. Link-only by projectId — never embedded in `projects`.
+ */
+export async function businessLessonsCol() {
+  return (await getDbCached()).collection<GeneratedLessonDoc & { _id?: unknown }>("business_lessons")
 }
 export async function webhookEventsCol() {
   return (await getDbCached()).collection<WebhookEventDoc & { _id?: unknown }>("webhook_events")
@@ -409,6 +429,25 @@ async function runEnsureIndexes(): Promise<void> {
     resources.createIndex({ category: 1, slug: 1 }, { unique: true, name: "resources_category_slug_unique" }),
     resources.createIndex({ status: 1, updatedAtMs: -1 }),
     resources.createIndex({ featured: 1, status: 1, publishedAt: -1 }),
+  ])
+
+  // Business lessons indexes. Published-library reads filter by status (the
+  // stage filter is applied in memory over a small published set); admin list
+  // reads sort by recency; slugs must be unique for clean /lessons/<slug> URLs.
+  const lessons = await lessonsCol()
+  await batchedIndexCreation([
+    lessons.createIndex({ id: 1 }, { unique: true, sparse: true, name: "lessons_id_unique" }),
+    lessons.createIndex({ slug: 1 }, { unique: true, name: "lessons_slug_unique" }),
+    lessons.createIndex({ status: 1, updatedAtMs: -1 }),
+  ])
+
+  // Per-project AI lesson packs: ownership-scoped reads by project + active
+  // status, history reads by pack version.
+  const businessLessons = await businessLessonsCol()
+  await batchedIndexCreation([
+    businessLessons.createIndex({ id: 1 }, { unique: true, sparse: true, name: "business_lessons_id_unique" }),
+    businessLessons.createIndex({ projectId: 1, status: 1, version: -1 }),
+    businessLessons.createIndex({ userId: 1, createdAt: -1 }),
   ])
 
   // Webhook event indexes

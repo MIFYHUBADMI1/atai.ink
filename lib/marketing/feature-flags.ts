@@ -85,6 +85,11 @@ export function isCampaignsEnvBlocked(): boolean {
   return hard === "false" || hard === "0"
 }
 
+export function isLessonsEnvBlocked(): boolean {
+  const hard = process.env.LESSONS_ENABLED
+  return hard === "false" || hard === "0"
+}
+
 /**
  * SEO audit flag (Phase 3 — W2). Resolution order:
  *   1. `SEO_AUDIT_ENABLED=false` → hard off for everyone (operator kill switch).
@@ -205,5 +210,29 @@ export function isCampaignsEnabledForUser(userId: string, prefs?: FeaturePrefere
   if (percent >= 100) return true
 
   const bucket = createHash("sha256").update(`campaigns:${userId}`).digest().readUInt32BE(0) % 100
+  return bucket < percent
+}
+
+/**
+ * Business lessons flag. Resolution order mirrors the SEO flag: env kill
+ * switch → the founder's own switch (featurePreferences.lessons, flipped from
+ * /settings/features — the intended default path, OFF until they turn it on)
+ * → operator hard-on → rollout percent (default 0). When off, the lessons
+ * routes fall back to the exact coming-soon experience. Core curriculum and
+ * library lessons are FREE; only per-project AI lesson packs cost credits.
+ */
+export function isLessonsEnabledForUser(userId: string, prefs?: FeaturePreferences): boolean {
+  if (isLessonsEnvBlocked()) return false
+  const pref = preferenceFor(prefs, "lessons")
+  if (pref !== undefined) return pref
+  const hard = process.env.LESSONS_ENABLED
+  if (hard === "true" || hard === "1") return true
+
+  const raw = process.env.LESSONS_ROLLOUT_PERCENT
+  const percent = raw === undefined ? 0 : clampPercent(parseInt(raw, 10))
+  if (percent <= 0) return false
+  if (percent >= 100) return true
+
+  const bucket = createHash("sha256").update(`lessons:${userId}`).digest().readUInt32BE(0) % 100
   return bucket < percent
 }

@@ -74,7 +74,7 @@ export function workspaceGrowNav(projectId: string): AtaiNavItem[] {
     { href: `/project/${projectId}/market`, label: "Market & grow", icon: TrendingUp, kind: "link" },
     { href: `/project/${projectId}/ads`, label: "Ads & marketing", icon: Megaphone, kind: "soon" },
     { href: `/project/${projectId}/finances`, label: "Business finances", icon: Wallet, kind: "link" },
-    { href: `/project/${projectId}/lessons`, label: "Business lessons", icon: GraduationCap, kind: "soon" },
+    { href: `/project/${projectId}/lessons`, label: "Business lessons", icon: GraduationCap, kind: "link" },
     { href: `/project/${projectId}/resources`, label: "Resources", icon: BookOpen, kind: "link" },
     { href: `/project/${projectId}/competition`, label: "Competition", icon: Swords, kind: "soon" },
   ]
@@ -107,7 +107,7 @@ export function ataiNav(projectId?: string): AtaiNavGroup[] {
         { href: "/market", label: "Market & grow", icon: TrendingUp, kind: "soon" },
         { href: "/ads", label: "Ads & marketing", icon: Megaphone, kind: "soon" },
         { href: "/finances", label: "Business finances", icon: Wallet, kind: "link", match: (p) => p === "/finances" },
-        { href: "/lessons", label: "Business lessons", icon: GraduationCap, kind: "soon" },
+        { href: "/lessons", label: "Business lessons", icon: GraduationCap, kind: "link" },
         { href: "/resources", label: "Resources", icon: BookOpen, kind: "link" },
       ],
     },

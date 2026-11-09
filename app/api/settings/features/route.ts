@@ -7,6 +7,8 @@ import {
   isCampaignsEnvBlocked,
   isGrowthTasksEnabledForUser,
   isGrowthTasksEnvBlocked,
+  isLessonsEnabledForUser,
+  isLessonsEnvBlocked,
   isSeoAuditEnabledForUser,
   isSeoAuditEnvBlocked,
 } from "@/lib/marketing/feature-flags"
@@ -17,6 +19,7 @@ const PatchSchema = z
     seoAudit: z.boolean().optional(),
     growthTasks: z.boolean().optional(),
     campaigns: z.boolean().optional(),
+    lessons: z.boolean().optional(),
   })
   .strict()
 
@@ -24,6 +27,7 @@ const ENV_BLOCKED: Record<FeaturePreferenceKey, { name: string; blocked: () => b
   seoAudit: { name: "SEO visibility audits", blocked: isSeoAuditEnvBlocked },
   growthTasks: { name: "Growth tasks", blocked: isGrowthTasksEnvBlocked },
   campaigns: { name: "Campaign planning", blocked: isCampaignsEnvBlocked },
+  lessons: { name: "Business lessons", blocked: isLessonsEnvBlocked },
 }
 
 /**
@@ -69,6 +73,7 @@ export async function PATCH(req: Request) {
         seoAudit: isSeoAuditEnabledForUser(user.id, preferences),
         growthTasks: isGrowthTasksEnabledForUser(user.id, preferences),
         campaigns: isCampaignsEnabledForUser(user.id, preferences),
+        lessons: isLessonsEnabledForUser(user.id, preferences),
       },
     })
   } catch (e) {

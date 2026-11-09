@@ -5,7 +5,7 @@ import { useState } from "react"
 import { patchJson, type ApiError } from "@/lib/client/api"
 
 export interface FeatureToggleState {
-  key: "seoAudit" | "growthTasks" | "campaigns"
+  key: "seoAudit" | "growthTasks" | "campaigns" | "lessons"
   title: string
   description: string
   costNote?: string

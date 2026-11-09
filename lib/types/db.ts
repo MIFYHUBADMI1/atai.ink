@@ -60,6 +60,8 @@ export interface FeaturePreferences {
   growthTasks?: boolean
   /** Plan-only campaign planning surface (free, never executes). */
   campaigns?: boolean
+  /** Stage-aware business lessons: core curriculum + AI personal lessons (credit-charging per pack). */
+  lessons?: boolean
 }
 
 export interface UserDoc {

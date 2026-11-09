@@ -7,6 +7,7 @@ import {
   Database,
   FileText,
   Gauge,
+  GraduationCap,
   Scale,
   LayoutDashboard,
   Lightbulb,
@@ -89,6 +90,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     label: "Product",
     items: [
       { href: "/admin/resources", label: "Resources", icon: BookOpen, description: "Publish guides, tutorials, roadmaps, PDFs, images, and videos." },
+      { href: "/admin/lessons", label: "Business lessons", icon: GraduationCap, description: "Stage-tagged lessons merged into the founder libraries." },
       { href: "/admin/feature-requests", label: "Feature requests", icon: Lightbulb, description: "Demand, review, and status." },
       { href: "/admin/feedback", label: "Doc feedback", icon: MessageSquare, description: "Documentation thumbs and comments." },
     ],
