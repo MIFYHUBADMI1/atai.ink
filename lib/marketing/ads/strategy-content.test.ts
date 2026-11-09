@@ -73,20 +73,36 @@ describe("buildStrategyBrief", () => {
     expect(brief).toContain("Target users: Commuters")
   })
 
-  it("drops plan backing prose before the founder's own words under budget pressure", () => {
+  it("keeps founder strategy over plan prose and never exceeds the service cap", () => {
     const verbose: StrategyBriefInput = {
       ...FULL_INPUT,
-      positioningFromPlan: "Long plan positioning. ".repeat(80),
-      description: "Long description. ".repeat(10),
-      targetUsers: ["A very long target user description that eats budget quickly. ".repeat(3)],
+      strategy: {
+        positioning: "P".repeat(500),
+        icp: "I".repeat(400),
+        geographies: "G".repeat(300),
+        objectives: Array.from({ length: 6 }, (_, i) => `Objective ${i + 1}: ${"o".repeat(100)}`),
+        channels: Array.from({ length: 6 }, (_, i) => `Channel ${i + 1}: ${"c".repeat(100)}`),
+        budgetNote: "B".repeat(300),
+        priorities: Array.from({ length: 6 }, (_, i) => `Priority ${i + 1}: ${"p".repeat(100)}`),
+        brandVoice: "V".repeat(200),
+        usps: "U".repeat(500),
+      },
+      positioningFromPlan: "Plan positioning prose that would normally appear. ".repeat(20),
+      description: "A description of the app. ".repeat(10),
+      targetUsers: ["Users"],
     }
     const brief = buildStrategyBrief(verbose)
-    // Founder strategy lines survive:
-    expect(brief).toContain("Founder's advertising objectives")
+    expect(brief.length).toBeLessThanOrEqual(SERVICE_BRIEF_CAP)
+    // Essential and founder lines survive whole:
+    expect(brief).toContain("Business: Sweet Crust Bakery")
     expect(brief).toContain("Live URL: https://sweet-crust.example.com")
-    // The plan's longest backing line gives way first; shorter ones still fit:
+    expect(brief).toContain("Founder's goal: Sell 100 weekend bundles")
+    expect(brief).toContain("Founder's advertising objectives")
+    // The anti-fabrication footer is never sliced away by the cap:
+    expect(brief).toContain("do not invent facts that are not here")
+    // Plan backing prose gives way first:
     expect(brief).not.toContain("Positioning from the plan:")
-    expect(brief).toContain("What it is:")
+    expect(brief).not.toContain("What it is:")
   })
 
   it("asks for grounded recommendations and forbids fabricated results", () => {

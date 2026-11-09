@@ -118,6 +118,17 @@ export async function postJson<T>(url: string, payload?: unknown): Promise<T> {
   return unwrap<T>(body, res.status)
 }
 
+export async function putJson<T>(url: string, payload?: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method: "PUT",
+    credentials: "include",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: payload === undefined ? undefined : JSON.stringify(payload),
+  })
+  const body = await res.json().catch(() => null)
+  return unwrap<T>(body, res.status)
+}
+
 export async function patchJson<T>(url: string, payload?: unknown): Promise<T> {
   const res = await fetch(url, {
     method: "PATCH",

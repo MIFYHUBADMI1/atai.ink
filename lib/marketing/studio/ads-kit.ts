@@ -156,3 +156,46 @@ export async function listAdsKit(projectId: string): Promise<AdsKitSlotView[]> {
     }
   })
 }
+
+export interface AdsKitDraftView {
+  id: string
+  title: string
+  body: string
+  kind: MarketContentView["kind"]
+  kitSlot?: string
+  creditsCharged: number
+  createdAt: number
+  hasMedia: boolean
+  mediaNotPersisted?: boolean
+}
+
+/**
+ * Newest-first ads-bench drafts (no per-slot dedupe): the History tab and the
+ * strategy recommendation read both use this. Media blobs are excluded —
+ * stored items open through the library's per-item read.
+ */
+export async function listAdsKitDrafts(
+  projectId: string,
+  opts: { kitSlot?: string; limit?: number } = {},
+): Promise<AdsKitDraftView[]> {
+  const col = await contentItemsCol()
+  const filter: Record<string, unknown> = { projectId, kind: "marketing_asset", kit: "ads" }
+  if (opts.kitSlot) filter.kitSlot = opts.kitSlot
+  const docs = (await col
+    .find(filter, { projection: { "media.dataUrl": 0 } })
+    .sort({ createdAt: -1 })
+    .limit(Math.min(Math.max(opts.limit ?? 20, 1), 50))
+    .toArray()) as unknown as ContentItemDoc[]
+
+  return docs.map((doc) => ({
+    id: doc.id,
+    title: doc.title,
+    body: doc.body,
+    kind: (doc.assetKind ?? "copy") as MarketContentView["kind"],
+    ...(doc.kitSlot ? { kitSlot: doc.kitSlot } : {}),
+    creditsCharged: doc.creditsCharged ?? 0,
+    createdAt: doc.createdAt,
+    hasMedia: Boolean(doc.media?.kind),
+    ...(doc.media?.notPersisted ? { mediaNotPersisted: true } : {}),
+  }))
+}

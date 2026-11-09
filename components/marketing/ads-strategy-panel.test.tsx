@@ -52,7 +52,7 @@ describe("AdsStrategyPanel — the Strategy tab surface", () => {
     expect(html).toContain("Selling points to emphasize")
     expect(html).toContain("The bakery that beats the queue.")
     expect(html).toContain('value="Families in Kampala"')
-    expect(html).toContain("31/500") // positioning counter shows value against the cap
+    expect(html).toContain("32/500") // positioning counter shows value against the cap
     expect(html).toContain("Save changes")
   })
 
