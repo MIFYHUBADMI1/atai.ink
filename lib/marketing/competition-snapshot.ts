@@ -1,4 +1,5 @@
 import "server-only"
+import { createHash } from "node:crypto"
 
 /**
  * Competition snapshot service — the honest v1 of /competition.
@@ -13,29 +14,27 @@ import "server-only"
  *     `kitSlot: "snapshot"`). The prompt forbids naming real companies that
  *     are not in the context and forbids market sizes, prices, rankings and
  *     other invented facts — every inference stays labelled as one.
+ *
+ * The prompt is Competition's OWN dedicated assembly
+ * (`./competition-snapshot-context`) — the studio's generic brief template is
+ * bypassed entirely, and the plan context budget is large enough that a
+ * full-length plan is not silently truncated.
  */
 
 import { contentItemsCol } from "@/lib/db/collections"
 import { AppError } from "@/lib/errors"
 import { readCombinedMarketingPlan } from "@/lib/analysis/plan-sections"
-import { readOwnerGoals, type OwnerGoals } from "@/lib/marketing/growth-overview"
+import type { OwnerGoals } from "@/lib/marketing/growth-overview"
 import type { ContentItemDoc } from "@/lib/types/db"
 import type { MirrorProject } from "@/lib/types/project"
 import type { ApplicationSpecification } from "@/lib/types/specification"
+import {
+  COMPETITION_SNAPSHOT_TITLE,
+  buildCompetitionSnapshotMessages,
+} from "./competition-snapshot-context"
 import { generateMarketContent, type MarketContentView } from "./studio/market-service"
-import { buildLaunchKitContext } from "./studio/launch-kit-content"
 
-const SNAPSHOT_TITLE = "Competitor snapshot (AI draft)"
-
-const SNAPSHOT_ASK =
-  "Draft a competitor-landscape snapshot for this product, written ONLY from the context provided. " +
-  "Cover, each under its own short heading: 1 'Competitor types' — the kinds of alternatives these users likely " +
-  "use today (describe types, do not name real companies unless they appear in the context); " +
-  "2 'How this product is positioned' — what the plan says sets it apart, restated clearly; " +
-  "3 'Where the plan is unproven' — the claims that would need real market evidence; " +
-  "4 'What to watch' — two or three things worth checking about the space, phrased as questions. " +
-  "Never invent market sizes, prices, rankings, reviews, funding, or statistics. Every statement that is an " +
-  "inference rather than something the plan says must be plainly worded as an inference."
+const SNAPSHOT_MAX_TOKENS = 1_200
 
 export interface CompetitionSnapshotView {
   id: string
@@ -43,6 +42,19 @@ export interface CompetitionSnapshotView {
   body: string
   creditsCharged: number
   createdAt: number
+  contextHash?: string
+}
+
+export function competitionContextHash(project: MirrorProject, goals?: OwnerGoals | null): string {
+  return createHash("sha256").update(JSON.stringify({
+    name: project.name,
+    idea: project.idea,
+    description: project.specification?.description,
+    plan: readCombinedMarketingPlan(project.specification),
+    targetUsers: project.specification?.targetUsers,
+    siteUrl: project.deployment?.status === "success" ? project.deployment.productionUrl : undefined,
+    goals: goals ?? undefined,
+  })).digest("hex")
 }
 
 /** Generate one competitor-landscape draft from the plan and persist it. */
@@ -52,16 +64,19 @@ export async function generateCompetitionSnapshot(input: {
   project: MirrorProject
   ownerGoals?: OwnerGoals | null
 }): Promise<MarketContentView> {
+  if (input.project.id !== input.projectId || input.project.userId !== input.userId) {
+    throw new AppError("UNAUTHORIZED_PROJECT_ACCESS")
+  }
   const spec = (input.project.specification ?? undefined) as ApplicationSpecification | undefined
   if (!spec) {
     throw new AppError("VALIDATION", "The competitor snapshot drafts from your plan — this project has no plan yet.")
   }
 
-  const context = buildLaunchKitContext({
+  const messages = buildCompetitionSnapshotMessages({
     projectName: input.project.name,
     description: spec.description,
     idea: input.project.idea,
-    marketingPlan: readCombinedMarketingPlan(spec).trim(),
+    marketingPlan: readCombinedMarketingPlan(spec),
     targetUsers: spec.targetUsers,
     siteUrl:
       input.project.deployment?.status === "success" ? input.project.deployment?.productionUrl : undefined,
@@ -72,10 +87,15 @@ export async function generateCompetitionSnapshot(input: {
     userId: input.userId,
     projectId: input.projectId,
     kind: "brief",
-    brief: `${SNAPSHOT_ASK}\n\nContext you must draw from — do not invent facts that are not here:\n${context}`,
-    title: SNAPSHOT_TITLE,
+    // The full assembled prompt is stored as the brief so the library keeps
+    // an honest record of what the model was asked, not a 2,000-char slice.
+    brief: messages.prompt,
+    messages,
+    maxTokens: SNAPSHOT_MAX_TOKENS,
+    title: COMPETITION_SNAPSHOT_TITLE,
     kit: "competition",
     kitSlot: "snapshot",
+    kitInput: { contextHash: competitionContextHash(input.project, input.ownerGoals) },
     tone: "professional",
     length: "medium",
   })
@@ -88,19 +108,22 @@ function toSnapshotView(doc: ContentItemDoc): CompetitionSnapshotView {
     body: doc.body,
     creditsCharged: doc.creditsCharged ?? 0,
     createdAt: doc.createdAt,
+    contextHash: doc.kitInput?.contextHash,
   }
 }
 
-/** The NEWEST competitor-snapshot draft, or null when none exists yet. */
-export async function getCompetitionSnapshot(projectId: string): Promise<CompetitionSnapshotView | null> {
+export async function listCompetitionSnapshots(
+  userId: string,
+  projectId: string,
+): Promise<CompetitionSnapshotView[]> {
   const col = await contentItemsCol()
-  const [doc] = (await col
+  const docs = await col
     .find(
-      { projectId, kind: "marketing_asset", kit: "competition", kitSlot: "snapshot" },
-      { projection: { "media.dataUrl": 0 } },
+      { userId, projectId, kind: "marketing_asset", kit: "competition", kitSlot: "snapshot" },
+      { projection: { id: 1, title: 1, body: 1, creditsCharged: 1, createdAt: 1, "kitInput.contextHash": 1 } },
     )
     .sort({ createdAt: -1 })
-    .limit(1)
-    .toArray()) as unknown as ContentItemDoc[]
-  return doc ? toSnapshotView(doc) : null
+    .limit(25)
+    .toArray()
+  return docs.map(toSnapshotView)
 }

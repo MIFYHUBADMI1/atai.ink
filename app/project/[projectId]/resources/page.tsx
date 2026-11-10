@@ -14,10 +14,13 @@ import {
 
 export default async function ProjectResourcesPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ projectId: string }>
+  searchParams: Promise<{ section?: string | string[] }>
 }) {
   const { projectId } = await params
+  const { section } = await searchParams
   const project = await requireOwnedProject(projectId, `/project/${projectId}/resources`)
   const user = await getCurrentUser()
 
@@ -61,6 +64,7 @@ export default async function ProjectResourcesPage({
         learningPaths={learningPaths as any}
         cachedData={cachedData}
         availableCredits={availableCredits}
+        initialSection={section === "competitors" ? "competitors" : "next-steps"}
       />
     </DashboardShell>
   )

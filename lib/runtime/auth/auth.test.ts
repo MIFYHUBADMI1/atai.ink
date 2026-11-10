@@ -13,9 +13,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 
 vi.mock("server-only", () => ({}))
 
-const { mockFindOne, mockUpdateOne } = vi.hoisted(() => ({
+const { mockFindOne, mockUpdateOne, mockProjectFindOne } = vi.hoisted(() => ({
   mockFindOne: vi.fn().mockResolvedValue(null),
   mockUpdateOne: vi.fn().mockResolvedValue({ modifiedCount: 0 }),
+  mockProjectFindOne: vi.fn(),
+}))
+
+vi.mock("@/lib/db/collections", () => ({
+  projectsCol: vi.fn().mockResolvedValue({ findOne: mockProjectFindOne }),
 }))
 
 vi.mock("@/lib/db/runtime-collections", () => ({
@@ -116,6 +121,7 @@ describe("authenticateRuntimeRequest", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockFindOne.mockResolvedValue(null)
+    mockProjectFindOne.mockResolvedValue({ _id: "project-record" })
     mockUpdateOne.mockResolvedValue({ modifiedCount: 0 })
   })
 
@@ -157,6 +163,51 @@ describe("authenticateRuntimeRequest", () => {
       scopes: [],
     })
     expect(ctx.requestId).toMatch(/^rtreq_/)
+    expect(mockProjectFindOne).toHaveBeenCalledWith(
+      { id: "proj_bound", userId: "user_owner" },
+      { projection: { _id: 1 } },
+    )
+  })
+
+  it.each(["deleted", "owned by another user"])("rejects an active key when its project is %s", async () => {
+    const { secret } = generateApiKey("production")
+    mockFindOne.mockResolvedValue(makeDoc({ keyHash: hashApiKey(secret) }))
+    mockProjectFindOne.mockResolvedValue(null)
+
+    await expect(authenticateRuntimeRequest(reqWithKey(secret))).rejects.toMatchObject({
+      code: "runtime_authentication_error",
+      status: 401,
+    })
+    expect(mockProjectFindOne).toHaveBeenCalledWith(
+      { id: "proj_bound", userId: "user_owner" },
+      { projection: { _id: 1 } },
+    )
+    expect(mockUpdateOne).not.toHaveBeenCalled()
+    expect(checkRateLimit).toHaveBeenCalledWith(expect.objectContaining({ action: "runtime_auth_fail" }))
+    expect(checkRateLimit).not.toHaveBeenCalledWith(expect.objectContaining({ action: "runtime_auth_request" }))
+  })
+
+  it("rechecks project existence after a previously successful authentication", async () => {
+    const { secret } = generateApiKey("production")
+    mockFindOne.mockResolvedValue(makeDoc({ keyHash: hashApiKey(secret) }))
+    await authenticateRuntimeRequest(reqWithKey(secret))
+    mockProjectFindOne.mockResolvedValue(null)
+    mockUpdateOne.mockClear()
+
+    await expect(authenticateRuntimeRequest(reqWithKey(secret))).rejects.toMatchObject({
+      code: "runtime_authentication_error",
+    })
+    expect(mockProjectFindOne).toHaveBeenCalledTimes(2)
+    expect(mockUpdateOne).not.toHaveBeenCalled()
+  })
+
+  it("fails closed when project verification is unavailable", async () => {
+    const { secret } = generateApiKey("production")
+    mockFindOne.mockResolvedValue(makeDoc({ keyHash: hashApiKey(secret) }))
+    mockProjectFindOne.mockRejectedValueOnce(new Error("database unavailable"))
+
+    await expect(authenticateRuntimeRequest(reqWithKey(secret))).rejects.toThrow("database unavailable")
+    expect(mockUpdateOne).not.toHaveBeenCalled()
   })
 
   it("revoked key → runtime_key_revoked", async () => {

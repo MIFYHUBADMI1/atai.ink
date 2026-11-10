@@ -72,11 +72,11 @@ export function workspaceIntelligenceNav(projectId: string): AtaiNavItem[] {
 export function workspaceGrowNav(projectId: string): AtaiNavItem[] {
   return [
     { href: `/project/${projectId}/market`, label: "Market & grow", icon: TrendingUp, kind: "link" },
-    { href: `/project/${projectId}/ads`, label: "Ads & marketing", icon: Megaphone, kind: "soon" },
+    { href: `/project/${projectId}/ads`, label: "Ads & marketing", icon: Megaphone, kind: "link" },
     { href: `/project/${projectId}/finances`, label: "Business finances", icon: Wallet, kind: "link" },
     { href: `/project/${projectId}/lessons`, label: "Business lessons", icon: GraduationCap, kind: "link" },
     { href: `/project/${projectId}/resources`, label: "Resources", icon: BookOpen, kind: "link" },
-    { href: `/project/${projectId}/competition`, label: "Competition", icon: Swords, kind: "soon" },
+    { href: `/project/${projectId}/competition`, label: "Competition", icon: Swords, kind: "link" },
   ]
 }
 
@@ -98,14 +98,14 @@ export function ataiNav(projectId?: string): AtaiNavGroup[] {
       label: "My business",
       items: [
         { href: "/projects", label: "All projects", icon: FolderKanban, kind: "link", match: (p) => p === "/projects" || p.startsWith("/project/") },
-        { href: competitionHref, label: "Competition", icon: Swords, kind: "soon" },
+        { href: competitionHref, label: "Competition", icon: Swords, kind: "link" },
       ],
     },
     {
       label: "Business & growth",
       items: [
         { href: "/market", label: "Market & grow", icon: TrendingUp, kind: "soon" },
-        { href: "/ads", label: "Ads & marketing", icon: Megaphone, kind: "soon" },
+        { href: "/ads", label: "Ads & marketing", icon: Megaphone, kind: "link" },
         { href: "/finances", label: "Business finances", icon: Wallet, kind: "link", match: (p) => p === "/finances" },
         { href: "/lessons", label: "Business lessons", icon: GraduationCap, kind: "link" },
         { href: "/resources", label: "Resources", icon: BookOpen, kind: "link" },

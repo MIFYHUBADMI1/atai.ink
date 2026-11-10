@@ -14,6 +14,9 @@ import type { CreditLedgerEntry, BuildAuthorization, PaymentRecord, Subscription
 import type { ResourceDoc } from "@/lib/resources/admin-types"
 import type { LessonDoc } from "@/lib/lessons/admin-types"
 import type { GeneratedLessonDoc } from "@/lib/lessons/types"
+import type { LessonCategoryDoc } from "@/lib/lessons/taxonomy"
+import type { LearningPathDoc } from "@/lib/lessons/paths"
+import type { UserLessonActivityDoc } from "@/lib/lessons/activity"
 
 /** Cache the Db reference across hot reloads so we don't re-resolve per call. */
 const globalForDb = globalThis as unknown as {
@@ -97,6 +100,21 @@ export async function lessonsCol() {
  */
 export async function businessLessonsCol() {
   return (await getDbCached()).collection<GeneratedLessonDoc & { _id?: unknown }>("business_lessons")
+}
+
+/** Operator overrides for the curated lesson taxonomy (names, order, hidden). */
+export async function lessonCategoriesCol() {
+  return (await getDbCached()).collection<LessonCategoryDoc & { _id?: unknown }>("lesson_categories")
+}
+
+/** Admin-managed learning paths; built-in defaults are overlaid at read. */
+export async function learningPathsCol() {
+  return (await getDbCached()).collection<LearningPathDoc & { _id?: unknown }>("learning_paths")
+}
+
+/** Per-user lesson activity — one row per user + lesson (unique index). */
+export async function userLessonsCol() {
+  return (await getDbCached()).collection<UserLessonActivityDoc & { _id?: unknown }>("user_lessons")
 }
 export async function webhookEventsCol() {
   return (await getDbCached()).collection<WebhookEventDoc & { _id?: unknown }>("webhook_events")
@@ -450,6 +468,29 @@ async function runEnsureIndexes(): Promise<void> {
     businessLessons.createIndex({ userId: 1, createdAt: -1 }),
   ])
 
+  // Learning structure: category overrides, admin-managed paths, and one
+  // activity row per user + lesson so progress can never duplicate.
+  const lessonCategories = await lessonCategoriesCol()
+  await batchedIndexCreation([
+    lessonCategories.createIndex({ id: 1 }, { unique: true, name: "lesson_categories_id_unique" }),
+  ])
+
+  const learningPaths = await learningPathsCol()
+  await batchedIndexCreation([
+    learningPaths.createIndex({ id: 1 }, { unique: true, name: "learning_paths_id_unique" }),
+    learningPaths.createIndex({ slug: 1 }, { unique: true, name: "learning_paths_slug_unique" }),
+    learningPaths.createIndex({ status: 1, featured: -1, order: 1 }),
+  ])
+
+  const userLessons = await userLessonsCol()
+  await batchedIndexCreation([
+    userLessons.createIndex(
+      { userId: 1, lessonRef: 1 },
+      { unique: true, name: "user_lessons_user_lesson_unique" },
+    ),
+    userLessons.createIndex({ userId: 1, updatedAt: -1 }),
+  ])
+
   // Webhook event indexes
   const webhookEvents = await webhookEventsCol()
   await batchedIndexCreation([
@@ -552,6 +593,7 @@ async function runEnsureIndexes(): Promise<void> {
     // Library search/filter + calendar reads stay project-scoped and bounded.
     contentItems.createIndex({ projectId: 1, status: 1, updatedAt: -1 }),
     contentItems.createIndex({ projectId: 1, plannedAt: 1 }),
+    contentItems.createIndex({ projectId: 1, kind: 1, kit: 1, kitSlot: 1, createdAt: -1 }),
   ])
 
   // Brand profile (Phase 4 v2): exactly one profile per project.

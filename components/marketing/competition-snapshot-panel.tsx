@@ -1,7 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { Check, Loader2, RefreshCw, ScanSearch, TriangleAlert } from "lucide-react"
+import { Check, History, Loader2, RefreshCw, ScanSearch, TriangleAlert } from "lucide-react"
+import { CofounderMarkdown } from "@/components/cofounder/markdown"
 import { postJson } from "@/lib/client/api"
 
 export interface CompetitionSnapshotItem {
@@ -10,6 +11,12 @@ export interface CompetitionSnapshotItem {
   body: string
   creditsCharged: number
   createdAt: number
+  contextHash?: string
+}
+
+/** Deterministic UTC day — safe to render on server and client alike. */
+function formatDay(ms: number): string {
+  return Number.isFinite(ms) && ms > 0 && ms <= 8.64e15 ? new Date(ms).toISOString().slice(0, 10) : "date unknown"
 }
 
 /**
@@ -21,17 +28,23 @@ export interface CompetitionSnapshotItem {
 export function CompetitionSnapshotPanel({
   projectId,
   snapshot: initialSnapshot,
+  history: initialHistory = [],
+  currentContextHash,
   creditsAvailable: initialCredits,
   textReady,
   hasPlan,
 }: {
   projectId: string
   snapshot: CompetitionSnapshotItem | null
+  /** Older drafts, newest first — the newest is `snapshot`. */
+  history?: CompetitionSnapshotItem[]
+  currentContextHash?: string
   creditsAvailable: number | null
   textReady: boolean
   hasPlan: boolean
 }) {
   const [snapshot, setSnapshot] = useState(initialSnapshot)
+  const [history, setHistory] = useState(initialHistory)
   const [confirmFresh, setConfirmFresh] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -47,6 +60,7 @@ export function CompetitionSnapshotPanel({
         `/api/projects/${encodeURIComponent(projectId)}/market/competition-snapshot`,
         {},
       )
+      if (snapshot) setHistory((current) => [snapshot, ...current])
       setSnapshot(item)
       if (item.creditsCharged > 0) {
         setCreditsAvailable((current) => (current === null ? null : Math.max(0, current - item.creditsCharged)))
@@ -71,7 +85,7 @@ export function CompetitionSnapshotPanel({
         )}
       </div>
       <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-        Atai does not collect live market or competitor data. What it can draft is a landscape written{" "}
+        This snapshot does not collect live market or competitor data. It drafts a landscape written{" "}
         <span className="text-foreground">strictly from your own plan</span> — competitor types, how your plan says
         you&apos;re positioned, what&apos;s unproven, and what to check. Verify every line before you rely on it.
       </p>
@@ -147,7 +161,20 @@ export function CompetitionSnapshotPanel({
               <Check className="size-3" aria-hidden /> AI draft · not verified
             </span>
           </div>
-          <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-foreground">{snapshot.body}</p>
+          <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+            Drafted {formatDay(snapshot.createdAt)} · from your plan, not market data
+          </p>
+          {(!snapshot.contextHash || (currentContextHash && snapshot.contextHash !== currentContextHash)) && (
+            <p className="mt-2 flex items-start gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-700 dark:text-amber-400">
+              <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              {snapshot.contextHash
+                ? "The planning context has changed since this draft. Generate a new draft to reflect it."
+                : "This older draft has no recorded plan version; its freshness is unknown."}
+            </p>
+          )}
+          <div className="mt-3 min-w-0 text-sm leading-6 text-foreground">
+            <CofounderMarkdown>{snapshot.body}</CofounderMarkdown>
+          </div>
           <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
             {snapshot.creditsCharged > 0 && (
               <span className="font-mono text-[10px] text-muted-foreground">{snapshot.creditsCharged} credits</span>
@@ -163,6 +190,32 @@ export function CompetitionSnapshotPanel({
             </a>
           </div>
         </div>
+      )}
+
+      {history.length > 0 && !generating && (
+        <details className="rounded-2xl border border-border bg-transparent px-4 py-3">
+          <summary className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-muted-foreground">
+            <History className="size-3.5" aria-hidden />
+            Recent previous drafts ({history.length}) — AI-generated, not current research
+          </summary>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Initially loads the latest 25 snapshots, including the current draft. Older drafts remain in your{" "}
+            <a className="text-primary underline" href={`/project/${projectId}/studio`}>Studio library</a>.
+          </p>
+          <div className="mt-3 flex flex-col gap-3">
+            {history.map((item) => (
+              <details key={item.id} className="rounded-xl border border-border bg-card px-3 py-2">
+                <summary className="flex cursor-pointer flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span className="font-mono text-[10px] uppercase tracking-[0.14em]">{formatDay(item.createdAt)}</span>
+                  <span className="min-w-0 flex-1 break-words">{item.title}</span>
+                </summary>
+                <div className="mt-2 min-w-0 text-sm leading-6 text-foreground/90">
+                  <CofounderMarkdown>{item.body}</CofounderMarkdown>
+                </div>
+              </details>
+            ))}
+          </div>
+        </details>
       )}
     </section>
   )

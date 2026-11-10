@@ -198,7 +198,7 @@ export const createProjectTool: ToolDefinition = {
 export const deleteProjectTool: ToolDefinition = {
   name: "delete_project",
   description:
-    "Prepare PERMANENT deletion of a project and all of its data (build runs, plans, activity). Destructive and irreversible — the founder must type DELETE to confirm. This only PREPARES the deletion.",
+    "Prepare PERMANENT deletion of a project workspace and revocation of its Atai runtime keys. Financial and audit records remain. Hosted apps, external files, domains and subscriptions are NOT removed or cancelled. The founder must type DELETE to confirm. This only PREPARES the deletion.",
   risk: "HARD_CONFIRM",
   requiresConfirmation: true,
   inputSchema: deleteProjectSchema,
@@ -214,7 +214,7 @@ export const deleteProjectTool: ToolDefinition = {
         toolName: "delete_project",
         parameters: { projectId: parsed.projectId, confirmWord: "DELETE" },
         risk: "HARD_CONFIRM",
-        description: `Permanently delete "${project.name}" and all of its data. This cannot be undone.`,
+        description: `Permanently delete "${project.name}" and its workspace data, and revoke its Atai runtime keys. Financial and audit records remain. Hosted apps, external files, domains and subscriptions are not removed or cancelled; shut them down separately. This cannot be undone.`,
         confirmWord: "DELETE",
       })
       return { ok: true as const, pending: action }
@@ -240,7 +240,13 @@ export const deleteProjectTool: ToolDefinition = {
       return {
         success: true,
         type: "project_deleted",
-        data: { projectId: parsed.projectId, name: project.name },
+        data: {
+          projectId: parsed.projectId,
+          name: project.name,
+          runtimeKeysRevoked: true,
+          externalResourcesRemoved: false,
+          warning: "Hosted apps, external files, domains and subscriptions are not removed or cancelled. Shut them down separately. Financial and audit records are retained.",
+        },
       }
     } catch (e) {
       return toToolOutcome(e, "I couldn't delete the project.")

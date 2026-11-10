@@ -1,4 +1,4 @@
-import { CompetitionSnapshotPanel } from "@/components/marketing/competition-snapshot-panel"
+import { CompetitionSnapshotPanel, type CompetitionSnapshotItem } from "@/components/marketing/competition-snapshot-panel"
 import { CofounderMarkdown } from "@/components/cofounder/markdown"
 import { DashboardShell } from "@/components/dashboard/dashboard-shell"
 import { ProjectComingSoon } from "@/components/workspace/project-coming-soon"
@@ -6,10 +6,13 @@ import { getCurrentUser } from "@/lib/auth/session"
 import { isMarketStudioEnabled } from "@/lib/marketing/feature-flags"
 import { getAvailableCredits } from "@/lib/billing/credit-service"
 import { capabilityAvailability } from "@/lib/runtime/router/adapters/availability"
-import { getCompetitionSnapshot } from "@/lib/marketing/competition-snapshot"
-import { isPlaceholderValue } from "@/lib/analysis/plan-sections"
+import { competitionContextHash, listCompetitionSnapshots } from "@/lib/marketing/competition-snapshot"
+import { readOwnerGoals } from "@/lib/marketing/growth-overview"
+import { isPlaceholderValue, readMarketPositioningText, readValuePropositionText } from "@/lib/analysis/plan-sections"
 import type { ApplicationSpecification } from "@/lib/types/specification"
 import { requireOwnedProject } from "@/lib/workspace/require-owned-project"
+import { getResourcesCompetitorIntelligence } from "@/lib/resources/competitor-intelligence"
+import { CompetitorIntelligenceList } from "@/components/project-resources/competitor-intelligence-list"
 
 /**
  * Competition route — honest v1.
@@ -38,9 +41,9 @@ export default async function ProjectCompetitionPage({ params }: { params: Promi
   }
 
   const spec = (project.specification ?? undefined) as ApplicationSpecification | undefined
-  const positioning = spec?.marketPositioning?.trim() ?? ""
+  const positioning = readMarketPositioningText(spec)
   const positioningPresent = positioning.length > 0 && !isPlaceholderValue(positioning)
-  const valueProposition = spec?.valueProposition?.trim() ?? ""
+  const valueProposition = readValuePropositionText(spec)
   const valuePresent = valueProposition.length > 0 && !isPlaceholderValue(valueProposition)
   const targetUsers = Array.isArray(spec?.targetUsers)
     ? spec.targetUsers.filter((u) => typeof u === "string" && u.trim().length > 0)
@@ -50,13 +53,17 @@ export default async function ProjectCompetitionPage({ params }: { params: Promi
   const textReady = studioEnabled && Boolean(capabilityAvailability()["ai.text"]?.configured)
 
   let snapshot = null
+  let history: CompetitionSnapshotItem[] = []
   let creditsAvailable: number | null = null
   if (studioEnabled) {
     try {
-      snapshot = await getCompetitionSnapshot(project.id)
+      const snapshots = await listCompetitionSnapshots(user.id, project.id)
+      snapshot = snapshots[0] ?? null
+      history = snapshots.slice(1)
     } catch {
       // Fail-soft like every other read on project pages.
       snapshot = null
+      history = []
     }
     try {
       creditsAvailable = await getAvailableCredits(user.id)
@@ -64,6 +71,8 @@ export default async function ProjectCompetitionPage({ params }: { params: Promi
       creditsAvailable = null
     }
   }
+
+  const resourcesIntelligence = await getResourcesCompetitorIntelligence(user.id, project.id).catch(() => null)
 
   return (
     <DashboardShell title={project.name} projectId={project.id}>
@@ -74,8 +83,8 @@ export default async function ProjectCompetitionPage({ params }: { params: Promi
             Where {project.name} stands
           </h1>
           <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-            Everything here comes from your own plan or is an AI draft written from it. Atai does not collect live
-            market or competitor data, so nothing on this page is a live measurement of the market.
+            Bring together your plan-derived landscape and existing Resources competitor suggestions.
+            Both retain their original context; neither is a live market measurement or verified research.
           </p>
         </header>
 
@@ -114,8 +123,8 @@ export default async function ProjectCompetitionPage({ params }: { params: Promi
                 <div className="min-w-0 rounded-2xl border border-border bg-card p-4 sm:p-5">
                   <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Who you are competing for</p>
                   <ul className="mt-2 flex flex-col gap-1 text-sm leading-6">
-                    {targetUsers.slice(0, 5).map((u) => (
-                      <li key={u} className="break-words">· {u}</li>
+                    {targetUsers.map((u, index) => (
+                      <li key={`${index}-${u}`} className="break-words">· {u}</li>
                     ))}
                   </ul>
                 </div>
@@ -128,11 +137,14 @@ export default async function ProjectCompetitionPage({ params }: { params: Promi
           <CompetitionSnapshotPanel
             projectId={project.id}
             snapshot={snapshot}
+            history={history}
+            currentContextHash={competitionContextHash(project, readOwnerGoals(user))}
             creditsAvailable={creditsAvailable}
             textReady={textReady}
             hasPlan={Boolean(spec)}
           />
         )}
+        <CompetitorIntelligenceList intelligence={resourcesIntelligence} projectId={project.id} />
       </div>
     </DashboardShell>
   )

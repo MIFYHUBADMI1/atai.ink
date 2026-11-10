@@ -279,7 +279,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     const deleted = await store.deleteProject(id, user.id)
     logger.info("api.projects.delete", "result", { id, deleted })
     if (!deleted) return fail("UNAUTHORIZED_PROJECT_ACCESS", "We couldn't find this project.", 404)
-    return ok({ deleted: true })
+    return ok({
+      deleted: true,
+      runtimeKeysRevoked: true,
+      externalResourcesRemoved: false,
+      warning: "Hosted apps, external files, domains and subscriptions are not removed or cancelled. Shut them down separately. Financial and audit records are retained.",
+    })
   } catch (e) {
     return handleRouteError("api.projects.delete", e)
   }

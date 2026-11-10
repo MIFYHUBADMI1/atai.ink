@@ -189,6 +189,15 @@ export interface GenerateMarketInput extends MarketBrief {
   kitSlot?: string
   /** Founder's raw kit inputs (e.g. the ads bench offer/audience) persisted for prefill. */
   kitInput?: Record<string, string>
+  /**
+   * Authoritative system + user messages for kit services that own their
+   * prompt shape (competition). When set, the studio's per-kind template is
+   * bypassed entirely — no KIND_INSTRUCTION, no 2,000-character brief cap on
+   * what is SENT (the stored brief still gets a larger, explicit cap below).
+   */
+  messages?: { system: string; prompt: string }
+  /** Output token cap override (default stays the per-length value). */
+  maxTokens?: number
 }
 
 export interface MarketCallView {
@@ -224,9 +233,11 @@ export interface MarketContentView {
 /** Generate one asset and persist it. Billing happens inside the router. */
 export async function generateMarketContent(input: GenerateMarketInput): Promise<MarketContentView> {
   if (!isMarketContentKind(input.kind)) throw new AppError("VALIDATION")
-  const briefText = clean(input.brief ?? "", 2000)
+  // Custom-message callers own their prompt; the stored brief keeps a record
+  // of the full ask under a larger cap instead of the 2,000-char template cap.
+  const briefText = clean(input.brief ?? "", input.messages ? 20_000 : 2000)
   const hasScript = input.kind === "voice" && Boolean(input.script && clean(input.script, 4000))
-  if (!briefText && !hasScript) throw new AppError("VALIDATION")
+  if (!briefText && !hasScript && !input.messages) throw new AppError("VALIDATION")
 
   const project = await store.getProject(input.projectId)
   if (!project || project.userId !== input.userId) {
@@ -347,7 +358,7 @@ export async function generateMarketContent(input: GenerateMarketInput): Promise
     if (!audio) throw new AppError("AI_UNAVAILABLE")
     media = { kind: "audio", dataUrl: audio.dataUrl, mimeType: audio.mimeType }
   } else {
-    body = await generateTextBody({ identity, projectName: project.name, brandVoice, brief, calls })
+    body = await generateTextBody({ identity, projectName: project.name, brandVoice, brief, calls, messages: input.messages, maxTokens: input.maxTokens })
   }
 
   forcedMediaBound(media)
@@ -406,13 +417,18 @@ async function generateTextBody(input: {
   brandVoice: string
   brief: MarketBrief
   calls: CallRecord[]
+  /** When provided, used verbatim — the studio template is skipped. */
+  messages?: { system: string; prompt: string }
+  maxTokens?: number
 }): Promise<string> {
-  const { system, prompt } = buildMarketMessages({
-    kind: input.brief.kind,
-    projectName: input.projectName,
-    brandVoice: input.brandVoice,
-    brief: input.brief,
-  })
+  const { system, prompt } = input.messages
+    ? input.messages
+    : buildMarketMessages({
+        kind: input.brief.kind,
+        projectName: input.projectName,
+        brandVoice: input.brandVoice,
+        brief: input.brief,
+      })
   const result = await callRuntime(
     input.identity,
     {
@@ -424,7 +440,15 @@ async function generateTextBody(input: {
           { role: "user", content: prompt },
         ],
         temperature: 0.75,
-        max_tokens: input.brief.kind === "voice" ? 500 : input.brief.length === "long" ? 1600 : input.brief.length === "short" ? 350 : 900,
+        max_tokens:
+          input.maxTokens ??
+          (input.brief.kind === "voice"
+            ? 500
+            : input.brief.length === "long"
+              ? 1600
+              : input.brief.length === "short"
+                ? 350
+                : 900),
       },
     },
   )

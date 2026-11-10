@@ -1,6 +1,7 @@
 import "server-only"
 import { AppError } from "@/lib/errors"
 import { checkRateLimit } from "@/lib/auth/rate-limit"
+import { projectsCol } from "@/lib/db/collections"
 import { logger } from "@/lib/logging/logger"
 import {
   runtimeError,
@@ -176,6 +177,17 @@ export async function authenticateRuntimeRequest(
       reason: failureReason,
     })
     throw failureToError(failureReason)
+  }
+
+  // Bypass project caches so deleted projects cannot keep authenticating with stale keys.
+  const projects = await projectsCol()
+  const project = await projects.findOne(
+    { id: doc.projectId, userId: doc.userId },
+    { projection: { _id: 1 } },
+  )
+  if (!project) {
+    await enforceAuthFailureLimit(hash)
+    throw failureToError("invalid")
   }
 
   // 4. Authenticated — volume cap per key (§21) and throttled lastUsedAt.

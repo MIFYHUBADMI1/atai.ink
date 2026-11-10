@@ -23,19 +23,7 @@ interface CachedData {
   marketingPlaybook?: { text: string; generatedAt: number }
 }
 
-export interface CompetitorProfile {
-  name: string
-  url?: string
-  tagline?: string
-  founded?: string
-  pricing?: string
-  businessModel?: string
-  strengths?: string[]
-  weaknesses?: string[]
-  targetCustomer?: string
-  competitiveEdge?: string
-  fundingStatus?: string
-}
+import type { CompetitorProfile } from "@/lib/resources/competitor-schema"
 
 type Section = "next-steps" | "market" | "competitors" | "marketing" | "library"
 
@@ -60,6 +48,7 @@ export function ResourcesClient({
   learningPaths,
   cachedData,
   availableCredits,
+  initialSection = "next-steps",
 }: {
   projectId: string
   projectName: string
@@ -73,8 +62,9 @@ export function ResourcesClient({
   learningPaths: { id: string; title: string; description: string; resources: any[] }[]
   cachedData: CachedData
   availableCredits: number
+  initialSection?: "next-steps" | "competitors"
 }) {
-  const [active, setActive] = useState<Section>("next-steps")
+  const [active, setActive] = useState<Section>(initialSection)
   const [credits, setCredits] = useState(availableCredits)
 
   return (
@@ -104,6 +94,8 @@ export function ResourcesClient({
           <button
             key={id}
             onClick={() => setActive(id)}
+            aria-label={label}
+            aria-current={active === id ? "page" : undefined}
             className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${active === id
                 ? "bg-primary text-primary-foreground"
                 : "text-muted-foreground hover:bg-accent hover:text-foreground"

@@ -124,6 +124,27 @@ beforeEach(() => {
   }))
 })
 
+describe("Competition dedicated messages", () => {
+  it("passes the complete prompt to the project runtime without Studio instructions", async () => {
+    const prompt = `## Positioning\n${"Detailed context. ".repeat(360).trimEnd()}\nEND OF PLAN`
+    await generateMarketContent({
+      userId: "u1", projectId: "p1", kind: "brief", brief: prompt,
+      messages: { system: "Competition analyst only", prompt }, maxTokens: 1200,
+      kit: "competition", kitSlot: "snapshot", kitInput: { contextHash: "hash" },
+    })
+    expect(mockRouteRuntime).toHaveBeenCalledWith(expect.objectContaining({ userId: "u1", projectId: "p1" }), {
+      capability: "ai.text", operation: "chat", input: {
+        messages: [{ role: "system", content: "Competition analyst only" }, { role: "user", content: prompt }],
+        max_tokens: 1200, temperature: 0.75,
+      },
+    })
+    expect(mockInsertOne).toHaveBeenCalledWith(expect.objectContaining({
+      kit: "competition", kitSlot: "snapshot", kitInput: { contextHash: "hash" },
+      brief: expect.objectContaining({ brief: prompt }),
+    }))
+  })
+})
+
 describe("scopesCover", () => {
   it("treats an empty scope list as all capabilities", () => {
     expect(scopesCover([], "ai.text")).toBe(true)

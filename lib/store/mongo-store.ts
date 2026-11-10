@@ -551,11 +551,57 @@ export class MongoStore implements DataStore {
           deleted = false
           return
         }
+        const keysCol = await apiKeysCol()
+        await keysCol.updateMany(
+          { projectId: id, status: "active" },
+          { $set: { status: "revoked", revokedAt: Date.now(), revokedReason: "project_deleted" } },
+          { session },
+        )
         const runsResult = await runsCol.deleteMany({ mirrorProjectId: id }, { session })
         logger.info("store.deleteProject", "cascaded build run delete", { id, deletedBuildRuns: runsResult.deletedCount })
         const attachmentsCol = await projectAttachmentsCol()
         const attachmentsResult = await attachmentsCol.deleteMany({ projectId: id }, { session })
         logger.info("store.deleteProject", "cascaded attachment delete", { id, deletedAttachments: attachmentsResult.deletedCount })
+        const collections = await import("@/lib/db/collections")
+        // Keep billing, refund, usage and append-only audit evidence outside this allowlist.
+        for (const getCollection of [
+          collections.projectAssetsCol,
+          collections.projectChatsCol,
+          collections.planningRunsCol,
+          collections.contentItemsCol,
+          collections.brandProfilesCol,
+          collections.growthTasksCol,
+          collections.campaignsCol,
+          collections.businessLessonsCol,
+          collections.analyticsEventsCol,
+          collections.projectLikesCol,
+          collections.projectGitHubCol,
+        ]) {
+          const artifacts = await getCollection()
+          await artifacts.deleteMany({ projectId: id }, { session })
+        }
+        const { projectRuntimeConfigCol } = await import("@/lib/db/runtime-collections")
+        await (await projectRuntimeConfigCol()).deleteMany({ projectId: id }, { session })
+        await (await collections.projectForksCol()).deleteMany(
+          { $or: [{ originalProjectId: id }, { forkedProjectId: id }] },
+          { session },
+        )
+        const conversations = await collections.cofounderConversationsCol()
+        await conversations.updateMany(
+          { activeProjectId: id },
+          { $unset: { activeProjectId: "" } },
+          { session },
+        )
+        await conversations.updateMany(
+          { projectContextReferences: id },
+          { $pull: { projectContextReferences: id } },
+          { session },
+        )
+        await (await collections.cofounderPendingActionsCol()).updateMany(
+          { "parameters.projectId": id, status: { $in: ["pending", "approved"] } },
+          { $set: { status: "expired", expiresAt: Date.now() } },
+          { session },
+        )
         deleted = true
       })
       logger.info("store.deleteProject", "result", { id, deleted })

@@ -55,6 +55,7 @@ async function post(_req: Request, { params }: { params: Promise<{ id: string }>
       body: item.body,
       creditsCharged: item.creditsCharged,
       createdAt: item.createdAt,
+      contextHash: item.kitInput?.contextHash,
     })
   } catch (e) {
     if (e instanceof AppError && e.code === "VALIDATION") {
