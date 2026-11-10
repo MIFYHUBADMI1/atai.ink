@@ -11,9 +11,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
 vi.mock("server-only", () => ({}))
 
-const { mockFindOne, mockUpdateOne } = vi.hoisted(() => ({
+const { mockFindOne, mockUpdateOne, mockProjectFindOne } = vi.hoisted(() => ({
   mockFindOne: vi.fn().mockResolvedValue(null),
   mockUpdateOne: vi.fn().mockResolvedValue({ modifiedCount: 0 }),
+  mockProjectFindOne: vi.fn(),
+}))
+
+vi.mock("@/lib/db/collections", () => ({
+  projectsCol: vi.fn().mockResolvedValue({ findOne: mockProjectFindOne }),
 }))
 
 vi.mock("@/lib/db/runtime-collections", () => ({
@@ -91,9 +96,10 @@ vi.mock("@/lib/runtime/usage", () => ({
 }))
 
 import { POST, GET } from "./route"
+import { checkRateLimit } from "@/lib/auth/rate-limit"
 import { clearProviderAdapters } from "@/lib/runtime/router/provider-registry"
 import { registerTestEchoAdapter } from "@/lib/runtime/router/test-adapter"
-import { registerOpenRouterAdapter } from "@/lib/runtime/router/adapters/openrouter"
+import { openRouterAdapter, registerOpenRouterAdapter } from "@/lib/runtime/router/adapters/openrouter"
 import { generateApiKey, hashApiKey } from "@/lib/runtime/key-crypto"
 import type { ApiKeyDoc } from "@/lib/runtime/types"
 
@@ -136,6 +142,7 @@ const CHAT_BODY = { capability: "ai.text", operation: "chat", input: { messages:
 beforeEach(() => {
   vi.clearAllMocks()
   mockFindOne.mockResolvedValue(null)
+  mockProjectFindOne.mockResolvedValue({ _id: "owned-project-id" })
   mockConsumeCredits.mockResolvedValue({ success: true, subscriptionConsumed: 0, permanentConsumed: 0 })
   mockGetAvailableCredits.mockResolvedValue(1_000_000)
   clearProviderAdapters()
@@ -239,6 +246,39 @@ describe("POST /api/runtime/v1 — full HTTP path", () => {
 // ─── Phase 6 — OpenRouter through the full runtime path ────────────────────
 
 describe("POST /api/runtime/v1 — OpenRouter adapter (Phase 6)", () => {
+  it("active key bound to a deleted project → 401 before quota, provider execution or billing", async () => {
+    registerOpenRouterAdapter()
+    const executeSpy = vi.spyOn(openRouterAdapter, "execute")
+    const fetchMock = vi.fn()
+    vi.stubGlobal("fetch", fetchMock)
+
+    const secret = "atai_production_deletedprojectkey123"
+    mockFindOne.mockResolvedValueOnce(makeDoc(secret))
+    mockProjectFindOne.mockResolvedValueOnce(null)
+
+    const res = await POST(request(CHAT_BODY, secret))
+
+    expect(res.status).toBe(401)
+    const json = await res.json()
+    expect(json.ok).toBe(false)
+    expect(json.error.code).toBe("runtime_authentication_error")
+    expect(mockProjectFindOne).toHaveBeenCalledExactlyOnceWith(
+      { id: "proj_bound", userId: "user_owner" },
+      { projection: { _id: 1 } },
+    )
+    // Only the failed-auth backstop runs, never an authenticated quota.
+    expect(checkRateLimit).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ action: "runtime_auth_fail", identifier: hashApiKey(secret) }),
+    )
+    expect(mockUpdateOne).not.toHaveBeenCalled()
+    expect(mockAcquireLease).not.toHaveBeenCalled()
+    expect(executeSpy).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(mockGetAvailableCredits).not.toHaveBeenCalled()
+    expect(mockConsumeCredits).not.toHaveBeenCalled()
+    expect(mockRecordUsage).not.toHaveBeenCalled()
+  })
+
   it("INTEGRATION: full path → OpenRouter (mocked) → normalized Atai response", async () => {
     registerOpenRouterAdapter()
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(chatResponse()), { status: 200 }))

@@ -11,7 +11,6 @@ import {
   executeCreateCheckout,
   executeCreateSubscription,
   executeListPayments,
-  executeListPayouts,
 } from "./client"
 import {
   toDodoCheckoutRequest,
@@ -23,8 +22,6 @@ import {
   toDodoListPaymentsQuery,
   toPaymentsPage,
   type PaymentsPageData,
-  toDodoListPayoutsQuery,
-  toPayoutsPage,
   type PayoutListItemData,
 } from "./mapper"
 
@@ -38,8 +35,8 @@ import {
  *
  *   createCheckout      → POST /checkouts          (one-time charge)
  *   createSubscription  → POST /subscriptions      (recurring charge on a Dodo product)
- *   listPayments        → GET  /payments           (read-only payment feed)
- *   listPayouts         → GET  /payouts            (read-only, ACCOUNT-LEVEL settlements)
+ *   listPayments        → GET  /payments           (read-only, scoped to the authenticated project)
+ *   listPayouts         → DENIED — settlements belong to the platform account
  *
  * Security:
  * - Dodo API key remains server-side only (§9/§53)
@@ -50,6 +47,9 @@ import {
  *   apiKeyId + environment) onto checkout/subscription writes so completed
  *   payments are attributable per project. Callers cannot override these
  *   reserved keys — impersonating another project is impossible.
+ * - Tenancy: the provider's payment feed is account-wide; the adapter scopes
+ *   listPayments to the authenticated project and refuses listPayouts, so one
+ *   leaked application key cannot read any other founder's money data.
  *
  * @module lib/runtime/router/adapters/dodo/adapter
  */
@@ -146,7 +146,20 @@ class DodoAdapter implements RuntimeProviderAdapter {
         query: translated.query,
         requestId: request.requestId,
       })
-      const result = toPaymentsPage(payload)
+      const page = toPaymentsPage(payload)
+      // Filter the account-wide feed using only server-stamped project attribution.
+      const scopedPayments = page.data.payments.filter(
+        (p) => p.metadata[ATTRIBUTION_METADATA_KEYS.projectId] === request.auth.projectId,
+      )
+      const result: ProviderExecutionResponse<PaymentsPageData> = {
+        provider: page.provider,
+        data: { payments: scopedPayments, pageFull: page.data.pageFull },
+        usage: {
+          inputTokens: 0,
+          outputTokens: 0,
+          metadata: { paymentsListed: scopedPayments.length },
+        },
+      }
       logger.info("runtime.dodo", "provider execution complete", {
         requestId: request.requestId,
         provider: this.provider,
@@ -159,21 +172,12 @@ class DodoAdapter implements RuntimeProviderAdapter {
     }
 
     if (operation === "listPayouts") {
-      const translated = toDodoListPayoutsQuery(request.request.input)
-      const { payload, latencyMs } = await executeListPayouts({
-        query: translated.query,
-        requestId: request.requestId,
-      })
-      const result = toPayoutsPage(payload)
-      logger.info("runtime.dodo", "provider execution complete", {
-        requestId: request.requestId,
-        provider: this.provider,
-        capability: request.request.capability,
-        operation,
-        count: result.data.payouts.length,
-        latencyMs,
-      })
-      return result
+      // Account-level settlements have no trustworthy per-project attribution.
+      throw new ProviderExecutionError(
+        "unsupported_operation",
+        "Payout settlements are platform-account records and are not available to application keys.",
+        `listPayouts denied for apiKeyId=${request.auth.apiKeyId}`,
+      )
     }
 
     // Unreachable through the router (supports gates), kept fail-safe.

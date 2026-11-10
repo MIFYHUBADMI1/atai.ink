@@ -6,13 +6,18 @@
  * and isolation (the response carries only the authenticated key's identity).
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
 vi.mock("server-only", () => ({}))
 
-const { mockFindOne, mockUpdateOne } = vi.hoisted(() => ({
+const { mockFindOne, mockUpdateOne, mockProjectFindOne } = vi.hoisted(() => ({
   mockFindOne: vi.fn().mockResolvedValue(null),
   mockUpdateOne: vi.fn().mockResolvedValue({ modifiedCount: 0 }),
+  mockProjectFindOne: vi.fn(),
+}))
+
+vi.mock("@/lib/db/collections", () => ({
+  projectsCol: vi.fn().mockResolvedValue({ findOne: mockProjectFindOne }),
 }))
 
 vi.mock("@/lib/db/runtime-collections", () => ({
@@ -57,6 +62,8 @@ vi.mock("@/lib/runtime/control/config-store", () => ({
 }))
 
 import { GET } from "./route"
+import { checkRateLimit } from "@/lib/auth/rate-limit"
+import { consumeCredits, getAvailableCredits } from "@/lib/billing/credit-service"
 import { generateApiKey, hashApiKey } from "@/lib/runtime/key-crypto"
 import type { ApiKeyDoc } from "@/lib/runtime/types"
 
@@ -86,6 +93,11 @@ function healthRequest(key?: string): Request {
 beforeEach(() => {
   vi.clearAllMocks()
   mockFindOne.mockResolvedValue(null)
+  mockProjectFindOne.mockResolvedValue({ _id: "owned-project-id" })
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
 })
 
 describe("GET /api/runtime/v1/health", () => {
@@ -114,6 +126,33 @@ describe("GET /api/runtime/v1/health", () => {
     const res = await GET(healthRequest(secret))
     expect(res.status).toBe(401)
     expect((await res.json()).error.code).toBe("runtime_key_expired")
+  })
+
+  it("active key bound to a deleted project → 401, never operational", async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal("fetch", fetchMock)
+    const secret = "atai_production_deletedhealthkey123"
+    mockFindOne.mockResolvedValueOnce(makeDoc(secret))
+    mockProjectFindOne.mockResolvedValueOnce(null)
+
+    const res = await GET(healthRequest(secret))
+
+    expect(res.status).toBe(401)
+    const json = await res.json()
+    expect(json.ok).toBe(false)
+    expect(json.error.code).toBe("runtime_authentication_error")
+    expect(json).not.toHaveProperty("data")
+    expect(mockProjectFindOne).toHaveBeenCalledExactlyOnceWith(
+      { id: "proj_bound", userId: "user_owner" },
+      { projection: { _id: 1 } },
+    )
+    expect(checkRateLimit).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ action: "runtime_auth_fail", identifier: hashApiKey(secret) }),
+    )
+    expect(mockUpdateOne).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(getAvailableCredits).not.toHaveBeenCalled()
+    expect(consumeCredits).not.toHaveBeenCalled()
   })
 
   it("valid key → operational status with SAFE metadata only", async () => {

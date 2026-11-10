@@ -94,7 +94,7 @@ function buildAdminConsoleBlock(spec: ApplicationSpecification): string {
       ? `- Business records: full management (create, edit, delete, list) for the planned data: ${entityNames.join(", ")}.`
       : "- Business records: whatever content this app stores, the admin area must manage it — create, edit, delete, list.",
     paidBusiness
-      ? "- Sales and money: purchases, subscriptions, and the payment/payout feed must be visible here so the owner can reconcile what the business earned. Read them through atai.payments (listPayments, listPayouts) — the console never talks to a gateway directly."
+      ? "- Sales and money: purchases, subscriptions, and the business's own payment feed must be visible here so the owner can reconcile what the business earned. Read payments through atai.payments listPayments (it returns only this business's own payments) — the console never talks to a gateway directly."
       : "- Activity: the app's key events (sign-ups, submissions, usage) must be visible to the owner.",
     "- Messages and requests: any contact, support, or inquiry channel the plan includes must land in the admin area.",
     "- Settings the owner can change without a rebuild: site content, prices and plans, notifications, and anything else the plan says the owner controls.",

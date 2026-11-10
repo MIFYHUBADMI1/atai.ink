@@ -108,8 +108,8 @@ export const RUNTIME_CAPABILITY_SUMMARIES: readonly RuntimeCapabilitySummary[] =
   {
     capability: "payments",
     sdk: "atai.payments",
-    operations: ["createCheckout", "createSubscription", "listPayments", "listPayouts"],
-    description: "Checkout sessions, recurring subscriptions, and the read-only payment/payout feed.",
+    operations: ["createCheckout", "createSubscription", "listPayments"],
+    description: "Checkout sessions, recurring subscriptions, and the read-only payment feed (own payments only).",
     examples: ["one-time purchases", "order checkout", "paid upgrades", "subscription plans", "payment feeds"],
   },
   {
@@ -168,7 +168,7 @@ export const RUNTIME_CAPABILITY_CONFIG_BLOCK = [
   "- atai.maps — geocode { query, limit? } · reverseGeocode { longitude, latitude } · search { query, limit?, longitude?, latitude? } · placeDetails { poiId } (a feature id taken from search/geocode results) · isochrone { coordinates: [lng,lat], profile, minutes[] } · directions { coordinates: [[lng,lat],…], profile } → routes carry GeoJSON geometry for map drawing · matrix { coordinates, annotations[] } (result under payload) · staticImage { longitude, latitude, zoom, width, height, marker? }.",
   "- atai.calendar — listBookings { limit?, status? } (read-only) · createBooking { start: <future ISO timestamp>, eventTypeId, attendee: { name, email, timeZone } }. Attendee emails must be real addresses — placeholder domains are rejected by the provider.",
   "- atai.vectors — upsert { vectors: [{ id, values }] } with 768-dimension values (the deployment's index) · search { vector, topK?, returnMetadata? } · delete { ids }. Pipe atai.ai embed output straight into upsert; freshly upserted vectors can take up to ~2 minutes to become searchable.",
-  "- atai.payments — createCheckout { items: [{ productId }], idempotencyKey, successUrl, customerEmail?, currency? } → hosted checkoutUrl. productId is a catalog product id (pdt_…): the charged amount comes from that catalog product, never from the request. createSubscription { productId, quantity, customer: { email, name }, billing: { country } }. listPayments / listPayouts are read-only feeds.",
+  "- atai.payments — createCheckout { items: [{ productId }], idempotencyKey, successUrl, customerEmail?, currency? } → hosted checkoutUrl. productId is a catalog product id (pdt_…): the charged amount comes from that catalog product, never from the request. createSubscription { productId, quantity, customer: { email, name }, billing: { country } }. listPayments is a read-only feed of THIS app's own payments (platform-attributed; other projects' records are never returned).",
   "- atai.db — query { tableName, … } · create/edit/delete { tableName, data?/recordId? }. This is the same database the Totalum SDK serves — use it for cross-cutting server reads (e.g. the admin console).",
   "- atai.analytics — track { events: [{ name, visitorId?, properties?, timestamp? }] } (1–100 events; properties are bounded scalar app data, never secrets) → { accepted }. summary { windowDays? } (1–90, default 7) → { totalEvents, uniqueVisitors, returningVisitors, newVisitors, topEvents[], daily[] }. First-party: events stay inside Atai and are scoped to this project — no external analytics provider or key. Send a stable anonymous visitorId (e.g. a localStorage id) with events so retention can be measured. Call track from the server; never block core app flows on it.",
   "- atai.health check() — proves ATAI_API_KEY authenticates and the runtime is reachable (GET /api/runtime/v1/health). Use it for the startup self-check required below.",
@@ -214,7 +214,7 @@ export interface UnsupportedRuntimeClaim {
 const UNSUPPORTED_CLAIM_PATTERNS: ReadonlyArray<{ pattern: RegExp; note: string }> = [
   {
     pattern: /\brefund(s|ed|ing)?\b/i,
-    note: "Automatic refunds are not a runtime capability — atai.payments exposes createCheckout, createSubscription, listPayments and listPayouts only. Track refund policy as app data with a manual step in the payment dashboard; never invent an SDK refund call and never add an external gateway.",
+    note: "Automatic refunds are not a runtime capability — atai.payments exposes createCheckout, createSubscription and listPayments only. Track refund policy as app data with a manual step in the payment dashboard; never invent an SDK refund call and never add an external gateway.",
   },
   {
     pattern: /\bsubscription cancell?ation\b|\bcancell?ing (a |the |their |my )?subscription\b|\bself-cancel\b/i,

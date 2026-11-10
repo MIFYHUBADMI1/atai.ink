@@ -253,3 +253,129 @@ describe("schemas", () => {
     expect(CreateSubscriptionInputSchema.safeParse({ ...VALID_SUBSCRIPTION_INPUT, quantity: 1001 }).success).toBe(false)
   })
 })
+
+// ── Adapter-level tenancy: the provider feed is account-wide, the key is not ──
+
+vi.mock("./config", () => ({
+  getDodoDefaultCheckoutProductId: () => "pdt_default",
+}))
+vi.mock("./client", () => ({
+  executeCreateCheckout: vi.fn(),
+  executeCreateSubscription: vi.fn(),
+  executeListPayments: vi.fn(),
+  executeListPayouts: vi.fn(),
+}))
+
+import { executeListPayments, executeListPayouts } from "./client"
+import { dodoAdapter } from "./adapter"
+import type { ProviderExecutionRequest } from "@/runtime/contracts/router"
+import type { Mock } from "vitest"
+
+const mockedExecuteListPayments = executeListPayments as unknown as Mock
+const mockedExecuteListPayouts = executeListPayouts as unknown as Mock
+
+function paymentsRequest(operation: string, input: Record<string, unknown> = {}): ProviderExecutionRequest {
+  return {
+    auth: {
+      apiKeyId: "rkey_test",
+      userId: "user_1",
+      projectId: "proj_own",
+      environment: "development",
+      scopes: ["payments"],
+    },
+    requestId: "rtreq_test",
+    request: { capability: "payments", operation, input },
+  }
+}
+
+const OWN_PAYMENT = {
+  payment_id: "pay_own",
+  total_amount: 2990,
+  currency: "USD",
+  status: "succeeded",
+  created_at: "2026-11-01T00:00:00Z",
+  customer: { email: "own-customer@example.com", name: "Own" },
+  metadata: { _ataiProjectId: "proj_own", plan: "pro" },
+}
+const FOREIGN_PAYMENT = {
+  payment_id: "pay_foreign",
+  total_amount: 5000,
+  status: "succeeded",
+  customer: { email: "other-founders-customer@example.com", name: "Foreign" },
+  metadata: { _ataiProjectId: "proj_other" },
+}
+const UNTAGGED_PAYMENT = { payment_id: "pay_untagged", total_amount: 100, status: "succeeded" }
+
+describe("dodoAdapter listPayments tenancy", () => {
+  it("returns only payments attributed to the authenticated project", async () => {
+    mockedExecuteListPayments.mockResolvedValue({
+      payload: { items: [FOREIGN_PAYMENT, OWN_PAYMENT, UNTAGGED_PAYMENT] },
+      latencyMs: 5,
+    })
+    const result = await dodoAdapter.execute(paymentsRequest("listPayments", { limit: 10 }))
+    expect(result.data).toEqual({
+      payments: [
+        expect.objectContaining({
+          paymentId: "pay_own",
+          customerEmail: "own-customer@example.com",
+          metadata: { _ataiProjectId: "proj_own", plan: "pro" },
+        }),
+      ],
+      pageFull: false,
+    })
+    expect(result.usage?.metadata).toEqual({ paymentsListed: 1 })
+  })
+
+  it("never leaks foreign records, even when they fill the whole raw page", async () => {
+    const foreignPage = Array.from({ length: 100 }, (_, i) => ({
+      payment_id: `pay_f${i}`,
+      customer: { email: `other${i}@example.com` },
+      metadata: { _ataiProjectId: "proj_other" },
+    }))
+    mockedExecuteListPayments.mockResolvedValue({ payload: { items: foreignPage }, latencyMs: 5 })
+    const result = await dodoAdapter.execute(paymentsRequest("listPayments"))
+    expect(result.data).toEqual({ payments: [], pageFull: true })
+  })
+
+  it("does not let unrestricted scopes widen the project boundary", async () => {
+    mockedExecuteListPayments.mockResolvedValue({ payload: { items: [FOREIGN_PAYMENT, OWN_PAYMENT] }, latencyMs: 5 })
+    const request = paymentsRequest("listPayments")
+    request.auth.scopes = []
+    const result = await dodoAdapter.execute(request)
+    expect(result.data).toMatchObject({ payments: [expect.objectContaining({ paymentId: "pay_own" })] })
+  })
+
+  it("rejects caller-supplied project attribution in the query", async () => {
+    await expect(dodoAdapter.execute(paymentsRequest("listPayments", { projectId: "proj_other" })))
+      .rejects.toMatchObject({ name: "ProviderExecutionError", detail: expect.stringContaining("validation failed") })
+    expect(mockedExecuteListPayments).not.toHaveBeenCalled()
+  })
+
+  it("keeps foreign customer and subscription filters inside the project boundary", async () => {
+    mockedExecuteListPayments.mockResolvedValue({ payload: { items: [FOREIGN_PAYMENT] }, latencyMs: 5 })
+    const result = await dodoAdapter.execute(paymentsRequest("listPayments", {
+      customerId: "customer_foreign", subscriptionId: "sub_foreign",
+    }))
+    expect(result.data).toMatchObject({ payments: [] })
+  })
+
+  it("passes caller filters through as the documented query while scoping results", async () => {
+    mockedExecuteListPayments.mockResolvedValue({ payload: { items: [OWN_PAYMENT] }, latencyMs: 5 })
+    await dodoAdapter.execute(paymentsRequest("listPayments", { limit: 10, status: "succeeded" }))
+    expect(mockedExecuteListPayments).toHaveBeenCalledTimes(1)
+    expect(mockedExecuteListPayments.mock.calls[0][0]).toMatchObject({
+      query: { page_size: 10, status: "succeeded" },
+    })
+  })
+})
+
+describe("dodoAdapter listPayouts denial", () => {
+  it("denies payouts to application keys without touching the provider", async () => {
+    await expect(dodoAdapter.execute(paymentsRequest("listPayouts"))).rejects.toMatchObject({
+      name: "ProviderExecutionError",
+      category: "unsupported_operation",
+      message: expect.stringContaining("platform-account"),
+    })
+    expect(mockedExecuteListPayouts).not.toHaveBeenCalled()
+  })
+})

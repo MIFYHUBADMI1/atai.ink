@@ -104,7 +104,7 @@ export class PaymentsCapability {
     return assertSubscriptionResult(envelope.data.data)
   }
 
-  /** Read the payment feed (`payments`/`listPayments`). Read-only — safe to call freely. */
+  /** Read the payment feed (`payments`/`listPayments`). Returns only payments attributed to this application's project. Read-only — safe to call freely. */
   async listPayments(input: PaymentsListPaymentsInput = {}, options?: AtaiRequestOptions): Promise<PaymentsListPaymentsResult> {
     const body = {
       capability: "payments",
@@ -127,7 +127,7 @@ export class PaymentsCapability {
     return assertPaymentsPage(envelope.data.data)
   }
 
-  /** Read account-level payout records (`payments`/`listPayouts`). Read-only. */
+  /** Platform-account settlements are not application data; runtime application keys cannot call this operation. */
   async listPayouts(input: PaymentsListPayoutsInput = {}, options?: AtaiRequestOptions): Promise<PaymentsListPayoutsResult> {
     const body = {
       capability: "payments",
