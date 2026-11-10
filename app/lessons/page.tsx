@@ -2,21 +2,25 @@ import type { Metadata } from "next"
 import { GraduationCap } from "lucide-react"
 import { AppHeader } from "@/components/app-header"
 import { ComingSoonPage } from "@/components/workspace/coming-soon"
-import { LessonCard } from "@/components/lessons/lesson-card"
+import { LessonsLibrary, type LessonStageSection } from "@/components/lessons/lessons-library"
 import { getCurrentUser } from "@/lib/auth/session"
-import { isLessonsEnabledForUser } from "@/lib/marketing/feature-flags"
-import { lessonsForStage } from "@/lib/lessons/store"
+import { isLessonsEnabledForUser, isLessonsGloballyEnabled } from "@/lib/marketing/feature-flags"
+import { lessonsForStage, libraryLessonMap } from "@/lib/lessons/store"
+import { listVisibleLessonCategories } from "@/lib/lessons/taxonomy-store"
+import { listPublishedLearningPaths } from "@/lib/lessons/paths-store"
+import { computePathProgress, resolvePathLessons, type LearningPathCard } from "@/lib/lessons/paths"
 import {
-  LESSON_STAGES,
-  LESSON_STAGE_META,
-  type LessonStage,
-  type LibraryLessonView,
-} from "@/lib/lessons/types"
+  completedLessonRefs,
+  inProgressLessonRefs,
+  savedLessonRefs,
+} from "@/lib/lessons/activity"
+import { loadRecentLessonActivity } from "@/lib/lessons/activity-store"
+import { LESSON_STAGES, type LibraryLessonView } from "@/lib/lessons/types"
 
 export const metadata: Metadata = {
   title: "Business lessons - Atai",
   description:
-    "A stage-aware curriculum for your business: the core lessons every founder needs, lessons published by Atai, and AI-written personal lessons that read where your business actually stands.",
+    "A free business learning library: stage-aware lessons, topic categories, ordered learning paths, saved lessons, and progress that follows your real business.",
 }
 
 const COMING_SOON = {
@@ -29,9 +33,8 @@ const COMING_SOON = {
 /**
  * The global Business Lessons library. Free, read-only: the in-code core
  * curriculum merged with operator-published lessons, grouped by business
- * stage. Personal AI lessons live on each project's lessons page. When the
- * feature is off for the signed-in founder (or nobody is signed in), this
- * route renders the exact coming-soon experience it always had.
+ * stage, searchable by topic, and organized into learning paths. Personal AI
+ * lessons live on each project's lessons page.
  */
 export default async function LessonsPage() {
   const user = await getCurrentUser()
@@ -39,14 +42,52 @@ export default async function LessonsPage() {
     return <ComingSoonPage {...COMING_SOON} />
   }
 
-  const sections = await Promise.all(
-    LESSON_STAGES.map(async (stage) => ({ stage, lessons: await lessonsForStage(stage) })),
-  )
+  const [sections, categories, paths, lessonsById, activity] = await Promise.all([
+    Promise.all(
+      LESSON_STAGES.map(async (stage) => ({ stage, lessons: await lessonsForStage(stage) })),
+    ) as Promise<LessonStageSection[]>,
+    listVisibleLessonCategories(),
+    listPublishedLearningPaths(),
+    libraryLessonMap(),
+    loadRecentLessonActivity(user.id),
+  ])
+
+  const completedRefs = completedLessonRefs(activity)
+  const pathCards: LearningPathCard[] = paths.map((path) => {
+    const resolved = resolvePathLessons(path, lessonsById)
+    const progress = computePathProgress(
+      resolved.map((lesson) => lesson.id),
+      completedRefs,
+    )
+    const nextLesson = resolved.find((lesson) => !completedRefs.has(lesson.id))
+    return {
+      id: path.id,
+      slug: path.slug,
+      title: path.title,
+      description: path.description,
+      objectives: path.objectives,
+      audience: path.audience,
+      stage: path.stage,
+      difficulty: path.difficulty,
+      estimatedMinutes: path.estimatedMinutes,
+      lessonCount: progress.total,
+      completedCount: progress.completed,
+      percent: progress.percent,
+      nextLessonTitle: nextLesson?.title ?? null,
+      href: path.href,
+    }
+  })
+
+  const resolve = (refs: string[]): LibraryLessonView[] =>
+    refs.map((ref) => lessonsById.get(ref)).filter((lesson): lesson is LibraryLessonView => Boolean(lesson))
+
+  const continueLessons = resolve(inProgressLessonRefs(activity, 4))
+  const savedLessons = resolve(savedLessonRefs(activity).slice(0, 4))
 
   return (
     <main className="min-h-svh bg-background text-foreground">
       <AppHeader />
-      <div className="mx-auto w-full max-w-5xl px-6 pb-20 pt-10 sm:px-8">
+      <div className="mx-auto w-full max-w-5xl px-4 pb-20 pt-10 sm:px-6 lg:px-8">
         <header className="max-w-2xl">
           <p className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
             <GraduationCap className="size-4" /> Business lessons
@@ -55,44 +96,25 @@ export default async function LessonsPage() {
             Learn the next useful thing — right when your business needs it.
           </h1>
           <p className="mt-4 text-base leading-7 text-muted-foreground">
-            The library below follows the journey every business takes: planning, building, live, growing. Each stage
-            holds the core lessons every founder needs plus lessons published by Atai. Your projects also get personal
-            lessons written for where that business actually stands — open a project and choose{" "}
+            A free library for founders: the core lessons every business needs, lessons published by Atai, and ordered
+            learning paths you can follow from idea to growth. Save lessons, mark progress, and search by the problem you
+            are trying to solve. Each project also gets personal AI lessons written for where that business actually
+            stands — open a project and choose{" "}
             <span className="font-medium text-foreground">Business lessons</span>.
           </p>
         </header>
 
-        <div className="mt-10 flex flex-col gap-10">
-          {sections.map(({ stage, lessons }) => (
-            <StageSection key={stage} stage={stage} lessons={lessons} />
-          ))}
+        <div className="mt-10">
+          <LessonsLibrary
+            sections={sections}
+            categories={categories}
+            paths={pathCards}
+            activity={activity}
+            continueLessons={continueLessons}
+            savedLessons={savedLessons}
+          />
         </div>
       </div>
     </main>
-  )
-}
-
-function StageSection({ stage, lessons }: { stage: LessonStage; lessons: LibraryLessonView[] }) {
-  const meta = LESSON_STAGE_META[stage]
-  return (
-    <section aria-labelledby={`stage-${stage}`}>
-      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border pb-3">
-        <h2 id={`stage-${stage}`} className="text-xl font-semibold tracking-tight">
-          {meta.label}
-        </h2>
-        <p className="text-sm text-muted-foreground">{meta.focus}</p>
-      </div>
-      {lessons.length > 0 ? (
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          {lessons.map((lesson) => (
-            <LessonCard key={lesson.id} lesson={lesson} />
-          ))}
-        </div>
-      ) : (
-        <p className="mt-4 rounded-2xl border border-dashed border-border bg-transparent p-5 text-sm leading-6 text-muted-foreground">
-          No lessons in this stage yet.
-        </p>
-      )}
-    </section>
   )
 }

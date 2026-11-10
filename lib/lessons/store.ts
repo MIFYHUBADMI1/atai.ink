@@ -5,7 +5,8 @@ import { AppError } from "@/lib/errors"
 import { logger } from "@/lib/logging/logger"
 import { cryptoId } from "@/lib/store/id"
 import { slugifyResource } from "@/lib/resources/media"
-import { coreLessonsForStage } from "@/lib/lessons/curriculum"
+import { coreLessonsForStage, allCoreLessons } from "@/lib/lessons/curriculum"
+import { LESSON_CATEGORY_FALLBACK } from "@/lib/lessons/taxonomy"
 import type { AdminLessonInput, AdminLessonView, LessonDoc } from "@/lib/lessons/admin-types"
 import type { CuratedLessonView, LibraryLessonView, LessonStage } from "@/lib/lessons/types"
 
@@ -38,6 +39,7 @@ function toCuratedView(doc: LessonDoc): CuratedLessonView {
   return {
     id: doc.id,
     stage: doc.stage,
+    categoryId: doc.categoryId || LESSON_CATEGORY_FALLBACK,
     title: doc.title,
     summary: doc.summary,
     href: `/lessons/${doc.slug}`,
@@ -109,6 +111,24 @@ export function invalidateLessonCache() {
   globalForLessons.__ataiLessonFailure = undefined
 }
 
+/** Every published library lesson (core curriculum + operator lessons). */
+export async function allLibraryLessons(): Promise<LibraryLessonView[]> {
+  const docs = await readPublishedDocs()
+  return [...docs.map(toCuratedView), ...allCoreLessons()]
+}
+
+/** Published lessons indexed by their stable library id — the resolver used
+ * by learning paths and per-user activity. */
+export async function libraryLessonMap(): Promise<Map<string, LibraryLessonView>> {
+  const lessons = await allLibraryLessons()
+  return new Map(lessons.map((lesson) => [lesson.id, lesson]))
+}
+
+/** True only for a lesson a founder can actually open right now. */
+export async function isPublishedLessonRef(ref: string): Promise<boolean> {
+  return (await libraryLessonMap()).has(ref)
+}
+
 // ─── Admin operations ────────────────────────────────────────────────────────
 
 export async function listAdminLessonDocs(): Promise<LessonDoc[]> {
@@ -126,6 +146,7 @@ export function toAdminLessonView(doc: LessonDoc): AdminLessonView {
     id: doc.id,
     slug: doc.slug,
     stage: doc.stage,
+    categoryId: doc.categoryId || LESSON_CATEGORY_FALLBACK,
     format: doc.format,
     title: doc.title,
     summary: doc.summary,

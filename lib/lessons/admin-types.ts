@@ -15,6 +15,7 @@ export interface LessonDoc {
   id: string
   slug: string
   stage: LessonStage
+  categoryId: string
   format: LessonFormat
   title: string
   summary: string

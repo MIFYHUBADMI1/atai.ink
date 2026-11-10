@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { ArrowUpRight, Clock } from "lucide-react"
+import { ArrowUpRight, Bookmark, CircleCheck, Clock } from "lucide-react"
 import {
   LESSON_FORMAT_LABEL,
   type CoreLessonView,
@@ -18,7 +18,17 @@ const DIFFICULTY_STYLE: Record<CoreLessonView["difficulty"], string> = {
   advanced: "text-rose-600 dark:text-rose-400",
 }
 
-export function LessonCard({ lesson }: { lesson: LibraryLessonView }) {
+export function LessonCard({
+  lesson,
+  categoryName,
+  saved = false,
+  completed = false,
+}: {
+  lesson: LibraryLessonView
+  categoryName?: string
+  saved?: boolean
+  completed?: boolean
+}) {
   const curated = isCurated(lesson)
   return (
     <Link
@@ -45,8 +55,18 @@ export function LessonCard({ lesson }: { lesson: LibraryLessonView }) {
         ) : (
           <span className="font-mono uppercase tracking-[0.12em]">Core curriculum</span>
         )}
+        {categoryName ? <span className="min-w-0 truncate">{categoryName}</span> : null}
         {curated && lesson.topics.length > 0 ? (
-          <span className="min-w-0 truncate">{lesson.topics.slice(0, 3).join(" · ")}</span>
+          <span className="min-w-0 truncate">{lesson.topics.slice(0, 2).join(" · ")}</span>
+        ) : null}
+        {completed ? (
+          <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+            <CircleCheck className="size-3" /> Completed
+          </span>
+        ) : saved ? (
+          <span className="inline-flex items-center gap-1 text-primary">
+            <Bookmark className="size-3" /> Saved
+          </span>
         ) : null}
       </p>
     </Link>

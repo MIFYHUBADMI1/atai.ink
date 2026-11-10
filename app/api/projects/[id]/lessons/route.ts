@@ -2,7 +2,7 @@ import { requireUser } from "@/lib/auth/session"
 import { checkRateLimit } from "@/lib/auth/rate-limit"
 import { fail, failInsufficientCredits, handleRouteError, ok } from "@/lib/api/respond"
 import { checkProjectOwnership } from "@/lib/runtime/ownership"
-import { isLessonsEnabledForUser } from "@/lib/marketing/feature-flags"
+import { isLessonsEnabledForUser, isPersonalLessonsEnabledForUser } from "@/lib/marketing/feature-flags"
 import { isFirecrawlConfigured } from "@/lib/integrations/firecrawl/client"
 import {
   getLessonsPackAffordability,
@@ -84,6 +84,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
     return ok({
       enabled: true,
+      personal: isPersonalLessonsEnabledForUser(user.id, user.featurePreferences),
       lessons: lessons.map(viewOfLesson),
       pack,
       archivedCount,
@@ -116,8 +117,12 @@ async function post(req: Request, { params }: { params: Promise<{ id: string }> 
     const ownership = await checkProjectOwnership(user.id, id)
     if (!ownership.ok) return fail("UNAUTHORIZED_PROJECT_ACCESS", "We couldn't find this project.", 404)
 
-    if (!isLessonsEnabledForUser(user.id, user.featurePreferences)) {
-      return fail("FEATURE_DISABLED", "Business lessons are switched off. Turn them on in Settings → Feature switches.", 403)
+    if (!isPersonalLessonsEnabledForUser(user.id, user.featurePreferences)) {
+      return fail(
+        "FEATURE_DISABLED",
+        "Personal AI lessons are switched off right now. The free lesson library is still available.",
+        403,
+      )
     }
     if (!isFirecrawlConfigured()) {
       return fail("RESEARCH_UNAVAILABLE", "The research connection isn't available right now, so lesson packs can't be written.", 503)

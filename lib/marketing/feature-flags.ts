@@ -90,6 +90,32 @@ export function isLessonsEnvBlocked(): boolean {
   return hard === "false" || hard === "0"
 }
 
+/** AI personal lesson packs have their own kill switch: turning generation off
+ * must never take the free curated library down with it. */
+export function isPersonalLessonsEnvBlocked(): boolean {
+  const hard = process.env.LESSONS_AI_ENABLED
+  return hard === "false" || hard === "0"
+}
+
+export function isPersonalLessonsEnabledForUser(
+  userId: string,
+  prefs?: FeaturePreferences,
+): boolean {
+  if (!isLessonsEnabledForUser(userId, prefs)) return false
+  return !isPersonalLessonsEnvBlocked()
+}
+
+/**
+ * Signed-out visitors have no founder preference and no rollout cohort, so the
+ * free library is reachable anonymously only when the operator turns it on at
+ * the deployment level (LESSONS_ENABLED=true). The kill switch always wins.
+ */
+export function isLessonsGloballyEnabled(): boolean {
+  if (isLessonsEnvBlocked()) return false
+  const hard = process.env.LESSONS_ENABLED
+  return hard === "true" || hard === "1"
+}
+
 /**
  * SEO audit flag (Phase 3 — W2). Resolution order:
  *   1. `SEO_AUDIT_ENABLED=false` → hard off for everyone (operator kill switch).

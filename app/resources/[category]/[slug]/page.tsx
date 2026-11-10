@@ -8,6 +8,9 @@ import { ArticleBody } from "@/components/resources/article-body"
 import { MarkdownArticle } from "@/components/resources/markdown-article"
 import { ResourceCard } from "@/components/resources/resource-card"
 import { ResourceFormatIcon } from "@/components/resources/format-icon"
+import { ResourceLessonActivity } from "@/components/lessons/resource-lesson-activity"
+import { TrackedVideoEmbed } from "@/components/lessons/tracked-video-embed"
+import { coreLessonForResource } from "@/lib/lessons/curriculum"
 import { CATEGORY_ACCENT, DIFFICULTY_ACCENT } from "@/components/resources/accents"
 import { AuthTrigger } from "@/components/auth/auth-trigger"
 import { buttonVariants } from "@/components/ui/button"
@@ -97,6 +100,7 @@ export default async function ResourceArticlePage({
   const resource = await getPublicResource(category, slug)
   if (!resource) notFound()
 
+  const coreLesson = coreLessonForResource(`${resource.category}/${resource.slug}`)
   const related = (await relatedPublicResources(resource)).map(summarize)
   const format = resourceFormat(resource)
   const formatLabel = FORMAT_LABEL[format]
@@ -273,20 +277,41 @@ export default async function ResourceArticlePage({
                 ))}
               </ul>
             ) : null}
+            {coreLesson ? (
+              <ResourceLessonActivity
+                lessonRef={coreLesson.id}
+                stage={coreLesson.stage}
+                categoryId={coreLesson.categoryId}
+              />
+            ) : null}
           </header>
 
           {embedUrl ? (
             <figure className="mt-8">
               <div className="aspect-video overflow-hidden rounded-2xl border border-border bg-black">
-                <iframe
-                  src={embedUrl}
-                  title={resource.title}
-                  loading="lazy"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  referrerPolicy="strict-origin-when-cross-origin"
-                  allowFullScreen
-                  className="size-full"
-                />
+                {coreLesson ? (
+                  <TrackedVideoEmbed
+                    src={embedUrl}
+                    title={resource.title}
+                    lessonRef={coreLesson.id}
+                    analytics={{
+                      kind: "core",
+                      stage: coreLesson.stage,
+                      categoryId: coreLesson.categoryId,
+                      surface: "resource_reader",
+                    }}
+                  />
+                ) : (
+                  <iframe
+                    src={embedUrl}
+                    title={resource.title}
+                    loading="lazy"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    referrerPolicy="strict-origin-when-cross-origin"
+                    allowFullScreen
+                    className="size-full"
+                  />
+                )}
               </div>
               {resource.youtubeUrl ? (
                 <figcaption className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">

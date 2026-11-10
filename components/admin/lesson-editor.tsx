@@ -2,6 +2,7 @@
 
 import { useRef, useState, type ChangeEvent } from "react"
 import Link from "next/link"
+import useSWR from "swr"
 import { Check, ExternalLink, FileDown, Film, Image as ImageIcon, Link2, Loader2, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -16,13 +17,16 @@ import {
   type LessonStage,
 } from "@/lib/lessons/types"
 import { LESSON_STATUSES, type AdminLessonView } from "@/lib/lessons/admin-types"
+import { LESSON_CATEGORY_SEED, type LessonCategoryView } from "@/lib/lessons/taxonomy"
 import { formatFileSize } from "@/lib/resources/media"
+import { jsonFetcher } from "@/lib/client/api"
 import { cn } from "@/lib/utils"
 
 type FormState = {
   title: string
   slug: string
   stage: LessonStage
+  categoryId: string
   format: LessonFormat
   summary: string
   topicsText: string
@@ -77,6 +81,7 @@ function blankForm(): FormState {
     title: "",
     slug: "",
     stage: "planning",
+    categoryId: LESSON_CATEGORY_SEED[0].id,
     format: "article",
     summary: "",
     topicsText: "",
@@ -97,6 +102,7 @@ function formFromLesson(lesson: AdminLessonView): FormState {
     title: lesson.title,
     slug: lesson.slug,
     stage: lesson.stage,
+    categoryId: lesson.categoryId || LESSON_CATEGORY_SEED[0].id,
     format: lesson.format,
     summary: lesson.summary,
     topicsText: lesson.topics.join(", "),
@@ -148,6 +154,11 @@ export function LessonEditor({
   const [file, setFile] = useState<LessonFile | null>(lesson?.file ?? null)
   const fileInput = useRef<HTMLInputElement>(null)
   const isPersisted = Boolean(lesson)
+  const { data: categoryData } = useSWR<{ items: LessonCategoryView[] }>(
+    "/api/admin/lesson-categories",
+    jsonFetcher,
+  )
+  const categories = categoryData?.items ?? LESSON_CATEGORY_SEED
 
   const needsContent = form.format === "article"
   const needsImage = form.format === "image"
@@ -220,6 +231,7 @@ export function LessonEditor({
         title: form.title.trim(),
         slug: form.slug.trim() || undefined,
         stage: form.stage,
+        categoryId: form.categoryId,
         format: form.format,
         summary: form.summary.trim(),
         topics: splitList(form.topicsText),
@@ -352,6 +364,20 @@ export function LessonEditor({
                 {LESSON_STAGES.map((id) => (
                   <option key={id} value={id}>
                     {LESSON_STAGE_META[id].label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span className={labelClass}>Topic category</span>
+              <select
+                value={form.categoryId}
+                onChange={(event) => update("categoryId", event.target.value)}
+                className={selectClass}
+              >
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
                   </option>
                 ))}
               </select>

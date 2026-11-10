@@ -1,4 +1,5 @@
 import { getResourceById } from "@/lib/resources"
+import { categoryForCoreLesson } from "@/lib/lessons/taxonomy"
 import type { CoreLessonView, LessonStage } from "@/lib/lessons/types"
 
 /**
@@ -95,6 +96,7 @@ function toView(entry: CoreCurriculumEntry, stage: LessonStage): CoreLessonView 
   return {
     id: `core:${entry.id}`,
     stage,
+    categoryId: categoryForCoreLesson(entry.id),
     title: resource.title,
     summary: resource.description,
     href: `/resources/${resource.category}/${resource.slug}`,
@@ -118,4 +120,14 @@ export function allCoreLessons(): CoreLessonView[] {
   return (["planning", "building", "live", "growing"] as const).flatMap((stage) =>
     coreLessonsForStage(stage),
   )
+}
+
+/**
+ * The core-curriculum lesson backed by a catalog resource (`category/slug`),
+ * or null when the resource is not part of the curriculum. The resource page
+ * uses this to show save/complete controls for lessons a founder can reach
+ * directly from search or the library.
+ */
+export function coreLessonForResource(resourceId: string): CoreLessonView | null {
+  return allCoreLessons().find((lesson) => lesson.id === `core:${resourceId}`) ?? null
 }

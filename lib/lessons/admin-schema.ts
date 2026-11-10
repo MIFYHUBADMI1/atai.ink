@@ -1,6 +1,9 @@
 import { z } from "zod"
 import { LESSON_FORMATS, LESSON_STAGES } from "@/lib/lessons/types"
+import { LESSON_CATEGORY_FALLBACK, LESSON_CATEGORY_SEED } from "@/lib/lessons/taxonomy"
 import { isHttpsUrl, youTubeVideoId } from "@/lib/resources/media"
+
+const lessonCategoryIds = LESSON_CATEGORY_SEED.map((category) => category.id) as [string, ...string[]]
 
 const optionalHttpsUrl = z
   .string()
@@ -36,6 +39,7 @@ export const lessonObjectSchema = z.object({
   title: z.string().trim().min(3, "Give the lesson a title.").max(160),
   slug: optionalText(80),
   stage: z.enum(LESSON_STAGES),
+  categoryId: z.enum(lessonCategoryIds).default(LESSON_CATEGORY_FALLBACK),
   format: z.enum(LESSON_FORMATS),
   summary: z.string().trim().min(20, "Describe the lesson in at least 20 characters.").max(400),
   topics: tagList,

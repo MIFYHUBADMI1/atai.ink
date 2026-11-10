@@ -1,15 +1,19 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import { ArrowUpRight, Clock, FileDown, GraduationCap, PlayCircle } from "lucide-react"
+import { ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Clock, FileDown, GraduationCap, PlayCircle } from "lucide-react"
 import { AppHeader } from "@/components/app-header"
 import { ComingSoonPage } from "@/components/workspace/coming-soon"
 import { MarkdownArticle } from "@/components/resources/markdown-article"
+import { LessonActivityBar } from "@/components/lessons/lesson-activity-bar"
+import { TrackedVideoEmbed } from "@/components/lessons/tracked-video-embed"
 import { getCurrentUser } from "@/lib/auth/session"
 import { isLessonsEnabledForUser } from "@/lib/marketing/feature-flags"
-import { getPublishedLessonBySlug } from "@/lib/lessons/store"
+import { allLibraryLessons, getPublishedLessonBySlug } from "@/lib/lessons/store"
+import { listPublishedLearningPaths } from "@/lib/lessons/paths-store"
+import { loadLessonActivity } from "@/lib/lessons/activity-store"
 import { LESSON_STAGE_META } from "@/lib/lessons/types"
-import { formatFileSize, youTubeEmbedUrl, youTubeThumbnailUrl } from "@/lib/resources/media"
+import { formatFileSize, markdownHeadings, youTubeEmbedUrl, youTubeThumbnailUrl } from "@/lib/resources/media"
 
 const COMING_SOON = {
   kicker: "Business & growth",
@@ -47,6 +51,23 @@ export default async function LessonReaderPage({ params }: { params: Promise<{ s
   const thumbnail = youTubeThumbnailUrl(lesson.youtubeUrl)
   const stage = LESSON_STAGE_META[lesson.stage]
 
+  const [activity, allLessons, paths] = await Promise.all([
+    loadLessonActivity(user.id, [lesson.id]),
+    allLibraryLessons(),
+    listPublishedLearningPaths(),
+  ])
+  const activityState = activity[lesson.id]
+  const toc = markdownHeadings(lesson.contentMarkdown)
+  const stageLessons = allLessons.filter((item) => item.stage === lesson.stage)
+  const lessonIndex = stageLessons.findIndex((item) => item.id === lesson.id)
+  const previousLesson = lessonIndex > 0 ? stageLessons[lessonIndex - 1] : null
+  const nextLesson =
+    lessonIndex >= 0 && lessonIndex < stageLessons.length - 1 ? stageLessons[lessonIndex + 1] : null
+  const relatedLessons = allLessons
+    .filter((item) => item.id !== lesson.id && item.categoryId === lesson.categoryId)
+    .slice(0, 3)
+  const lessonPaths = paths.filter((path) => path.lessonRefs.includes(lesson.id)).slice(0, 2)
+
   return (
     <main className="min-h-svh bg-background text-foreground">
       <AppHeader />
@@ -78,20 +99,66 @@ export default async function LessonReaderPage({ params }: { params: Promise<{ s
             </span>
             <span>Published by Atai</span>
             {lesson.topics.length > 0 ? <span>{lesson.topics.slice(0, 4).join(" · ")}</span> : null}
+            {lesson.updatedAt ? <span>Updated {lesson.updatedAt}</span> : null}
           </p>
+          <LessonActivityBar
+            lessonRef={lesson.id}
+            initialSaved={Boolean(activityState?.saved)}
+            initialCompleted={Boolean(activityState?.completed)}
+            analytics={{
+              kind: "curated",
+              stage: lesson.stage,
+              categoryId: lesson.categoryId,
+              surface: "lesson_reader",
+            }}
+          />
+          {lessonPaths.length > 0 ? (
+            <p className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              Part of:
+              {lessonPaths.map((path) => (
+                <Link
+                  key={path.id}
+                  href={path.href}
+                  className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 font-medium text-foreground hover:bg-accent"
+                >
+                  <BookOpen className="size-3" /> {path.title}
+                </Link>
+              ))}
+            </p>
+          ) : null}
         </header>
+
+        {toc.length >= 3 ? (
+          <nav aria-label="On this page" className="mt-6 rounded-2xl border border-border bg-muted/30 p-4">
+            <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">On this page</p>
+            <ol className="mt-2 grid gap-1.5 sm:grid-cols-2">
+              {toc.map((heading) => (
+                <li key={heading.id}>
+                  <a
+                    href={`#${heading.id}`}
+                    className="text-sm leading-6 text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                  >
+                    {heading.text}
+                  </a>
+                </li>
+              ))}
+            </ol>
+          </nav>
+        ) : null}
 
         {embedUrl ? (
           <figure className="mt-8">
             <div className="aspect-video overflow-hidden rounded-2xl border border-border bg-black">
-              <iframe
+              <TrackedVideoEmbed
                 src={embedUrl}
                 title={lesson.title}
-                loading="lazy"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                referrerPolicy="strict-origin-when-cross-origin"
-                allowFullScreen
-                className="size-full"
+                lessonRef={lesson.id}
+                analytics={{
+                  kind: "curated",
+                  stage: lesson.stage,
+                  categoryId: lesson.categoryId,
+                  surface: "lesson_reader",
+                }}
               />
             </div>
             {lesson.youtubeUrl ? (
@@ -161,6 +228,59 @@ export default async function LessonReaderPage({ params }: { params: Promise<{ s
             <MarkdownArticle markdown={lesson.contentMarkdown} />
           </div>
         ) : null}
+
+        {relatedLessons.length > 0 ? (
+          <section aria-labelledby="related-lessons" className="mt-12 border-t border-border pt-8">
+            <h2 id="related-lessons" className="text-lg font-semibold tracking-tight">
+              Related lessons
+            </h2>
+            <ul className="mt-3 divide-y divide-border rounded-2xl border border-border bg-card">
+              {relatedLessons.map((related) => (
+                <li key={related.id}>
+                  <Link
+                    href={related.href}
+                    className="group flex min-w-0 items-start justify-between gap-3 px-4 py-3 hover:bg-accent/40"
+                  >
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium leading-6">{related.title}</span>
+                      <span className="mt-0.5 line-clamp-2 block text-sm leading-6 text-muted-foreground">
+                        {related.summary}
+                      </span>
+                    </span>
+                    <ArrowUpRight className="mt-1 size-4 shrink-0 text-muted-foreground group-hover:text-primary" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
+        <nav aria-label="Lesson navigation" className="mt-10 grid gap-3 border-t border-border pt-6 sm:grid-cols-2">
+          {previousLesson ? (
+            <Link
+              href={previousLesson.href}
+              className="group rounded-2xl border border-border bg-card p-4 transition-colors hover:border-primary/30 hover:bg-accent/30"
+            >
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                <ArrowLeft className="size-3.5" /> Previous
+              </span>
+              <span className="mt-1 block text-sm font-medium leading-6">{previousLesson.title}</span>
+            </Link>
+          ) : (
+            <span aria-hidden />
+          )}
+          {nextLesson ? (
+            <Link
+              href={nextLesson.href}
+              className="group rounded-2xl border border-border bg-card p-4 text-right transition-colors hover:border-primary/30 hover:bg-accent/30 sm:col-start-2"
+            >
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                Next <ArrowRight className="size-3.5" />
+              </span>
+              <span className="mt-1 block text-sm font-medium leading-6">{nextLesson.title}</span>
+            </Link>
+          ) : null}
+        </nav>
 
         <div className="mt-12 rounded-2xl border border-border bg-muted/40 p-5">
           <p className="text-sm font-semibold">Keep going</p>

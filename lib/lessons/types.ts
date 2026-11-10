@@ -57,6 +57,7 @@ export interface LessonSource {
 export interface CoreLessonView {
   id: string
   stage: LessonStage
+  categoryId: string
   title: string
   summary: string
   href: string
@@ -71,6 +72,7 @@ export interface CoreLessonView {
 export interface CuratedLessonView {
   id: string
   stage: LessonStage
+  categoryId: string
   title: string
   summary: string
   href: string
