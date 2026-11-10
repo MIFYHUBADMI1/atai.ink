@@ -364,6 +364,8 @@ export type LedgerTransactionType =
   | "fork_purchase"
   | "fork_royalty"
   | "ai_collaboration"
+  | "ad_campaign_charge"
+  | "ad_campaign_refund"
   | RuntimeLedgerTransactionType
 
 // ─── Payment States ──────────────────────────────────────────────────────────

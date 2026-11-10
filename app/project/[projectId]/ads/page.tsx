@@ -1,6 +1,11 @@
 import Link from "next/link"
 import { AdsBench } from "@/components/marketing/ads-bench"
+import { AdRequestList } from "@/components/marketing/ad-request-list"
+import { AdRequestPanel } from "@/components/marketing/ad-request-panel"
 import { AdsNav, isAdsTab, type AdsTab } from "@/components/marketing/ads-nav"
+import { PromoteWizard } from "@/components/marketing/promote-wizard"
+import { PROMOTE_SERVICE_INTRO } from "@/lib/marketing/ads/request-shared"
+import { listAdRequests } from "@/lib/marketing/ads/requests"
 import {
   AdsStrategyPanel,
   type AdStrategyView,
@@ -81,11 +86,11 @@ export default async function ProjectAdsPage({
   searchParams,
 }: {
   params: Promise<{ projectId: string }>
-  searchParams: Promise<{ tab?: string }>
+  searchParams: Promise<{ tab?: string; request?: string }>
 }) {
   const { projectId } = await params
-  const { tab: rawTab } = await searchParams
-  const tab: AdsTab = isAdsTab(rawTab) ? rawTab : "overview"
+  const { tab: rawTab, request: requestId } = await searchParams
+  const tab: AdsTab = isAdsTab(rawTab) ? rawTab : requestId ? "promote" : "overview"
 
   const project = await requireOwnedProject(projectId, `/project/${projectId}/ads`)
   const user = await getCurrentUser()
@@ -124,6 +129,8 @@ export default async function ProjectAdsPage({
           <StrategyTab projectId={project.id} user={user} project={project} />
         ) : tab === "bench" ? (
           <BenchTab userId={user.id} projectId={project.id} />
+        ) : tab === "promote" ? (
+          <PromoteTab project={project} user={user} requestId={requestId} />
         ) : (
           <HistoryTab projectId={project.id} />
         )}
@@ -251,6 +258,15 @@ async function OverviewTab({
             <span className="text-sm font-medium">Draft ad creatives</span>
             <span className="text-xs leading-5 text-muted-foreground">
               Platform copy and image creatives from your offer — you place them yourself.
+            </span>
+          </Link>
+          <Link
+            href={`/project/${projectId}/ads?tab=promote`}
+            className="flex h-full flex-col gap-1 rounded-2xl border border-border bg-card p-4 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <span className="text-sm font-medium">Request Atai promotion</span>
+            <span className="text-xs leading-5 text-muted-foreground">
+              Ask Atai&apos;s team to review your live business and send a quotation. Execution is manual.
             </span>
           </Link>
           {campaignsOn ? (
@@ -467,5 +483,57 @@ async function HistoryTab({ projectId }: { projectId: string }) {
         </ol>
       )}
     </section>
+  )
+}
+
+async function PromoteTab({
+  project,
+  user,
+  requestId,
+}: {
+  project: Awaited<ReturnType<typeof requireOwnedProject>>
+  user: NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>
+  requestId?: string
+}) {
+  const requests = await listAdRequests(project.id)
+  if (requestId) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Link href={`/project/${project.id}/ads?tab=promote`} className="text-sm text-muted-foreground hover:text-foreground">
+          ← All promotion requests
+        </Link>
+        <AdRequestPanel projectId={project.id} requestId={requestId} />
+      </div>
+    )
+  }
+
+  const liveUrl = project.deployment?.productionUrl ?? ""
+  return (
+    <div className="flex flex-col gap-8">
+      <section className="rounded-2xl border border-border bg-card p-5">
+        <h2 className="text-lg font-semibold tracking-tight">Promote my business with Atai</h2>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{PROMOTE_SERVICE_INTRO}</p>
+        <p className="mt-2 text-xs italic leading-5 text-muted-foreground">
+          Atai does not automatically publish ads or operate your advertising accounts. Submitting is free.
+          You are charged only if you later approve a quotation.
+        </p>
+      </section>
+      <section className="flex flex-col gap-3">
+        <h3 className="text-base font-semibold">Your requests</h3>
+        <AdRequestList projectId={project.id} requests={requests} />
+      </section>
+      <PromoteWizard
+        projectId={project.id}
+        prefill={{
+          name: project.name,
+          liveUrl,
+          description: project.idea ?? "",
+          targetAudience: "",
+          pricingInfo: "",
+          stage: project.state,
+          contact: user.email,
+        }}
+      />
+    </div>
   )
 }

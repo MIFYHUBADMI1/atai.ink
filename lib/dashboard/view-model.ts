@@ -363,6 +363,7 @@ export function buildNotificationInbox(input: {
   creditsAvailable?: number
   now?: number
   featureRequests?: { id: string; title: string; status: string; updatedAt: number }[]
+  adRequests?: { id: string; projectId: string; title: string; status: string; updatedAt: number }[]
   maxItems?: number
   maxFeatureRequests?: number
 }): InboxItem[] {
@@ -442,6 +443,31 @@ export function buildNotificationInbox(input: {
       actionLabel: copy.action,
       severity: request.status === "shipped" ? "success" : request.status === "declined" ? "neutral" : "info",
       kind: "update",
+    })
+  }
+
+  const adCopy: Record<string, { title: string; action: string; kind: InboxItem["kind"]; severity: InboxItem["severity"] }> = {
+    submitted: { title: "Atai received your promotion request", action: "View request", kind: "progress", severity: "info" },
+    under_review: { title: "Atai is reviewing your promotion request", action: "View request", kind: "progress", severity: "info" },
+    needs_info: { title: "Atai needs more information for your promotion", action: "Reply", kind: "action", severity: "warning" },
+    awaiting_approval: { title: "A promotion quotation is ready", action: "Review quotation", kind: "action", severity: "warning" },
+    awaiting_payment: { title: "Confirm payment for your promotion", action: "Pay with credits", kind: "action", severity: "warning" },
+    approved: { title: "Your promotion is approved", action: "View campaign", kind: "update", severity: "success" },
+    in_progress: { title: "Atai is running your promotion", action: "View progress", kind: "progress", severity: "info" },
+    completed: { title: "Your promotion is complete", action: "View report", kind: "update", severity: "success" },
+  }
+  for (const request of input.adRequests ?? []) {
+    const copy = adCopy[request.status]
+    if (!copy) continue
+    items.push({
+      id: `adreq-${request.id}-${request.status}-${request.updatedAt}`,
+      at: request.updatedAt,
+      title: copy.title,
+      description: request.title,
+      href: `/project/${request.projectId}/ads?tab=promote&request=${encodeURIComponent(request.id)}`,
+      actionLabel: copy.action,
+      severity: copy.severity,
+      kind: copy.kind,
     })
   }
 

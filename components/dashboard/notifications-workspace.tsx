@@ -70,6 +70,11 @@ export function NotificationsWorkspace() {
     jsonFetcher,
     { revalidateOnFocus: true, dedupingInterval: 30_000 },
   )
+  const { data: adsMine } = useSWR<{ requests: { id: string; projectId: string; projectName: string; status: string; updatedAt: number }[] }>(
+    session ? "/api/me/ads/requests" : null,
+    jsonFetcher,
+    { revalidateOnFocus: true, dedupingInterval: 30_000 },
+  )
   const { hydrated, read, dismissed, markRead, markUnread, markAllRead, dismiss, restore, clearDismissed } =
     useNotificationState()
 
@@ -84,9 +89,16 @@ export function NotificationsWorkspace() {
         emailVerified: session?.user.emailVerified ?? true,
         creditsAvailable: session?.credits.available,
         featureRequests: mine?.items,
+        adRequests: adsMine?.requests.map((request) => ({
+          id: request.id,
+          projectId: request.projectId,
+          title: request.projectName,
+          status: request.status,
+          updatedAt: request.updatedAt,
+        })),
         ...SHOW_ALL,
       }),
-    [projects, session, mine],
+    [projects, session, mine, adsMine],
   )
 
   const live = useMemo(() => selectNotifications({ items, read, dismissed }), [items, read, dismissed])

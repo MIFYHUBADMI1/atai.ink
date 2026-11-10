@@ -1302,6 +1302,10 @@ function formatTransactionReason(type: LedgerTransactionType, metadata?: Record<
       return "Promotional grant"
     case "admin_adjustment":
       return "Admin adjustment"
+    case "ad_campaign_charge":
+      return "Atai promotional campaign"
+    case "ad_campaign_refund":
+      return "Promotional campaign refund"
     case "subscription_expiration":
       return "Subscription credits expired"
     default:

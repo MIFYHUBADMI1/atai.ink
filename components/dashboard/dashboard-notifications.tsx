@@ -37,6 +37,11 @@ export function DashboardNotifications() {
     jsonFetcher,
     { revalidateOnFocus: true, dedupingInterval: 30_000 },
   )
+  const { data: adsMine } = useSWR<{ requests: { id: string; projectId: string; projectName: string; status: string; updatedAt: number }[] }>(
+    session ? "/api/me/ads/requests" : null,
+    jsonFetcher,
+    { revalidateOnFocus: true, dedupingInterval: 30_000 },
+  )
   const { hydrated, read, dismissed, markRead, markAllRead, dismiss, restore } = useNotificationState()
 
   const items = useMemo(
@@ -46,11 +51,18 @@ export function DashboardNotifications() {
         emailVerified: session?.user.emailVerified ?? true,
         creditsAvailable: session?.credits.available,
         featureRequests: mine?.items,
+        adRequests: adsMine?.requests.map((request) => ({
+          id: request.id,
+          projectId: request.projectId,
+          title: request.projectName,
+          status: request.status,
+          updatedAt: request.updatedAt,
+        })),
         // Build the full inbox so the badge and "N more" are honest; only three render below.
         maxItems: 200,
         maxFeatureRequests: 100,
       }),
-    [projects, session, mine],
+    [projects, session, mine, adsMine],
   )
 
   const live = useMemo(() => selectNotifications({ items, read, dismissed }), [items, read, dismissed])
