@@ -7,7 +7,7 @@ import { ComingSoonPage } from "@/components/workspace/coming-soon"
 import { LessonCompletionToggle } from "@/components/lessons/lesson-completion-toggle"
 import { PathProgressTracker } from "@/components/lessons/path-progress-tracker"
 import { getCurrentUser } from "@/lib/auth/session"
-import { isLessonsEnabledForUser } from "@/lib/marketing/feature-flags"
+import { isLessonsEnabledForUser, isLessonsGloballyEnabled } from "@/lib/marketing/feature-flags"
 import { libraryLessonMap } from "@/lib/lessons/store"
 import { getPublishedLearningPath } from "@/lib/lessons/paths-store"
 import { computePathProgress, resolvePathLessons } from "@/lib/lessons/paths"
@@ -35,13 +35,31 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 /**
  * A learning path: an ordered sequence with its objectives, audience, and
  * per-founder progress. Every step is still independently readable — the path
- * is a guide, not a gate.
+ * is a guide, not a gate. Signed-out visitors can read the whole path when the
+ * operator has opened the library; progress controls ask them to sign in.
  */
 export default async function LearningPathPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const user = await getCurrentUser()
-  if (!user || !isLessonsEnabledForUser(user.id, user.featurePreferences)) {
-    return <ComingSoonPage {...COMING_SOON} />
+  const enabled = user
+    ? isLessonsEnabledForUser(user.id, user.featurePreferences)
+    : isLessonsGloballyEnabled()
+  if (!enabled) {
+    return (
+      <ComingSoonPage
+        {...COMING_SOON}
+        action={
+          user ? undefined : (
+            <Link
+              href="/login"
+              className="inline-flex w-fit items-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+            >
+              Sign in
+            </Link>
+          )
+        }
+      />
+    )
   }
 
   const path = await getPublishedLearningPath(slug)
@@ -50,7 +68,7 @@ export default async function LearningPathPage({ params }: { params: Promise<{ s
   const lessonsById = await libraryLessonMap()
   const lessons = resolvePathLessons(path, lessonsById)
   const activity = await loadLessonActivity(
-    user.id,
+    user?.id ?? "",
     lessons.map((lesson) => lesson.id),
   )
   const completedRefs = completedLessonRefs(activity)
@@ -112,6 +130,15 @@ export default async function LearningPathPage({ params }: { params: Promise<{ s
               </dd>
             </div>
           </dl>
+
+          {!user ? (
+            <p className="mt-4 text-sm text-muted-foreground">
+              <a href="/login" className="font-medium text-primary underline-offset-4 hover:underline">
+                Sign in
+              </a>{" "}
+              to save your progress and continue where you stopped.
+            </p>
+          ) : null}
 
           <div className="mt-6 rounded-2xl border border-border bg-muted/40 p-4">
             <p className="text-sm font-semibold">What you will learn</p>
@@ -183,12 +210,14 @@ export default async function LearningPathPage({ params }: { params: Promise<{ s
                       </span>
                     </span>
                   </Link>
-                  <LessonCompletionToggle
-                    lessonRef={lesson.id}
-                    initialCompleted={completed}
-                    stage={lesson.stage}
-                    categoryId={lesson.categoryId}
-                  />
+                  {user ? (
+                    <LessonCompletionToggle
+                      lessonRef={lesson.id}
+                      initialCompleted={completed}
+                      stage={lesson.stage}
+                      categoryId={lesson.categoryId}
+                    />
+                  ) : null}
                 </li>
               )
             })}

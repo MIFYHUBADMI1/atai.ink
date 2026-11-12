@@ -8,7 +8,7 @@ import { MarkdownArticle } from "@/components/resources/markdown-article"
 import { LessonActivityBar } from "@/components/lessons/lesson-activity-bar"
 import { TrackedVideoEmbed } from "@/components/lessons/tracked-video-embed"
 import { getCurrentUser } from "@/lib/auth/session"
-import { isLessonsEnabledForUser } from "@/lib/marketing/feature-flags"
+import { isLessonsEnabledForUser, isLessonsGloballyEnabled } from "@/lib/marketing/feature-flags"
 import { allLibraryLessons, getPublishedLessonBySlug } from "@/lib/lessons/store"
 import { listPublishedLearningPaths } from "@/lib/lessons/paths-store"
 import { loadLessonActivity } from "@/lib/lessons/activity-store"
@@ -33,15 +33,33 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 }
 
 /**
- * Reader for an operator-published business lesson. Same gating as the
- * library: signed-out or feature-off founders see the exact coming-soon
- * experience; the published lesson itself is free to read.
+ * Reader for an operator-published business lesson. The published lesson
+ * itself is free to read; signed-out visitors browse it when the operator has
+ * opened the library at deployment level and get a sign-in cue on the
+ * save/complete controls.
  */
 export default async function LessonReaderPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const user = await getCurrentUser()
-  if (!user || !isLessonsEnabledForUser(user.id, user.featurePreferences)) {
-    return <ComingSoonPage {...COMING_SOON} />
+  const enabled = user
+    ? isLessonsEnabledForUser(user.id, user.featurePreferences)
+    : isLessonsGloballyEnabled()
+  if (!enabled) {
+    return (
+      <ComingSoonPage
+        {...COMING_SOON}
+        action={
+          user ? undefined : (
+            <Link
+              href="/login"
+              className="inline-flex w-fit items-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+            >
+              Sign in
+            </Link>
+          )
+        }
+      />
+    )
   }
 
   const lesson = await getPublishedLessonBySlug(slug)
@@ -52,7 +70,7 @@ export default async function LessonReaderPage({ params }: { params: Promise<{ s
   const stage = LESSON_STAGE_META[lesson.stage]
 
   const [activity, allLessons, paths] = await Promise.all([
-    loadLessonActivity(user.id, [lesson.id]),
+    loadLessonActivity(user?.id ?? "", [lesson.id]),
     allLibraryLessons(),
     listPublishedLearningPaths(),
   ])
@@ -105,6 +123,7 @@ export default async function LessonReaderPage({ params }: { params: Promise<{ s
             lessonRef={lesson.id}
             initialSaved={Boolean(activityState?.saved)}
             initialCompleted={Boolean(activityState?.completed)}
+            authenticated={Boolean(user)}
             analytics={{
               kind: "curated",
               stage: lesson.stage,

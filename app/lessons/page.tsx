@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import Link from "next/link"
 import { GraduationCap } from "lucide-react"
 import { AppHeader } from "@/components/app-header"
 import { ComingSoonPage } from "@/components/workspace/coming-soon"
@@ -34,12 +35,39 @@ const COMING_SOON = {
  * The global Business Lessons library. Free, read-only: the in-code core
  * curriculum merged with operator-published lessons, grouped by business
  * stage, searchable by topic, and organized into learning paths. Personal AI
- * lessons live on each project's lessons page.
+ * lessons live on each project's lessons page. Signed-out visitors browse the
+ * same free library when the operator has opened it at deployment level; the
+ * personal rows simply stay empty until they sign in.
  */
 export default async function LessonsPage() {
   const user = await getCurrentUser()
-  if (!user || !isLessonsEnabledForUser(user.id, user.featurePreferences)) {
-    return <ComingSoonPage {...COMING_SOON} />
+  const enabled = user
+    ? isLessonsEnabledForUser(user.id, user.featurePreferences)
+    : isLessonsGloballyEnabled()
+  if (!enabled) {
+    return (
+      <ComingSoonPage
+        {...COMING_SOON}
+        action={
+          user ? undefined : (
+            <div className="flex flex-wrap items-center gap-3">
+              <Link
+                href="/login"
+                className="inline-flex items-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+              >
+                Sign in
+              </Link>
+              <Link
+                href="/register"
+                className="inline-flex items-center rounded-xl border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              >
+                Create an account
+              </Link>
+            </div>
+          )
+        }
+      />
+    )
   }
 
   const [sections, categories, paths, lessonsById, activity] = await Promise.all([
@@ -49,7 +77,7 @@ export default async function LessonsPage() {
     listVisibleLessonCategories(),
     listPublishedLearningPaths(),
     libraryLessonMap(),
-    loadRecentLessonActivity(user.id),
+    loadRecentLessonActivity(user?.id ?? ""),
   ])
 
   const completedRefs = completedLessonRefs(activity)

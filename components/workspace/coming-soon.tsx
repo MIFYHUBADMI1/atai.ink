@@ -1,4 +1,5 @@
 import Link from "next/link"
+import type { ReactNode } from "react"
 import { AppHeader } from "@/components/app-header"
 
 export function ComingSoonPage({
@@ -7,12 +8,15 @@ export function ComingSoonPage({
   description,
   backHref = "/dashboard",
   backLabel = "Dashboard",
+  action,
 }: {
   kicker: string
   title: string
   description: string
   backHref?: string
   backLabel?: string
+  /** Optional primary step for the visitor (e.g. a sign-in link). */
+  action?: ReactNode
 }) {
   return (
     <main className="min-h-svh bg-background text-foreground">
@@ -24,6 +28,7 @@ export function ComingSoonPage({
         <p className="rounded-2xl border border-border/80 bg-card p-5 text-sm leading-6 text-muted-foreground">
           This part of Atai is on the way. It is not available yet — nothing here is simulated or unfinished behind a fake button.
         </p>
+        {action}
         <Link href={backHref} className="inline-flex w-fit text-sm font-medium text-primary hover:underline">
           ← {backLabel}
         </Link>

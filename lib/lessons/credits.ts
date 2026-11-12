@@ -6,9 +6,9 @@ import "server-only"
  * Mirrors `lib/marketing/seo/credits.ts` exactly: the EXISTING double-entry
  * credit service, charges taken only when a real generation pack is about to
  * run, refunded on failure. The core curriculum and the admin-published
- * library are free — only per-project AI lesson packs cost credits. Ledger
- * entries carry `referenceType: "project"` so project credit metrics account
- * for them with no change.
+ * library are always free; per-project AI packs are free until the operator
+ * sets LESSONS_CREDIT_COST. Ledger entries carry `referenceType: "project"`
+ * so project credit metrics account for them with no change.
  */
 
 import { consumeCredits, grantCredits, getAvailableCredits } from "@/lib/billing/credit-service"
@@ -16,17 +16,19 @@ import { cryptoId } from "@/lib/store/store"
 import { logger } from "@/lib/logging/logger"
 
 /**
- * Default credit cost for one personal lesson pack (three lessons: research +
- * synthesis each). Overridable via LESSONS_CREDIT_COST (integer ≥ 0; 0 makes
- * generation free and skips the ledger entirely). Kept as a local knob rather
- * than editing the shared billing settings schema, so this phase touches no
- * unrelated billing logic.
+ * Credit cost for one personal lesson pack (three lessons: research +
+ * synthesis each). Directive §7 rollout: personalized AI lessons launch FREE
+ * while usage and provider costs are unproven, so the default is 0 — the
+ * ledger is skipped entirely and nothing is charged. Charging is activated by
+ * setting LESSONS_CREDIT_COST (integer ≥ 0); everything downstream
+ * (disclosure on the button and panel, affordability, idempotent charge,
+ * refund on failure) is already wired and just switches on with the number.
  */
 export function getLessonsPackCost(): number {
   const raw = process.env.LESSONS_CREDIT_COST
-  if (raw === undefined) return 40
+  if (raw === undefined) return 0
   const parsed = Number.parseInt(raw, 10)
-  if (!Number.isFinite(parsed) || parsed < 0) return 40
+  if (!Number.isFinite(parsed) || parsed < 0) return 0
   return parsed
 }
 

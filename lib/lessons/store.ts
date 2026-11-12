@@ -90,9 +90,13 @@ async function readPublishedDocs(): Promise<LessonDoc[]> {
 
   try {
     const col = await lessonsCol()
+    // Featured first, then newest — the cap keeps the library (and the
+    // browser payload built from it) bounded no matter how large the
+    // collection grows.
     const docs = (await col
       .find({ status: "published" })
       .sort({ featured: -1, updatedAtMs: -1 })
+      .limit(500)
       .toArray()) as LessonDoc[]
     globalForLessons.__ataiLessonCache = { at: now, docs }
     globalForLessons.__ataiLessonFailure = undefined
