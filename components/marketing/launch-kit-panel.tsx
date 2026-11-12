@@ -2,8 +2,9 @@
 
 import { useCallback, useRef, useState } from "react"
 import Link from "next/link"
-import { Check, Copy, Loader2, RefreshCw, Rocket, Square, TriangleAlert } from "lucide-react"
+import { Check, Loader2, RefreshCw, Rocket, Square, TriangleAlert } from "lucide-react"
 import { postNdjson } from "@/lib/client/api"
+import { LaunchKitDraftView } from "@/components/marketing/launch-kit-draft-view"
 
 export interface LaunchKitItem {
   id: string
@@ -44,7 +45,6 @@ export function LaunchKitPanel({
   const [error, setError] = useState<string | null>(null)
   const [creditsAvailable, setCreditsAvailable] = useState(initialCredits)
   const [confirmAll, setConfirmAll] = useState(false)
-  const [copiedId, setCopiedId] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
   const hasAnyItem = slots.some((slot) => slot.item)
@@ -113,16 +113,6 @@ export function LaunchKitPanel({
     },
     [projectId, running, slots],
   )
-
-  async function copyBody(item: LaunchKitItem) {
-    try {
-      await navigator.clipboard.writeText(item.body)
-      setCopiedId(item.id)
-      window.setTimeout(() => setCopiedId((current) => (current === item.id ? null : current)), 1600)
-    } catch {
-      // Clipboard blocked (permissions) — the founder can still select the text.
-    }
-  }
 
   const runIndex = (slot: string) => (running ? running.indexOf(slot) : -1)
   const isRunning = (slot: string) => runIndex(slot) >= 0 && Boolean(running)
@@ -295,30 +285,11 @@ export function LaunchKitPanel({
 
               {slot.item && !active && (
                 <>
-                  <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-foreground">{slot.item.body}</p>
-                  <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
-                    <button
-                      type="button"
-                      onClick={() => void copyBody(slot.item as LaunchKitItem)}
-                      className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted"
-                    >
-                      {copiedId === slot.item.id ? (
-                        <>
-                          <Check className="size-3 text-emerald-500" aria-hidden /> Copied
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="size-3" aria-hidden /> Copy
-                        </>
-                      )}
-                    </button>
-                    {slot.item.creditsCharged > 0 && (
-                      <span className="font-mono text-[10px] text-muted-foreground">{slot.item.creditsCharged} credits</span>
-                    )}
-                    <span className="text-[10px] text-muted-foreground">AI draft — review before you post</span>
+                  <LaunchKitDraftView projectId={projectId} slot={slot.slot} label={slot.label} item={slot.item} />
+                  <div className="mt-3 flex flex-wrap items-center justify-end border-t border-border pt-3">
                     <Link
                       href={`/project/${projectId}/studio`}
-                      className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                      className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
                     >
                       Open in Studio <span aria-hidden>→</span>
                     </Link>
