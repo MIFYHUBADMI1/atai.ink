@@ -79,8 +79,10 @@ export function ProjectCard({ project, onDeleted }: { project: ProjectSummary; o
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this project?</AlertDialogTitle>
             <AlertDialogDescription>
-              This permanently removes <span className="font-medium text-foreground">{title}</span> and its entire
-              build history. This can&apos;t be undone.
+              This permanently removes <span className="font-medium text-foreground">{title}</span>, its build
+              history and project workspace data, and revokes its Atai runtime keys. Financial and audit records
+              are retained. Hosted apps, external files, domains and subscriptions are not removed or cancelled;
+              shut them down separately. This can&apos;t be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

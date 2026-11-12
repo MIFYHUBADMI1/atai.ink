@@ -158,8 +158,10 @@ function DeleteDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>Delete this business?</AlertDialogTitle>
           <AlertDialogDescription>
-            This permanently removes <span className="font-medium text-foreground">{title}</span> and all
-            its data, build history, and deployment records. This cannot be undone.
+            This permanently removes <span className="font-medium text-foreground">{title}</span>, its build
+            history and project workspace data, and revokes its Atai runtime keys. Financial and audit records
+            are retained. Hosted apps, external files, domains and subscriptions are not removed or cancelled;
+            shut them down separately. This cannot be undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

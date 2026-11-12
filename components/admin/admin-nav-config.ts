@@ -11,6 +11,7 @@ import {
   Scale,
   LayoutDashboard,
   Lightbulb,
+  Megaphone,
   MessageSquare,
   Package,
   Receipt,
@@ -55,6 +56,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
       { href: "/admin/runtime/pricing", label: "Runtime pricing", icon: BarChart3, description: "Runtime plan and usage pricing." },
       { href: "/admin/infrastructure", label: "Infrastructure", icon: Database, description: "Storage, plans, sync, and cost." },
       { href: "/admin/planning-runs", label: "Planning runs", icon: Workflow, description: "Build-planning pipeline observability." },
+      { href: "/admin/ads", label: "Advertising", icon: Megaphone, description: "Promotion requests, quotations, and manual execution." },
     ],
   },
   {
@@ -91,6 +93,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     items: [
       { href: "/admin/resources", label: "Resources", icon: BookOpen, description: "Publish guides, tutorials, roadmaps, PDFs, images, and videos." },
       { href: "/admin/lessons", label: "Business lessons", icon: GraduationCap, description: "Stage-tagged lessons merged into the founder libraries." },
+      { href: "/admin/learning", label: "Learning structure", icon: Route, description: "Learning paths and the topic categories founders filter by." },
       { href: "/admin/feature-requests", label: "Feature requests", icon: Lightbulb, description: "Demand, review, and status." },
       { href: "/admin/feedback", label: "Doc feedback", icon: MessageSquare, description: "Documentation thumbs and comments." },
     ],
