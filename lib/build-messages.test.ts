@@ -16,6 +16,7 @@ const ctx = {
 }
 
 const corpus = getBuildMessages(ctx)
+const bareCorpus = getBuildMessages({})
 
 describe("build message corpus", () => {
   it("stays large enough that a long build never repeats", () => {
@@ -68,5 +69,40 @@ describe("stage resolution", () => {
     expect(stageForServerStage("deploy").id).toBe("release")
     expect(stageForServerStage("mystery", 85).id).toBe("optimization")
     expect(stageForServerStage(undefined, 50).id).toBe("backend")
+  })
+})
+
+/**
+ * The build screen narrates work the squads genuinely do. It must never claim a
+ * measurement, a study, or an outcome that was never produced — that was audit
+ * finding G. These guards keep the removed classes of claim from creeping back.
+ */
+describe("build message honesty guards", () => {
+  const FORBIDDEN: Array<{ claim: string; pattern: RegExp }> = [
+    { claim: "fabricated counts of users, tests or interviews", pattern: /\b\d[\d,]*\+?\s+(real\s+|potential\s+)?(users|customers|respondents|interviews|edge cases|test cases)\b/i },
+    { claim: "invented research speed", pattern: /in 0?\.\d+\s?(seconds|ms|milliseconds)/i },
+    { claim: "invented throughput", pattern: /\d[\d,]*\s?(lines per second|words per minute)\b/i },
+    { claim: "claimed competitor war-gaming", pattern: /war-gam/i },
+    { claim: "claimed profit or revenue outcome", pattern: /profitable at scale|will be profitable|guaranteed (sales|revenue|customers|income|profit)/i },
+    { claim: "invented market sizing", pattern: /\bTAM\b|\$\s?\d+(\.\d+)?\s?(B|bn|billion|million)\b/i },
+    { claim: "invented uptime or SLA figure", pattern: /9\d\.\d+\s?%|zero single points of failure/i },
+    { claim: "claimed completed live testing", pattern: /tested with (real|live) (card|user|traffic)/i },
+    { claim: "claimed a benchmark it did not run", pattern: /metrics don'?t lie|exceeds (them )?in every category|better than most shipped apps\. (verified|confirmed)/i },
+    { claim: "claims work the platform cannot verify", pattern: /\b(200 real users|closed two leaks|47 times|3 days on)\b/i },
+  ]
+
+  const allMessages = [...corpus, ...bareCorpus]
+
+  for (const { claim, pattern } of FORBIDDEN) {
+    it(`never contains ${claim}`, () => {
+      const offenders = allMessages.filter((message) => pattern.test(message))
+      expect(offenders, offenders.join("\n")).toEqual([])
+    })
+  }
+
+  it("keeps the three audit-named sentences out of the corpus for good", () => {
+    for (const phrase of ["200 real users", "unit economics — profitable", "war-gamed"]) {
+      expect(corpus.some((message) => message.includes(phrase)), phrase).toBe(false)
+    }
   })
 })
