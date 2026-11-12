@@ -112,3 +112,39 @@ export function cofounderMessage(
 ): CofounderConversationMessage {
   return { id: cryptoId(), role, content, at: Date.now(), ...(action ? { action } : {}) }
 }
+
+/** Bounded multi-turn memory for the workspace agent (Phase 0 W4 / D-02).
+ * At most this many recent whole messages are replayed into a turn. */
+export const MAX_HISTORY_MESSAGES = 12
+/** Soft character ceiling for the replayed transcript. Older whole messages
+ * are trimmed to stay under it; the most recent turn always survives. */
+export const MAX_HISTORY_CHARS = 12_000
+
+/**
+ * Render prior conversation turns into a compact, role-labelled transcript for
+ * replay into the agent prompt. The caller passes ONLY earlier turns (the
+ * current founder message is persisted after the model call, so it is never in
+ * this list) — this helper does not deduplicate the current message.
+ *
+ * Each message is flattened to a single line so a prior turn cannot pose as a
+ * structural prompt delimiter; the prompt layer wraps the result as untrusted
+ * content. Bounds trim the OLDEST messages first, keeping recent continuity.
+ */
+export function buildHistoryBlock(messages: CofounderConversationMessage[]): string {
+  if (!messages?.length) return ""
+  const recent = messages.slice(-MAX_HISTORY_MESSAGES)
+  const lines: string[] = []
+  let used = 0
+  // Walk newest → oldest so the most recent context always survives the bound.
+  for (let i = recent.length - 1; i >= 0; i--) {
+    const m = recent[i]
+    const content = (m.content ?? "").replace(/\s+/g, " ").trim()
+    if (!content) continue
+    const role = m.role === "user" ? "Founder" : m.role === "assistant" ? "You" : "System"
+    const line = `${role}: ${content}`
+    if (lines.length && used + line.length > MAX_HISTORY_CHARS) break
+    lines.unshift(line)
+    used += line.length
+  }
+  return lines.join("\n")
+}

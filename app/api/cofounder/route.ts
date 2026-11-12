@@ -74,6 +74,9 @@ async function post(req: Request) {
       user: { id: user.id, name: user.name, email: user.email, emailVerified: user.emailVerified },
       message,
       conversationId: conversation.id,
+      // User-scoped prior turns (loaded above). The current message is persisted
+      // after the model call, so it is never duplicated into this history.
+      history: conversation.messages,
       ...(safeActiveProjectId ? { activeProjectId: safeActiveProjectId } : {}),
       ...(currentRoute ? { currentRoute } : {}),
       ...(currentSurface ? { currentSurface } : {}),
