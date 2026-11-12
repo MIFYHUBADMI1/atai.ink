@@ -19,10 +19,19 @@ import type {
   ContentItemDoc,
   MarketAssetBrief,
   MarketAssetMedia,
+  MarketAssetResearch,
   MarketAssetRuntime,
   MarketAssetRuntimeCall,
 } from "@/lib/types/db"
 import { deriveBrandVoice } from "./generator"
+import { getBrandProfile, brandContextLines } from "./brand"
+import { readValuePropositionText } from "@/lib/analysis/plan-sections"
+import {
+  buildSuggestionMessages,
+  deriveStudioAudience,
+  parseSuggestion,
+  type MarketSuggestion,
+} from "./market-suggestion"
 import {
   RECOMMENDED_SPEECH_MODEL,
   RECOMMENDED_SPEECH_VOICE,
@@ -190,6 +199,12 @@ export interface GenerateMarketInput extends MarketBrief {
   /** Founder's raw kit inputs (e.g. the ads bench offer/audience) persisted for prefill. */
   kitInput?: Record<string, string>
   /**
+   * Live-research evidence (competition snapshots): the queries run and every
+   * sanitized source the analysis drew from, persisted with the asset so the
+   * founder can audit every claim against its reference.
+   */
+  research?: MarketAssetResearch
+  /**
    * Authoritative system + user messages for kit services that own their
    * prompt shape (competition). When set, the studio's per-kind template is
    * bypassed entirely — no KIND_INSTRUCTION, no 2,000-character brief cap on
@@ -221,6 +236,8 @@ export interface MarketContentView {
   media?: MarketAssetMedia
   /** Founder's raw kit inputs, present on kit-stamped items that carry them. */
   kitInput?: Record<string, string>
+  /** Live-research evidence behind the analysis (competition snapshots). */
+  research?: MarketAssetResearch
   runtime: {
     keySource: "project_api_key" | "workspace"
     keyLabel: string
@@ -269,6 +286,7 @@ export async function generateMarketContent(input: GenerateMarketInput): Promise
     ...(input.quality ? { quality: input.quality } : {}),
     ...(input.voiceStyle ? { voiceStyle: input.voiceStyle } : {}),
     ...(input.durationSeconds ? { durationSeconds: input.durationSeconds } : {}),
+    ...(input.instructions ? { instructions: clean(input.instructions, 2000) } : {}),
   }
 
   if (input.kind === "image" || input.kind === "video") {
@@ -395,6 +413,7 @@ export async function generateMarketContent(input: GenerateMarketInput): Promise
     ...(input.kit ? { kit: input.kit } : {}),
     ...(input.kitSlot ? { kitSlot: input.kitSlot } : {}),
     ...(input.kitInput ? { kitInput: input.kitInput } : {}),
+    ...(input.research ? { research: input.research } : {}),
     createdAt: now,
     updatedAt: now,
   }
@@ -464,11 +483,130 @@ async function generateTextBody(input: {
   return text.content
 }
 
+// ─── Suggestions ────────────────────────────────────────────────────────────
+
+export interface MarketSuggestionResult {
+  suggestion: MarketSuggestion
+  creditsCharged: number
+  model?: string
+}
+
+/**
+ * Ask the project's own runtime for ONE concrete creative direction.
+ *
+ * This is a PROPOSAL, not an asset: nothing is persisted and nothing is
+ * published. The client applies it to the studio form and the founder decides
+ * what to keep. Charged like any other runtime call.
+ */
+export async function suggestMarketContent(input: {
+  userId: string
+  projectId: string
+  kind: MarketContentKind
+  ask?: string
+  instructions?: string
+}): Promise<MarketSuggestionResult> {
+  if (!isMarketContentKind(input.kind)) throw new AppError("VALIDATION")
+
+  const project = await store.getProject(input.projectId)
+  if (!project || project.userId !== input.userId) {
+    throw new AppError("UNAUTHORIZED_PROJECT_ACCESS")
+  }
+
+  const { voice: brandVoice } = deriveBrandVoice(project.specification)
+  const { lines: brandLines } = brandContextLines(await getBrandProfile(input.projectId))
+  const context = await getMarketStudioContext(input.projectId)
+
+  const identity = await resolveProjectRuntimeIdentity({
+    userId: input.userId,
+    projectId: input.projectId,
+    capability: "ai.text",
+  })
+
+  const { system, prompt } = buildSuggestionMessages({
+    kind: input.kind,
+    projectName: project.name,
+    brandVoice,
+    brandLines,
+    audience: context.audience,
+    ...(input.ask ? { ask: input.ask } : {}),
+    ...(input.instructions ? { instructions: input.instructions } : {}),
+  })
+
+  const result = await callRuntime(identity, {
+    capability: "ai.text",
+    operation: "chat",
+    input: {
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: prompt },
+      ],
+      temperature: 0.8,
+      max_tokens: 800,
+    },
+  })
+
+  const text = readText(result.response)
+  if (!text) throw new AppError("AI_UNAVAILABLE")
+
+  let suggestion: MarketSuggestion
+  try {
+    suggestion = parseSuggestion(text.content)
+  } catch (e) {
+    logger.warn("marketing.studio.market", "suggestion could not be parsed", {
+      projectId: input.projectId,
+      kind: input.kind,
+      message: e instanceof Error ? e.message : String(e),
+    })
+    throw new AppError("AI_UNAVAILABLE")
+  }
+
+  logger.info("marketing.studio.market", "suggestion produced", {
+    projectId: input.projectId,
+    kind: input.kind,
+    creditsCharged: result.creditsCharged,
+  })
+
+  return {
+    suggestion,
+    creditsCharged: result.creditsCharged,
+    ...(text.model ? { model: text.model } : {}),
+  }
+}
+
+/**
+ * What the studio already knows about this business, so the form can start
+ * filled instead of blank. Every value here is the founder's own words or the
+ * plan's — the origin travels with it so the UI can say where it came from.
+ */
+export interface MarketStudioContext {
+  /** The audience the form starts with (empty when nothing is known yet). */
+  audience: string
+  /** Where that audience came from — "Brand settings", "Your plan", or "". */
+  audienceOrigin: string
+  /** The plan's value proposition, when the plan has one. */
+  valueProposition: string
+}
+
+export async function getMarketStudioContext(projectId: string): Promise<MarketStudioContext> {
+  const [project, brand] = await Promise.all([
+    store.getProject(projectId),
+    getBrandProfile(projectId),
+  ])
+  const prefill = deriveStudioAudience({
+    brandAudience: brand?.audience ?? null,
+    targetUsers: project?.specification?.targetUsers ?? [],
+  })
+  return {
+    audience: prefill.audience,
+    audienceOrigin: prefill.origin,
+    valueProposition: readValuePropositionText(project?.specification).trim(),
+  }
+}
+
 /**
  * Poll an existing video job. Charged like any runtime call; updates the stored
  * asset's status/output rather than creating a second asset.
- */
-export async function pollMarketVideo(input: {
+ */export async function pollMarketVideo(input: {
   userId: string
   projectId: string
   contentId: string
@@ -616,6 +754,7 @@ export async function getMarketStudioState(userId: string, projectId: string) {
   }
 
   const identity = await resolveProjectRuntimeIdentity({ userId, projectId, capability: "ai.text" })
+  const context = await getMarketStudioContext(projectId)
   return {
     capabilities,
     creditsAvailable: available,
@@ -624,6 +763,7 @@ export async function getMarketStudioState(userId: string, projectId: string) {
       label: identity.keyLabel,
     },
     textConfigured: Boolean(all["ai.text"]?.configured),
+    context,
   }
 }
 
@@ -711,6 +851,7 @@ function toBriefDoc(brief: MarketBrief): MarketAssetBrief {
     ...(brief.aspectRatio ? { aspectRatio: brief.aspectRatio } : {}),
     ...(brief.durationSeconds ? { durationSeconds: brief.durationSeconds } : {}),
     ...(brief.voiceStyle ? { voiceStyle: brief.voiceStyle } : {}),
+    ...(brief.instructions ? { instructions: brief.instructions } : {}),
   }
 }
 
@@ -735,6 +876,7 @@ function toView(doc: ContentItemDoc, options: { includeMedia: boolean }): Market
     updatedAt: doc.updatedAt,
     ...(media ? { media } : {}),
     ...(doc.kitInput ? { kitInput: doc.kitInput } : {}),
+    ...(doc.research ? { research: doc.research } : {}),
     runtime: {
       keySource: doc.runtime?.keySource ?? "workspace",
       keyLabel: doc.runtime?.keyLabel ?? "Workspace session",

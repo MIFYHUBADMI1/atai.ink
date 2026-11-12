@@ -95,6 +95,8 @@ export interface MarketBrief {
   durationSeconds?: MarketVideoDuration
   /** Optional pre-written voiceover script (voice kind only). */
   script?: string
+  /** Optional extra direction from the founder for this generation. */
+  instructions?: string
 }
 
 export interface MarketKindMeta {
@@ -264,6 +266,8 @@ export function buildMarketMessages(input: {
     `Channels: ${channels}`,
   ]
   if (brief) parts.push(`Founder brief:\n${brief}`)
+  const instructions = clean(input.brief.instructions ?? "", 2000)
+  if (instructions) parts.push(`Extra direction from the founder (follow it):\n${instructions}`)
   parts.push(`Now write the deliverable. ${KIND_INSTRUCTION[input.kind]}`)
 
   return { system, prompt: parts.join("\n\n") }
@@ -280,10 +284,12 @@ export function buildVisualPrompt(input: {
   const aspect = input.brief.aspectRatio ?? (input.kind === "video" ? "16:9" : "1:1")
   const voice = clean(input.brandVoice, 900)
   const subject = clean(input.brief.brief, 2000)
+  const instructions = clean(input.brief.instructions ?? "", 2000)
   const common = [
     `Professional marketing ${input.kind} for the product "${clean(input.projectName, 200)}".`,
     `Subject and scene: ${subject || "a clear, premium product-focused scene"}.`,
     voice ? `Brand and visual direction: ${voice}.` : "",
+    instructions ? `Extra direction from the founder: ${instructions}.` : "",
     `Mood: ${tone}.`,
     `Composition: designed for a ${aspect} frame with a strong focal point and uncluttered space.`,
     "No text overlays, no logos, no watermarks, no user-interface chrome.",

@@ -24,7 +24,12 @@ import {
   getMarketStudioState,
   listMarketContent,
   pollMarketVideo,
+  suggestMarketContent,
 } from "@/lib/marketing/studio/market-service"
+import {
+  MARKET_SUGGESTION_MAX_ASK,
+  MARKET_SUGGESTION_MAX_INSTRUCTIONS,
+} from "@/lib/marketing/studio/market-suggestion"
 
 /**
  * Market & Grow AI studio endpoint.
@@ -35,10 +40,23 @@ import {
  * this project's own assets.
  */
 
+const KIND_ENUM = z.enum([
+  "copy",
+  "email",
+  "social",
+  "timeline",
+  "blog",
+  "brief",
+  "image",
+  "voice",
+  "video",
+])
+
 const BaseGenerateSchema = z
   .object({
-    kind: z.enum(["copy", "email", "social", "timeline", "blog", "brief", "image", "voice", "video"]),
+    kind: KIND_ENUM,
     brief: z.string().max(2000).default(""),
+    title: z.string().max(200).optional(),
     tone: z.enum(MARKET_TONES).optional(),
     language: z.enum(MARKET_LANGUAGES).optional(),
     channel: z.enum(MARKET_CHANNELS).optional(),
@@ -52,11 +70,24 @@ const BaseGenerateSchema = z
       .union([z.literal(4), z.literal(6), z.literal(8)])
       .optional(),
     script: z.string().max(4000).optional(),
+    instructions: z.string().max(MARKET_SUGGESTION_MAX_INSTRUCTIONS).optional(),
+  })
+  .strict()
+
+const SuggestSchema = z
+  .object({
+    action: z.literal("suggest"),
+    kind: KIND_ENUM,
+    /** What the founder asked for, in their own words (optional). */
+    ask: z.string().max(MARKET_SUGGESTION_MAX_ASK).optional(),
+    /** The founder's standing direction for the AI (optional). */
+    instructions: z.string().max(MARKET_SUGGESTION_MAX_INSTRUCTIONS).optional(),
   })
   .strict()
 
 const PostSchema = z.discriminatedUnion("action", [
   BaseGenerateSchema.extend({ action: z.literal("generate") }).strict(),
+  SuggestSchema,
   z.object({ action: z.literal("pollVideo"), contentId: z.string().min(1).max(80) }).strict(),
 ])
 
@@ -110,13 +141,6 @@ async function post(req: Request, { params }: { params: Promise<{ id: string }> 
     const user = await requireUser()
     const { id } = await params
 
-    await checkRateLimit({
-      action: "market_studio_generate",
-      identifier: user.id,
-      limit: 30,
-      windowMs: 60 * 60 * 1000,
-    })
-
     const ownership = await checkProjectOwnership(user.id, id)
     if (!ownership.ok) return fail("UNAUTHORIZED_PROJECT_ACCESS", "We couldn't find this project.", 404)
 
@@ -129,6 +153,15 @@ async function post(req: Request, { params }: { params: Promise<{ id: string }> 
       return fail("VALIDATION", "Please check the brief and try again.", 422)
     }
 
+    // Suggestions and generations are metered separately so asking for an idea
+    // never eats the budget for building the asset.
+    await checkRateLimit({
+      action: parsed.data.action === "suggest" ? "market_studio_suggest" : "market_studio_generate",
+      identifier: user.id,
+      limit: parsed.data.action === "suggest" ? 60 : 30,
+      windowMs: 60 * 60 * 1000,
+    })
+
     if (parsed.data.action === "pollVideo") {
       const item = await pollMarketVideo({
         userId: user.id,
@@ -136,6 +169,27 @@ async function post(req: Request, { params }: { params: Promise<{ id: string }> 
         contentId: parsed.data.contentId,
       })
       return ok(item)
+    }
+
+    if (parsed.data.action === "suggest") {
+      const readiness = capabilityReady("ai.text")
+      if (!readiness.ready) {
+        return fail(
+          "AI_UNAVAILABLE",
+          readiness.missing.length > 0
+            ? `This capability isn't configured on this deployment (missing ${readiness.missing.join(", ")}).`
+            : "This AI capability isn't wired on this deployment yet.",
+          503,
+        )
+      }
+      const result = await suggestMarketContent({
+        userId: user.id,
+        projectId: id,
+        kind: parsed.data.kind,
+        ...(parsed.data.ask ? { ask: parsed.data.ask } : {}),
+        ...(parsed.data.instructions ? { instructions: parsed.data.instructions } : {}),
+      })
+      return ok(result)
     }
 
     const capabilities = requiredCapabilities(parsed.data.kind)
@@ -157,6 +211,7 @@ async function post(req: Request, { params }: { params: Promise<{ id: string }> 
       projectId: id,
       kind: parsed.data.kind,
       brief: parsed.data.brief,
+      ...(parsed.data.title ? { title: parsed.data.title } : {}),
       ...(parsed.data.tone ? { tone: parsed.data.tone } : {}),
       ...(parsed.data.language ? { language: parsed.data.language } : {}),
       ...(parsed.data.channel ? { channel: parsed.data.channel } : {}),
@@ -168,6 +223,7 @@ async function post(req: Request, { params }: { params: Promise<{ id: string }> 
       ...(parsed.data.voiceStyle ? { voiceStyle: parsed.data.voiceStyle } : {}),
       ...(parsed.data.durationSeconds ? { durationSeconds: parsed.data.durationSeconds } : {}),
       ...(parsed.data.script ? { script: parsed.data.script } : {}),
+      ...(parsed.data.instructions ? { instructions: parsed.data.instructions } : {}),
     })
 
     return ok(item)

@@ -87,7 +87,7 @@ const HONEST_LIMITS: string[] = [
   "Nothing here posts, sends, or publishes — you copy each draft to its channel yourself.",
   "Atai does not collect visitor analytics for your app yet, so there are no visitor, conversion, or revenue numbers; runtime requests are API calls, not visitors.",
   "Paid advertising is planned and quoted on Ads & marketing — execution stays manual, with you in control.",
-  "Competitor suggestions in Resources are AI-generated and unverified; the Competition page states exactly what is known and what is not.",
+  "Competitor suggestions in Resources are AI-generated and unverified. The Competition page can also run live web research on your trigger — sources come back with links and dates, but nothing is verified for you.",
 ]
 
 export function MarketGuide() {
