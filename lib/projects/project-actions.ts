@@ -123,7 +123,12 @@ export async function startProjectBuild(userId: string, projectId: string): Prom
   const requestedProjectId = preparedProjectId.requestedProjectId
 
   const tier = project.specification.complexity ?? classifyComplexity(project.specification)
-  const creditsNeeded = await getBuildCost(tier)
+  // Price an initial build through the same authority as the automatic pipeline
+  // (lib/analysis/pipeline.ts) and POST /api/projects/[id]/build, so one project
+  // cannot cost two different amounts depending on who started it. Follow-up
+  // edits keep getBuildCost — they are a separate, flat-priced product (§6.7).
+  const pipelineMode = project.pipelineMode ?? "legacy"
+  const creditsNeeded = await getTierCost(tier, pipelineMode)
   const run: BuildRun = {
     id: cryptoId(),
     userId,

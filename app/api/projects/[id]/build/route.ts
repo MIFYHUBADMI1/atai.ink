@@ -2,9 +2,8 @@ import { requireUser } from "@/lib/auth/session"
 import { store, cryptoId } from "@/lib/store/store"
 import { fail, failInsufficientCredits, handleRouteError, ok } from "@/lib/api/respond"
 import { checkRateLimit } from "@/lib/auth/rate-limit"
-import { getBuildCost } from "@/lib/billing/build-auth"
 import { reserveCredits, releaseReservation, getAvailableCredits } from "@/lib/billing/credit-service"
-import { classifyComplexity } from "@/lib/credits/credits"
+import { classifyComplexity, getTierCost } from "@/lib/credits/credits"
 import { launchProject, isTotalumConfigured } from "@/lib/integrations/totalum/service"
 import { TotalumError } from "@/lib/integrations/totalum/errors"
 import { prepareRequestedProjectId } from "@/lib/projects/project-actions"
@@ -72,9 +71,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
     const requestedProjectId = preparedProjectId.requestedProjectId
 
-    // 1. Determine tier and reserve credits.
+    // 1. Determine tier and reserve credits. Price with the project's pipeline
+    // mode so the manual path charges exactly what the automatic pipeline
+    // (lib/analysis/pipeline.ts) and the Build button display for the same
+    // project — a heavy-mode project must not be quoted heavy and charged legacy.
     const tier = project.specification.complexity ?? classifyComplexity(project.specification)
-    const creditsNeeded = await getBuildCost(tier)
+    const pipelineMode = project.pipelineMode ?? "legacy"
+    const creditsNeeded = await getTierCost(tier, pipelineMode)
     const run: BuildRun = {
       id: cryptoId(),
       userId,
@@ -109,7 +112,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       })
     }
 
-    const reserved = await reserveCredits({ userId, amount: creditsNeeded, buildId: run.id, reason: `${tier.charAt(0).toUpperCase() + tier.slice(1)} application build`, projectId: id })
+    const modeLabel = pipelineMode === "heavy" ? "Heavy Mode" : "Legacy"
+    const reserved = await reserveCredits({ userId, amount: creditsNeeded, buildId: run.id, reason: `${tier.charAt(0).toUpperCase() + tier.slice(1)} application build (${modeLabel})`, projectId: id })
     if (!reserved) {
       await store.updateBuildRun(run.id, { status: "failed", error: "insufficient credits" })
       await store.updateProject(id, { state: project.state })

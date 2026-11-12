@@ -14,6 +14,7 @@ import {
   formatUSD,
   WELCOME_BONUS_CREDITS,
 } from "@/lib/billing/config"
+import { getBuildTierCosts, getDeploymentCosts } from "@/lib/billing/runtime-config"
 import { PlanCard } from "@/components/billing/plan-card"
 import { CheckoutButton } from "@/components/billing/checkout-button"
 import { AuthTrigger } from "@/components/auth/auth-trigger"
@@ -21,10 +22,11 @@ import { AuthTrigger } from "@/components/auth/auth-trigger"
 /**
  * Pricing is where a first-time owner decides whether Atai is for them, so the
  * page leads with what the business gets and puts credit arithmetic after it.
- * Numbers come from `lib/billing/config.ts`; only the framing lives here.
+ * Build and publishing costs are read from the billing authority
+ * (`lib/billing/runtime-config.ts`, which defaults to `lib/billing/config.ts`)
+ * so the numbers shown here are the numbers a build actually charges. Plan and
+ * top-up prices are fixed in config; only the framing lives here.
  */
-
-const SIMPLE_CREDITS = BUILD_TIERS.simple.credits
 
 /** Per plan: what a founder can actually do with it this month. */
 const PLAN_GUIDANCE: Record<string, { bestFor: string; outcomes: string[] }> = {
@@ -252,6 +254,20 @@ export default async function PricingPage() {
     // Not logged in — show register buttons
   }
 
+  // Read the same billing authority the build pipeline charges from, so an
+  // admin price override shows here instead of drifting from the real charge.
+  const [buildTierCosts, deploymentCosts] = await Promise.all([
+    getBuildTierCosts(),
+    getDeploymentCosts(),
+  ])
+  const simpleCredits = buildTierCosts.simple
+  const deployCost = deploymentCosts.deployCost
+  const tierCosts: Record<string, number> = buildTierCosts
+  const launches = LAUNCHES.map((entry) => ({
+    ...entry,
+    tier: { ...entry.tier, credits: tierCosts[entry.tier.id] },
+  }))
+
   return (
     <main className="min-h-screen bg-background text-foreground">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(pricingStructuredData) }} />
@@ -326,7 +342,7 @@ export default async function PricingPage() {
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">Plans</p>
           <h2 className="mt-3 text-3xl font-semibold tracking-tight">Pick by how much work you need done</h2>
           <p className="mx-auto mt-3 max-w-2xl text-muted-foreground text-pretty">
-            A simple launch is {SIMPLE_CREDITS.toLocaleString()} credits, so the plans below
+            A simple launch is {simpleCredits.toLocaleString()} credits, so the plans below
             differ mainly in how much of your business&rsquo;s work they cover each month.
             Not sure? Start on Free, then pick a plan when you see the plan for your business.
           </p>
@@ -375,7 +391,7 @@ export default async function PricingPage() {
           </div>
 
           <div className="grid gap-6 lg:grid-cols-3">
-            {LAUNCHES.map(({ tier, icon: Icon, headline, forLine, gets, popular }) => (
+            {launches.map(({ tier, icon: Icon, headline, forLine, gets, popular }) => (
               <div
                 key={tier.id}
                 className={`relative flex flex-col rounded-xl border p-6 ${popular ? "border-primary/50 bg-card shadow-lg shadow-primary/5" : "border-border bg-card"}`}
@@ -427,7 +443,7 @@ export default async function PricingPage() {
           </div>
 
           <p className="mx-auto mt-8 max-w-3xl text-center text-sm leading-6 text-muted-foreground text-pretty">
-            Publishing takes 500 credits on top of the build, and starting from a
+            Publishing takes {deployCost.toLocaleString()} credits on top of the build, and starting from a
             business someone already published can cost far less than building your own.
           </p>
         </div>
@@ -556,7 +572,7 @@ export default async function PricingPage() {
             </ul>
 
             <div className="mt-auto pt-5">
-              <p className="mb-3 text-sm"><span className="font-medium">Publishing your build</span> <span className="float-right font-mono">500 {CREDIT_UNIT_NAME}</span></p>
+              <p className="mb-3 text-sm"><span className="font-medium">Publishing your build</span> <span className="float-right font-mono">{deployCost.toLocaleString()} {CREDIT_UNIT_NAME}</span></p>
               <AuthTrigger view="signup" next="/pricing" className="block w-full text-center py-2.5 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
                 Start free
               </AuthTrigger>
@@ -597,7 +613,7 @@ export default async function PricingPage() {
             </ul>
 
             <div className="mt-auto pt-5">
-              <p className="mb-3 text-sm"><span className="font-medium">Publishing your build</span> <span className="float-right font-mono">500 {CREDIT_UNIT_NAME}</span></p>
+              <p className="mb-3 text-sm"><span className="font-medium">Publishing your build</span> <span className="float-right font-mono">{deployCost.toLocaleString()} {CREDIT_UNIT_NAME}</span></p>
               <AuthTrigger view="signup" next="/pricing" className="block w-full text-center py-2.5 rounded-lg text-sm font-medium border border-border hover:bg-accent transition-colors">
                 Get started
               </AuthTrigger>
