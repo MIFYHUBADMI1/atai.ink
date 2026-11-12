@@ -2,6 +2,7 @@ import Link from "next/link"
 import { DashboardShell } from "@/components/dashboard/dashboard-shell"
 import { GrowthOverviewView } from "@/components/marketing/growth-overview-view"
 import { LaunchKitPanel } from "@/components/marketing/launch-kit-panel"
+import { MarketGuide } from "@/components/marketing/market-guide"
 import { SeoAuditPanel } from "@/components/marketing/seo-audit-panel"
 import { ProjectComingSoon } from "@/components/workspace/project-coming-soon"
 import { getCurrentUser } from "@/lib/auth/session"
@@ -56,31 +57,39 @@ export default async function ProjectMarketPage({ params }: { params: Promise<{ 
       {/* One responsive content column for the whole page: phone gutters,
           comfortable desktop measure, and consistent spacing between blocks. */}
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 pb-12 pt-6 sm:gap-8 sm:px-6 sm:pt-8 lg:px-8 lg:pb-16">
-        {launchKit && (
-          <LaunchKitPanel
-            projectId={project.id}
-            slots={launchKit.slots}
-            creditsAvailable={launchKit.creditsAvailable}
-            textReady={launchKit.textReady}
-          />
-        )}
-        <GrowthOverviewView overview={overview} />
-        <Link
-          href={`/project/${project.id}/studio`}
-          className="group flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:flex-row sm:items-center sm:justify-between sm:p-5"
-        >
-          <span className="flex min-w-0 flex-col gap-1">
-            <span className="text-base font-semibold tracking-tight sm:text-lg">AI Marketing Studio</span>
-            <span className="text-sm leading-6 text-muted-foreground">
-              Draft social posts, emails, website copy, blog articles and strategy briefs, save them in your content
-              library, and plan when to use them. Drafts are never published automatically.
+        <MarketGuide />
+        <div data-tour="launch-kit">
+          {launchKit && (
+            <LaunchKitPanel
+              projectId={project.id}
+              slots={launchKit.slots}
+              creditsAvailable={launchKit.creditsAvailable}
+              textReady={launchKit.textReady}
+            />
+          )}
+        </div>
+        <div data-tour="overview">
+          <GrowthOverviewView overview={overview} />
+        </div>
+        <div data-tour="studio">
+          <Link
+            href={`/project/${project.id}/studio`}
+            className="group flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:flex-row sm:items-center sm:justify-between sm:p-5"
+          >
+            <span className="flex min-w-0 flex-col gap-1">
+              <span className="text-base font-semibold tracking-tight sm:text-lg">AI Marketing Studio</span>
+              <span className="text-sm leading-6 text-muted-foreground">
+                Draft social posts, emails, website copy, blog articles and strategy briefs, save them in your content
+                library, and plan when to use them. Drafts are never published automatically.
+              </span>
             </span>
-          </span>
-          <span className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-primary">
-            Open studio <span aria-hidden>→</span>
-          </span>
-        </Link>
-        <SeoAuditPanel
+            <span className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-primary">
+              Open studio <span aria-hidden>→</span>
+            </span>
+          </Link>
+        </div>
+        <div data-tour="seo">
+          <SeoAuditPanel
           projectId={project.id}
           state={{
             enabled: seoEnabled,
@@ -101,7 +110,8 @@ export default async function ProjectMarketPage({ params }: { params: Promise<{ 
                 }
               : null,
           }}
-        />
+          />
+        </div>
       </div>
     </DashboardShell>
   )
