@@ -45,6 +45,10 @@ import {
   type MarketChannel,
   type MarketContentKind,
 } from "@/lib/marketing/studio/market-content"
+import {
+  SUGGESTION_FIELD_LABELS,
+  type MarketSuggestion,
+} from "@/lib/marketing/studio/market-suggestion"
 
 /**
  * Market & Grow — AI content studio (client).
@@ -69,6 +73,19 @@ interface StudioState {
   key: { source: "project_api_key" | "workspace"; label: string }
   textConfigured: boolean
   items: MarketItem[]
+  /** What the studio already knows about this business, so the form can start filled. */
+  context?: {
+    audience: string
+    audienceOrigin: string
+    valueProposition: string
+  }
+}
+
+/** A proposal from Atai, plus what it cost. */
+interface SuggestionResult {
+  suggestion: MarketSuggestion
+  creditsCharged: number
+  model?: string
 }
 
 interface MarketCall {
@@ -141,6 +158,18 @@ function formatNumber(value: number): string {
   return value.toLocaleString("en-US")
 }
 
+/** Which form fields a proposal filled — shown under the suggestion. */
+function appliedFieldLabels(proposal: MarketSuggestion): string[] {
+  const labels = ["Title", "Brief"]
+  for (const [field, value] of Object.entries(proposal)) {
+    if (field === "title" || field === "brief" || field === "rationale") continue
+    if (value === undefined || value === null || value === "") continue
+    const label = SUGGESTION_FIELD_LABELS[field]
+    if (label) labels.push(label)
+  }
+  return labels
+}
+
 function formatWhen(ms: number): string {
   return new Date(ms).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })
 }
@@ -185,17 +214,24 @@ export function MarketStudio({
   const [stateError, setStateError] = useState<string | null>(null)
   const [kind, setKind] = useState<MarketContentKind>("copy")
   const [brief, setBrief] = useState("")
+  const [title, setTitle] = useState("")
   const [tone, setTone] = useState<string>("professional")
   const [language, setLanguage] = useState<string>("English")
   const [channel, setChannel] = useState<MarketChannel>("instagram")
   const [channels, setChannels] = useState<MarketChannel[]>(["instagram", "linkedin"])
   const [audience, setAudience] = useState("")
+  const [audienceOrigin, setAudienceOrigin] = useState<string | null>(null)
   const [length, setLength] = useState<string>("medium")
   const [aspectRatio, setAspectRatio] = useState<string>("1:1")
   const [quality, setQuality] = useState<string>("medium")
   const [voiceStyle, setVoiceStyle] = useState<string>("warm")
   const [duration, setDuration] = useState<number>(4)
   const [script, setScript] = useState("")
+  const [instructions, setInstructions] = useState("")
+  const [instructionsOpen, setInstructionsOpen] = useState(false)
+  const [ask, setAsk] = useState("")
+  const [suggesting, setSuggesting] = useState(false)
+  const [suggestion, setSuggestion] = useState<SuggestionResult | null>(null)
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<MarketItem | null>(null)
@@ -204,6 +240,10 @@ export function MarketStudio({
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const resultRef = useRef<HTMLDivElement | null>(null)
+  /** True once the founder edits the audience — their words win from then on. */
+  const audienceTouched = useRef(false)
+  /** Mirror of the audience field so async loads never overwrite the founder. */
+  const audienceValue = useRef("")
 
   const loadState = useCallback(
     async (quiet: boolean) => {
@@ -218,6 +258,14 @@ export function MarketStudio({
         }
         setState(json.data as StudioState)
         setStateError(null)
+        // Start the form filled with what Atai already knows, unless the
+        // founder has written their own audience.
+        const context = (json.data as StudioState).context
+        if (context?.audience && !audienceTouched.current && !audienceValue.current.trim()) {
+          audienceValue.current = context.audience
+          setAudience(context.audience)
+          setAudienceOrigin(context.audienceOrigin || null)
+        }
       } catch (e) {
         setStateError(e instanceof Error ? e.message : "Couldn't load the content studio.")
       } finally {
@@ -250,9 +298,16 @@ export function MarketStudio({
     !outOfCredits &&
     (brief.trim().length > 0 || (kind === "voice" && script.trim().length > 0))
 
+  // A suggestion is a text proposal — it only needs the text capability, not
+  // the capability that renders the asset it describes.
+  const textReady = Boolean(readiness.get("ai.text")?.available)
+  const canSuggest =
+    enabled && Boolean(state?.enabled) && textReady && !suggesting && !outOfCredits
+
   function resetForKind(next: MarketContentKind) {
     setKind(next)
     setError(null)
+    setSuggestion(null)
     if (next === "image") setAspectRatio("1:1")
     if (next === "video") setAspectRatio("16:9")
   }
@@ -261,6 +316,72 @@ export function MarketStudio({
     setChannels((current) =>
       current.includes(value) ? current.filter((entry) => entry !== value) : [...current, value],
     )
+  }
+
+  /** Copy a proposal into the form. Every field stays editable afterwards. */
+  function applySuggestion(proposal: MarketSuggestion) {
+    setTitle(proposal.title)
+    setBrief(proposal.brief)
+    if (proposal.audience) {
+      audienceValue.current = proposal.audience
+      setAudience(proposal.audience)
+      setAudienceOrigin(null)
+    }
+    if (proposal.tone) setTone(proposal.tone)
+    if (proposal.channel) setChannel(proposal.channel as MarketChannel)
+    if (proposal.channels?.length) setChannels(proposal.channels as MarketChannel[])
+    if (proposal.length) setLength(proposal.length)
+    if (proposal.aspectRatio) setAspectRatio(proposal.aspectRatio)
+    if (proposal.quality) setQuality(proposal.quality)
+    if (proposal.durationSeconds) setDuration(proposal.durationSeconds)
+    if (proposal.voiceStyle) setVoiceStyle(proposal.voiceStyle)
+    if (proposal.script) setScript(proposal.script)
+  }
+
+  async function suggest() {
+    if (!canSuggest) return
+    setSuggesting(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/market/studio`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "suggest",
+          kind,
+          ...(ask.trim() ? { ask: ask.trim() } : {}),
+          ...(instructions.trim() ? { instructions: instructions.trim() } : {}),
+        }),
+      })
+      const json = await res.json().catch(() => null)
+      if (!res.ok || !json?.ok) {
+        const code = json?.error?.code as string | undefined
+        const message = json?.error?.message as string | undefined
+        throw new Error(
+          code === "INSUFFICIENT_CREDITS" || code === "runtime_insufficient_entitlement"
+            ? message || "Not enough credits for a suggestion. Add credits and try again."
+            : message || "Couldn't get a suggestion. Please try again.",
+        )
+      }
+      const data = json.data as SuggestionResult
+      setSuggestion(data)
+      applySuggestion(data.suggestion)
+      setState((current) =>
+        current
+          ? {
+              ...current,
+              creditsAvailable:
+                current.creditsAvailable === null
+                  ? null
+                  : Math.max(0, current.creditsAvailable - data.creditsCharged),
+            }
+          : current,
+      )
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't get a suggestion. Please try again.")
+    } finally {
+      setSuggesting(false)
+    }
   }
 
   async function generate() {
@@ -275,6 +396,8 @@ export function MarketStudio({
         tone,
         language,
       }
+      if (title.trim()) payload.title = title.trim()
+      if (instructions.trim()) payload.instructions = instructions.trim()
       if (audience.trim()) payload.audience = audience.trim()
       if (kind === "social") {
         payload.channels = channels.length > 0 ? channels : [channel]
@@ -530,6 +653,124 @@ export function MarketStudio({
                 <p className="mt-0.5 text-[11px] text-muted-foreground">{meta.description}</p>
               </div>
 
+              {/* Ask Atai for a direction, then let it fill the form */}
+              <div className="rounded-xl border border-border bg-background p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles aria-hidden className="size-3.5 text-primary" />
+                    <Label htmlFor="market-ask" className="text-xs">
+                      Ask Atai for an idea
+                    </Label>
+                    <span className="text-[10px] text-muted-foreground">Optional</span>
+                  </div>
+                  {suggestion ? (
+                    <span className="text-[10px] text-muted-foreground">
+                      {formatNumber(suggestion.creditsCharged)} credits · filled the form below
+                    </span>
+                  ) : null}
+                </div>
+                <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
+                  Say what you want, or leave it empty and Atai proposes one from your plan and brand
+                  settings. It writes the title, the brief and the settings for this format — you can
+                  still change any of them.
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <Input
+                    id="market-ask"
+                    value={ask}
+                    onChange={(event) => setAsk(event.target.value)}
+                    placeholder={`e.g. a launch video for our free trial`}
+                    maxLength={600}
+                    disabled={suggesting}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void suggest()}
+                    disabled={!canSuggest}
+                    className="shrink-0 gap-1.5"
+                  >
+                    {suggesting ? (
+                      <Loader2 aria-hidden className="animate-spin" />
+                    ) : (
+                      <Wand2 aria-hidden />
+                    )}
+                    {suggesting ? "Thinking…" : "Suggest"}
+                  </Button>
+                </div>
+                {!textReady ? (
+                  <p className="mt-2 text-[10px] text-muted-foreground">
+                    Suggestions need the text capability, which isn&apos;t configured on this deployment.
+                  </p>
+                ) : null}
+                {suggestion ? (
+                  <div className="mt-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
+                    <p className="text-xs font-medium">{suggestion.suggestion.title}</p>
+                    {suggestion.suggestion.rationale ? (
+                      <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
+                        {suggestion.suggestion.rationale}
+                      </p>
+                    ) : null}
+                    <p className="mt-2 whitespace-pre-wrap text-[11px] leading-5">
+                      {suggestion.suggestion.brief}
+                    </p>
+                    <p className="mt-2 text-[10px] text-muted-foreground">
+                      Filled into: {appliedFieldLabels(suggestion.suggestion).join(", ")}.
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="market-title">Title (optional)</Label>
+                <Input
+                  id="market-title"
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  placeholder="Leave blank and Atai names it after the format"
+                  maxLength={200}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Label htmlFor="market-instructions" className="text-xs">
+                    AI instructions (optional)
+                  </Label>
+                  {!instructionsOpen ? (
+                    <button
+                      type="button"
+                      onClick={() => setInstructionsOpen(true)}
+                      className="text-[11px] font-medium underline underline-offset-4"
+                    >
+                      Add instructions
+                    </button>
+                  ) : null}
+                </div>
+                {instructionsOpen ? (
+                  <>
+                    <Textarea
+                      id="market-instructions"
+                      value={instructions}
+                      onChange={(event) => {
+                        setInstructions(event.target.value)
+                        setInstructionsOpen(true)
+                      }}
+                      placeholder="e.g. Mention the free trial, keep it under 60 words, no jargon"
+                      maxLength={2000}
+                      rows={3}
+                    />
+                    <p className="text-right text-[10px] text-muted-foreground">
+                      {instructions.length}/2000
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-[11px] leading-5 text-muted-foreground">
+                    Standing direction for Atai — applied to its suggestions and to the final draft.
+                  </p>
+                )}
+              </div>
+
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="market-brief">Brief</Label>
                 <Textarea
@@ -719,10 +960,20 @@ export function MarketStudio({
                 <Input
                   id="market-audience"
                   value={audience}
-                  onChange={(event) => setAudience(event.target.value)}
+                  onChange={(event) => {
+                    audienceTouched.current = true
+                    audienceValue.current = event.target.value
+                    setAudience(event.target.value)
+                    setAudienceOrigin(null)
+                  }}
                   placeholder={`Who should this ${meta.shortLabel.toLowerCase()} speak to?`}
                   maxLength={400}
                 />
+                {audienceOrigin ? (
+                  <p className="text-[10px] text-muted-foreground">
+                    Filled from {audienceOrigin}. Edit it to change who this is for.
+                  </p>
+                ) : null}
               </Field>
 
               {error ? (
