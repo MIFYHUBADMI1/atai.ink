@@ -3,6 +3,7 @@ import { fail, handleRouteError, ok } from "@/lib/api/respond"
 import { checkProjectOwnership } from "@/lib/runtime/ownership"
 import { isMarketStudioEnabled } from "@/lib/marketing/feature-flags"
 import { capabilityAvailability } from "@/lib/runtime/router/adapters/availability"
+import { isFirecrawlConfigured } from "@/lib/integrations/firecrawl/client"
 import { store } from "@/lib/store/store"
 import { AppError } from "@/lib/errors"
 import { withAiProtection } from "@/lib/api/ai-protection"
@@ -12,10 +13,12 @@ import { generateCompetitionSnapshot } from "@/lib/marketing/competition-snapsho
 /**
  * POST /api/projects/[id]/market/competition-snapshot
  *
- * One-click competitor-landscape DRAFT, written strictly from the project's
- * plan. No request body. The response is the usual JSON envelope with the
- * draft item. Atai does not collect live market or competitor data; the draft
- * is planning context and is labelled as such everywhere it is shown.
+ * One live-researched competitor snapshot. The run charges fixed research
+ * credits (refunded if the run fails), derives search queries from the
+ * founder's plan, searches the live web (web pages, news, the research
+ * category, and Alexandria data-tool sources), and writes the analysis
+ * grounded in those sources. Every source is returned with the snapshot so
+ * the founder can verify each claim against its reference. No request body.
  */
 export const POST = withAiProtection("studio", post)
 
@@ -31,6 +34,14 @@ async function post(_req: Request, { params }: { params: Promise<{ id: string }>
       return fail("FEATURE_DISABLED", "The AI content studio isn't available right now.", 403)
     }
 
+    if (!isFirecrawlConfigured()) {
+      return fail(
+        "AI_UNAVAILABLE",
+        "Live web research isn't configured on this deployment yet — the snapshot needs it to search the live web.",
+        503,
+      )
+    }
+
     if (!Boolean(capabilityAvailability()["ai.text"]?.configured)) {
       return fail("AI_UNAVAILABLE", "Text generation isn't configured on this deployment yet.", 503)
     }
@@ -40,7 +51,7 @@ async function post(_req: Request, { params }: { params: Promise<{ id: string }>
       return fail("UNAUTHORIZED_PROJECT_ACCESS", "Project not found.", 404)
     }
     if (!project.specification) {
-      return fail("VALIDATION", "The competitor snapshot drafts from your plan — this project has no plan yet.", 409)
+      return fail("VALIDATION", "The competitor snapshot builds on your plan — this project has no plan yet.", 409)
     }
 
     const item = await generateCompetitionSnapshot({
@@ -56,6 +67,7 @@ async function post(_req: Request, { params }: { params: Promise<{ id: string }>
       creditsCharged: item.creditsCharged,
       createdAt: item.createdAt,
       contextHash: item.kitInput?.contextHash,
+      ...(item.research ? { research: item.research } : {}),
     })
   } catch (e) {
     if (e instanceof AppError && e.code === "VALIDATION") {

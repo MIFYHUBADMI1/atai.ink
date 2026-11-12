@@ -11,19 +11,19 @@ const snapshot = { id: "new", title: "Snapshot", body: '##Positioning\n\n- **Boo
 
 describe("Competition and Resources rendering", () => {
   it("renders safe Markdown and accessible historical drafts, not raw headings or active HTML", () => {
-    const html = renderToStaticMarkup(<CompetitionSnapshotPanel projectId="p1" snapshot={snapshot} history={[{ ...snapshot, id: "old", body: "## Earlier draft\n\nHistorical plan." }]} creditsAvailable={100} textReady hasPlan />)
+    const html = renderToStaticMarkup(<CompetitionSnapshotPanel projectId="p1" snapshot={snapshot} history={[{ ...snapshot, id: "old", body: "## Earlier draft\n\nHistorical plan." }]} creditsAvailable={100} textReady researchReady hasPlan />)
     expect(html).toContain("<h2")
     expect(html).toContain("<ul")
     expect(html).toContain("<strong")
     expect(html).toContain("Historical plan.")
-    expect(html).toContain("AI-generated, not current research")
+    expect(html).toContain("AI-generated, from what the sources showed that day")
     expect(html).toContain("freshness is unknown")
     expect(html).not.toContain('href="javascript:')
     expect(html).not.toContain("<script>")
     expect(html).not.toContain("##Positioning")
   })
   it("does not flag matching context as stale", () => {
-    const html = renderToStaticMarkup(<CompetitionSnapshotPanel projectId="p1" snapshot={{ ...snapshot, contextHash: "current" }} currentContextHash="current" creditsAvailable={0} textReady hasPlan />)
+    const html = renderToStaticMarkup(<CompetitionSnapshotPanel projectId="p1" snapshot={{ ...snapshot, contextHash: "current" }} currentContextHash="current" creditsAvailable={0} textReady researchReady hasPlan />)
     expect(html).not.toContain("planning context has changed")
     expect(html).not.toContain("freshness is unknown")
   })

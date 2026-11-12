@@ -74,6 +74,89 @@ export interface FirecrawlSearchResponse {
   creditsUsed?: number
 }
 
+export interface FirecrawlNewsResult {
+  title: string
+  url: string
+  snippet?: string
+  date?: string
+  position?: number
+}
+
+/** Alexandria data-provider/tool discovery result (Firecrawl search source "alexandria"). */
+export interface FirecrawlAlexandriaTool {
+  provider?: string
+  capability?: string
+  description?: string
+  url?: string
+  [key: string]: unknown
+}
+
+export interface FirecrawlMultiSearchResponse {
+  success: boolean
+  data: {
+    /** Web results; entries may carry `category: "research"` when `categories` is used. */
+    web?: Array<FirecrawlSearchResult & { category?: string }>
+    news?: FirecrawlNewsResult[]
+    tools?: FirecrawlAlexandriaTool[]
+  }
+  creditsUsed?: number
+}
+
+export type FirecrawlSearchSource = "web" | "news" | "alexandria"
+
+/**
+ * POST /v2/search across multiple sources in one request — web, news, and the
+ * Alexandria data-provider/tool discovery, optionally with the "research"
+ * category filter (research results come back inside `data.web` with a
+ * `category` field). `limit` applies PER SOURCE. Use `scrapeWeb` to pull page
+ * markdown for web results (costs extra provider credits and time).
+ */
+export async function searchMultiSource(
+  query: string,
+  options: {
+    sources?: readonly FirecrawlSearchSource[]
+    categories?: readonly string[]
+    limit?: number
+    scrapeWeb?: boolean
+    /** Time filter for web results, e.g. "qdr:y" for the past year. */
+    tbs?: string
+    timeoutMs?: number
+  } = {},
+): Promise<FirecrawlMultiSearchResponse> {
+  const sources = options.sources?.length ? options.sources : (["web"] as FirecrawlSearchSource[])
+  const body: Record<string, unknown> = {
+    query,
+    sources,
+    limit: options.limit ?? 5,
+  }
+  if (options.categories?.length) body.categories = options.categories
+  if (options.tbs) body.tbs = options.tbs
+  if (options.scrapeWeb) body.scrapeOptions = { formats: ["markdown"] }
+
+  logger.info("firecrawl.search", "multi-source search", {
+    query,
+    sources,
+    limit: body.limit,
+    categories: options.categories,
+    scrapeWeb: Boolean(options.scrapeWeb),
+  })
+
+  const result = await firecrawlFetch<FirecrawlMultiSearchResponse>(
+    "/v2/search",
+    body,
+    options.timeoutMs ?? 45_000,
+  )
+
+  logger.info("firecrawl.search", "multi-source search complete", {
+    query,
+    web: result.data.web?.length ?? 0,
+    news: result.data.news?.length ?? 0,
+    tools: result.data.tools?.length ?? 0,
+    creditsUsed: result.creditsUsed,
+  })
+  return result
+}
+
 /** POST /v2/search — web search with optional page scraping */
 export async function searchWeb(
   query: string,

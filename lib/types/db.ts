@@ -729,6 +729,8 @@ export interface MarketAssetBrief {
   aspectRatio?: string
   durationSeconds?: number
   voiceStyle?: string
+  /** Extra direction the founder gave for this generation. */
+  instructions?: string
 }
 
 /**
@@ -786,8 +788,44 @@ export interface ContentItemDoc {
   /** The founder's raw kit inputs (e.g. the ads bench offer/audience), kept so the
    * bench can prefill them on return. Bounded strings only; never provider output. */
   kitInput?: Record<string, string>
+  /**
+   * Live-research evidence collected at REQUEST time for competition snapshots:
+   * the exact queries run and every source the analysis could draw from,
+   * rendered on the competition page as references. Never written to by
+   * anything else.
+   */
+  research?: MarketAssetResearch
   createdAt: number
   updatedAt: number
+}
+
+/** One live-search source behind a competition snapshot's analysis. */
+export interface MarketResearchSource {
+  kind: "web" | "news" | "research" | "data_tool"
+  title: string
+  /** Sanitized http(s) URL only; data tools may have none. */
+  url?: string
+  /** Display host derived from the URL. */
+  domain?: string
+  /** Search-result snippet / tool description, clipped. */
+  snippet?: string
+  /** Clipped page content for scraped web results — why the analysis said what it said. */
+  excerpt?: string
+  /** ISO day for news results. */
+  date?: string
+  /** Alexandria data-tool provider name. */
+  provider?: string
+  /** Which derived search query (0-based) produced this source. */
+  queryIndex?: number
+}
+
+export interface MarketAssetResearch {
+  /** The exact search queries run — shown to the founder for transparency. */
+  queries: string[]
+  collectedAt: number
+  sources: MarketResearchSource[]
+  /** Credits charged for the live-search step itself (the AI analysis is metered separately). */
+  researchCreditsCharged: number
 }
 
 // ─── Brand profile (Phase 4 v2) ─────────────────────────────────────────────
