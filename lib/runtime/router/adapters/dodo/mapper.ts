@@ -366,12 +366,16 @@ function safeMetadata(metadata: Record<string, unknown> | undefined): Record<str
 
 export interface PaymentsPageData {
   payments: PaymentListItemData[]
-  /** True when the provider truncated the page (another page likely exists). */
+  /** True when the raw provider page was full (another account-wide page likely
+   * exists). The feed is account-wide and filtered to the project AFTER paging,
+   * so a full raw page means the project-scoped result may be incomplete — older
+   * attributed payments can sit beyond the first raw page. */
   pageFull: boolean
 }
 
 export function toPaymentsPage(
   response: unknown,
+  requestedPageSize: number = MAX_PAYMENTS_PAGE_SIZE,
 ): ProviderExecutionResponse<PaymentsPageData> {
   assertDodoOk(response as { errors?: unknown })
   const rawItems = Array.isArray(response) ? response : (response as { items?: unknown }).items
@@ -382,6 +386,7 @@ export function toPaymentsPage(
       "missing items array in payments list",
     )
   }
+  const pageSize = Math.min(Math.max(requestedPageSize, 1), MAX_PAYMENTS_PAGE_SIZE)
   const payments: PaymentListItemData[] = []
   for (const item of rawItems.slice(0, MAX_PAYMENTS_PAGE_SIZE)) {
     if (typeof item !== "object" || item === null) continue
@@ -400,7 +405,7 @@ export function toPaymentsPage(
   }
   return {
     provider: "dodo",
-    data: { payments, pageFull: rawItems.length >= MAX_PAYMENTS_PAGE_SIZE },
+    data: { payments, pageFull: rawItems.length >= pageSize },
     usage: { inputTokens: 0, outputTokens: 0, metadata: { paymentsListed: payments.length } },
   }
 }
@@ -414,9 +419,9 @@ function parseEpochMs(iso: string): number | null {
 // ── listPayouts (payments/listPayouts) ──────────────────────────────────────
 
 // ACCOUNT-LEVEL: payouts settle the Atai-owned Dodo business account, not a
-// single project — the runtime returns them as a tested capability, and the
-// finance dashboard labels them honestly (they are never added to a
-// project's earnings).
+// single project. The runtime adapter DENIES listPayouts to application keys
+// (no trustworthy per-project attribution exists); these translation helpers
+// remain only for authorized platform/admin contexts and their tests.
 
 export const ListPayoutsInputSchema = z
   .object({

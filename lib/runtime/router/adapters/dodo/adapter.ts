@@ -146,7 +146,7 @@ class DodoAdapter implements RuntimeProviderAdapter {
         query: translated.query,
         requestId: request.requestId,
       })
-      const page = toPaymentsPage(payload)
+      const page = toPaymentsPage(payload, translated.query.page_size)
       // Filter the account-wide feed using only server-stamped project attribution.
       const scopedPayments = page.data.payments.filter(
         (p) => p.metadata[ATTRIBUTION_METADATA_KEYS.projectId] === request.auth.projectId,

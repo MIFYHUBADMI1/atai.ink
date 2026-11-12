@@ -155,6 +155,14 @@ describe("listPayments — query translation & page normalization", () => {
     const items = Array.from({ length: 100 }, (_, i) => ({ payment_id: `p${i}` }))
     expect(toPaymentsPage({ items }).data.pageFull).toBe(true)
   })
+
+  it("reports pageFull against the requested page size, not the 100 cap", () => {
+    const tenItems = Array.from({ length: 10 }, (_, i) => ({ payment_id: `p${i}` }))
+    // A full 10-item page means another page likely exists even though 10 < 100.
+    expect(toPaymentsPage({ items: tenItems }, 10).data.pageFull).toBe(true)
+    // Five items on a 10-item page is a partial (final) page.
+    expect(toPaymentsPage({ items: tenItems.slice(0, 5) }, 10).data.pageFull).toBe(false)
+  })
 })
 
 describe("listPayouts — query translation & page normalization", () => {
@@ -335,6 +343,19 @@ describe("dodoAdapter listPayments tenancy", () => {
     mockedExecuteListPayments.mockResolvedValue({ payload: { items: foreignPage }, latencyMs: 5 })
     const result = await dodoAdapter.execute(paymentsRequest("listPayments"))
     expect(result.data).toEqual({ payments: [], pageFull: true })
+  })
+
+  it("signals an incomplete project view when a small requested page is full of foreign records", async () => {
+    const foreignPage = Array.from({ length: 10 }, (_, i) => ({
+      payment_id: `pay_f${i}`,
+      metadata: { _ataiProjectId: "proj_other" },
+    }))
+    mockedExecuteListPayments.mockResolvedValue({ payload: { items: foreignPage }, latencyMs: 5 })
+    const result = await dodoAdapter.execute(paymentsRequest("listPayments", { limit: 10 }))
+    // No leak, and pageFull honestly reports that older attributed payments may
+    // sit beyond this raw page rather than implying the empty result is complete.
+    expect(result.data).toEqual({ payments: [], pageFull: true })
+    expect(mockedExecuteListPayments.mock.calls[0][0]).toMatchObject({ query: { page_size: 10 } })
   })
 
   it("does not let unrestricted scopes widen the project boundary", async () => {
