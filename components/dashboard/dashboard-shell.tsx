@@ -278,7 +278,7 @@ function SidebarBody({
               >
                 <Icon className="size-4 shrink-0" />
                 {collapsed ? <span className="sr-only">{item.label}</span> : <span className="flex-1 truncate">{item.label}</span>}
-                {!collapsed ? (
+                {!collapsed && item.kind === "soon" ? (
                   <span className="rounded-full bg-muted px-1.5 py-px text-[9px] font-medium uppercase tracking-wider text-muted-foreground">Soon</span>
                 ) : null}
               </Link>
