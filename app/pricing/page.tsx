@@ -199,7 +199,8 @@ const pricingStructuredData = {
   name: "Atai",
   description:
     "Atai.ink is the business builder for founders: launch, run and grow a real business with an AI team — customers, sales and your own admin console included. No code.",
-  brand: { "@type": "Organization", name: "ATAI Enterprises", url: SITE_URL },
+  image: `${SITE_URL}/og-image.png`,
+  brand: { "@type": "Brand", name: "Atai" },
   offers: SUBSCRIPTION_PLANS.filter((p) => !p.custom).map((plan) => ({
     "@type": "Offer",
     name: `${plan.name} Plan`,

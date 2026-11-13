@@ -146,7 +146,8 @@ const STRUCTURED_DATA = JSON.stringify({
       "@id": `${SITE_URL}/#product`,
       name: "Atai SDK",
       description: "The unified developer SDK that powers Atai's business-building platform. Access 40+ infrastructure services through one API: AI, payments, maps, messaging, and more.",
-      brand: { "@id": `${SITE_URL}/#organization` },
+      image: `${SITE_URL}/og-image.png`,
+      brand: { "@type": "Brand", name: "Atai" },
       manufacturer: { "@id": `${SITE_URL}/#organization` },
       category: "Software Development Kit",
       offers: {

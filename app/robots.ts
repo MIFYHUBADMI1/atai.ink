@@ -32,6 +32,8 @@ export default function robots(): MetadataRoute.Robots {
     "/llms.txt",
     "/llms-full.txt",
     "/resources/sitemap.xml",
+    // Googlebot needs these to render pages; longest-match overrides the /_next/ disallow.
+    "/_next/static/",
   ]
 
   const privateDisallow = [
