@@ -67,10 +67,11 @@ const INPUT_SOURCE_NOTE: Record<BenchInputSource, string> = {
   none: "",
 }
 
+/** How much of the founder's time the place takes, as an ongoing commitment. */
 const EFFORT_LABEL: Record<"low" | "medium" | "high", string> = {
-  low: "A few minutes",
-  medium: "Half an hour",
-  high: "Most of a day",
+  low: "Minutes a week",
+  medium: "An hour or two a week",
+  high: "Most days",
 }
 
 function sourceNote(source: BenchInputSource): string {
