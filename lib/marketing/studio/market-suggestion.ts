@@ -120,7 +120,13 @@ export const SUGGESTION_FIELDS_BY_KIND: Record<
   video: ["audience", "tone", "aspectRatio", "durationSeconds"],
 }
 
-const SUGGESTION_JSON_SHAPE = `{"title":"...","brief":"...","audience":"...","tone":"...","channel":"...","channels":["..."],"length":"...","aspectRatio":"...","quality":"...","durationSeconds":4,"voiceStyle":"...","script":"...","rationale":"..."}`
+/**
+ * The keys the model must return. Listed as NAMES, never with placeholder
+ * values — a shape like {"title":"..."} invites the model to echo the
+ * placeholder back instead of writing real content.
+ */
+const SUGGESTION_JSON_KEYS =
+  "title, brief, audience, tone, channel, channels, length, aspectRatio, quality, durationSeconds, voiceStyle, script, rationale"
 
 function systemPrompt(): string {
   return (
@@ -130,9 +136,10 @@ function systemPrompt(): string {
     "Never invent facts, statistics, prices, reviews, testimonials, certifications, partnerships, rankings, or results. " +
     "If a concrete fact is not provided, write around it instead of fabricating it. " +
     "Do not mention that you are an AI. " +
-    "Return ONLY a JSON object with these keys: " +
-    SUGGESTION_JSON_SHAPE +
-    ". Omit any key you cannot ground in the context. The brief must be a creative direction, not the finished deliverable."
+    `Return ONLY a JSON object with these keys: ${SUGGESTION_JSON_KEYS}. ` +
+    "Omit any key you cannot ground in the context. " +
+    "Every value must be real content written for this product — never placeholders, never example dots, never the key names. " +
+    "The brief must be a creative direction, not the finished deliverable."
   )
 }
 
@@ -146,6 +153,7 @@ export function buildSuggestionMessages(input: {
   brandVoice: string
   brandLines?: string[]
   audience?: string
+  valueProposition?: string
   ask?: string
   instructions?: string
 }): { system: string; prompt: string } {
@@ -160,6 +168,8 @@ export function buildSuggestionMessages(input: {
     `Deliverable to propose a direction for: ${input.kind}.`,
     `Brand voice (derived from this project's plan):\n${(input.brandVoice ?? "").trim() || "(none on file — stay neutral and specific to the product)"}`,
   ]
+  const valueProposition = (input.valueProposition ?? "").trim()
+  if (valueProposition) parts.push(`What the product does for the customer:\n${valueProposition}`)
   if (brandLines.length > 0) parts.push(`Brand preferences (founder-authored):\n${brandLines.join("\n")}`)
   const audience = (input.audience ?? "").trim()
   if (audience) parts.push(`Audience: ${audience}`)
@@ -168,7 +178,7 @@ export function buildSuggestionMessages(input: {
   parts.push(`TASK: ${task}`)
   if (ask) parts.push(`The founder asked for: ${ask}`)
   if (instructions) parts.push(`Extra direction from the founder (follow it): ${instructions}`)
-  parts.push(`Return ONLY the JSON object. Keys: ${SUGGESTION_JSON_SHAPE}`)
+  parts.push(`Return ONLY the JSON object with these keys: ${SUGGESTION_JSON_KEYS}. Every value is real content, never a placeholder.`)
 
   return { system: systemPrompt(), prompt: parts.join("\n\n") }
 }
@@ -185,6 +195,9 @@ function pickText(value: unknown, max: number): string | undefined {
   if (typeof value !== "string") return undefined
   const trimmed = value.trim()
   if (!trimmed) return undefined
+  // A model that echoes the prompt's shape returns dots, dashes or the key
+  // name itself. That is not content — treat it as an absent field.
+  if (!/[a-z0-9]/i.test(trimmed)) return undefined
   return trimmed.slice(0, max)
 }
 

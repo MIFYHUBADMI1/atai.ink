@@ -528,6 +528,7 @@ export async function suggestMarketContent(input: {
     brandVoice,
     brandLines,
     audience: context.audience,
+    valueProposition: context.valueProposition,
     ...(input.ask ? { ask: input.ask } : {}),
     ...(input.instructions ? { instructions: input.instructions } : {}),
   })

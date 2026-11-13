@@ -138,6 +138,10 @@ describe("listAdsKit", () => {
 
     const slots = await listAdsKit("proj_1")
     expect(slots.map((slot) => slot.slot)).toEqual([
+      "first-post",
+      "business-profile",
+      "customer-message",
+      "content-plan",
       "facebook-copy",
       "instagram-copy",
       "tiktok-copy",
@@ -145,22 +149,40 @@ describe("listAdsKit", () => {
       "image-story",
     ])
 
-    const facebook = slots[0].item!
+    const facebook = slots[4].item!
     expect(facebook.id).toBe(docs[0].id)
     expect(facebook.input).toEqual({ offer: "Bundle", audience: "Families" })
     expect(facebook.hasMedia).toBe(false)
 
-    const square = slots[3].item!
+    const square = slots[7].item!
     expect(square.hasMedia).toBe(true)
     expect(square.media?.kind).toBe("image")
     expect(square.media?.dataUrl).toBeUndefined()
 
-    const story = slots[4].item!
+    const story = slots[8].item!
     expect(story.hasMedia).toBe(true)
     expect(story.mediaNotPersisted).toBe(true)
 
-    expect(slots[1].item).toBeNull()
-    expect(slots[2].item).toBeNull()
+    expect(slots[5].item).toBeNull()
+    expect(slots[6].item).toBeNull()
+  })
+
+  it("carries the posting guidance so the bench can tell the founder where to paste", async () => {
+    mockContentFind.mockReturnValue({
+      sort: () => ({
+        limit: () => ({
+          toArray: async () => [],
+        }),
+      }),
+    })
+    const slots = await listAdsKit("proj_1")
+    for (const slot of slots) {
+      expect(slot.whereToPost.length).toBeGreaterThan(0)
+      expect(slot.whatGoodLooksLike.length).toBeGreaterThan(0)
+      expect(slot.group === "posts" || slot.group === "ads").toBe(true)
+    }
+    expect(slots[0].group).toBe("posts")
+    expect(slots[4].group).toBe("ads")
   })
 
   it("renders empty slots when nothing is stored yet", async () => {
@@ -172,7 +194,7 @@ describe("listAdsKit", () => {
       }),
     })
     const slots = await listAdsKit("proj_1")
-    expect(slots).toHaveLength(5)
+    expect(slots).toHaveLength(9)
     expect(slots.every((slot) => slot.item === null)).toBe(true)
   })
 })

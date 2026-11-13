@@ -128,7 +128,7 @@ export default async function ProjectAdsPage({
         ) : tab === "strategy" ? (
           <StrategyTab projectId={project.id} user={user} project={project} />
         ) : tab === "bench" ? (
-          <BenchTab userId={user.id} projectId={project.id} />
+          <BenchTab user={user} project={project} />
         ) : tab === "promote" ? (
           <PromoteTab project={project} user={user} requestId={requestId} />
         ) : (
@@ -397,17 +397,28 @@ async function StrategyTab({
   )
 }
 
-async function BenchTab({ userId, projectId }: { userId: string; projectId: string }) {
-  const bench = await getAdsBenchData(userId, projectId)
+async function BenchTab({
+  user,
+  project,
+}: {
+  user: NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>
+  project: Awaited<ReturnType<typeof requireOwnedProject>>
+}) {
+  const bench = await getAdsBenchData({
+    userId: user.id,
+    projectId: project.id,
+    user,
+    project,
+  })
 
   return (
     <AdsBench
-      projectId={projectId}
+      projectId={project.id}
       slots={bench.slots}
       creditsAvailable={bench.creditsAvailable}
       textReady={bench.textReady}
       imageReady={bench.imageReady}
-      initialInput={bench.initialInput}
+      guide={bench.guide}
     />
   )
 }

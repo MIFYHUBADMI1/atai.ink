@@ -54,6 +54,8 @@ vi.mock("@/lib/db/collections", () => ({
       }),
     }),
   }),
+  // The studio reads the project's brand profile when it assembles a brief.
+  brandProfilesCol: async () => ({ findOne: async () => null }),
 }))
 
 vi.mock("@/lib/db/runtime-collections", () => ({

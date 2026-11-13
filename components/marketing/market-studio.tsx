@@ -47,6 +47,7 @@ import {
 } from "@/lib/marketing/studio/market-content"
 import {
   SUGGESTION_FIELD_LABELS,
+  SUGGESTION_FIELDS_BY_KIND,
   type MarketSuggestion,
 } from "@/lib/marketing/studio/market-suggestion"
 
@@ -132,6 +133,7 @@ interface MarketItem {
     aspectRatio?: string
     durationSeconds?: number
     voiceStyle?: string
+    instructions?: string
   }
 }
 
@@ -159,10 +161,11 @@ function formatNumber(value: number): string {
 }
 
 /** Which form fields a proposal filled — shown under the suggestion. */
-function appliedFieldLabels(proposal: MarketSuggestion): string[] {
+function appliedFieldLabels(kind: MarketContentKind, proposal: MarketSuggestion): string[] {
   const labels = ["Title", "Brief"]
-  for (const [field, value] of Object.entries(proposal)) {
-    if (field === "title" || field === "brief" || field === "rationale") continue
+  const allowed = SUGGESTION_FIELDS_BY_KIND[kind] ?? []
+  for (const field of allowed) {
+    const value = proposal[field]
     if (value === undefined || value === null || value === "") continue
     const label = SUGGESTION_FIELD_LABELS[field]
     if (label) labels.push(label)
@@ -320,22 +323,27 @@ export function MarketStudio({
 
   /** Copy a proposal into the form. Every field stays editable afterwards. */
   function applySuggestion(proposal: MarketSuggestion) {
+    const allowed = SUGGESTION_FIELDS_BY_KIND[kind] ?? []
     setTitle(proposal.title)
     setBrief(proposal.brief)
-    if (proposal.audience) {
+    if (proposal.audience && allowed.includes("audience")) {
       audienceValue.current = proposal.audience
       setAudience(proposal.audience)
       setAudienceOrigin(null)
     }
-    if (proposal.tone) setTone(proposal.tone)
-    if (proposal.channel) setChannel(proposal.channel as MarketChannel)
-    if (proposal.channels?.length) setChannels(proposal.channels as MarketChannel[])
-    if (proposal.length) setLength(proposal.length)
-    if (proposal.aspectRatio) setAspectRatio(proposal.aspectRatio)
-    if (proposal.quality) setQuality(proposal.quality)
-    if (proposal.durationSeconds) setDuration(proposal.durationSeconds)
-    if (proposal.voiceStyle) setVoiceStyle(proposal.voiceStyle)
-    if (proposal.script) setScript(proposal.script)
+    if (proposal.tone && allowed.includes("tone")) setTone(proposal.tone)
+    if (proposal.channel && allowed.includes("channel")) setChannel(proposal.channel as MarketChannel)
+    if (proposal.channels?.length && allowed.includes("channels")) {
+      setChannels(proposal.channels as MarketChannel[])
+    }
+    if (proposal.length && allowed.includes("length")) setLength(proposal.length)
+    if (proposal.aspectRatio && allowed.includes("aspectRatio")) setAspectRatio(proposal.aspectRatio)
+    if (proposal.quality && allowed.includes("quality")) setQuality(proposal.quality)
+    if (proposal.durationSeconds && allowed.includes("durationSeconds")) {
+      setDuration(proposal.durationSeconds)
+    }
+    if (proposal.voiceStyle && allowed.includes("voiceStyle")) setVoiceStyle(proposal.voiceStyle)
+    if (proposal.script && allowed.includes("script")) setScript(proposal.script)
   }
 
   async function suggest() {
@@ -715,7 +723,7 @@ export function MarketStudio({
                       {suggestion.suggestion.brief}
                     </p>
                     <p className="mt-2 text-[10px] text-muted-foreground">
-                      Filled into: {appliedFieldLabels(suggestion.suggestion).join(", ")}.
+                      Filled into: {appliedFieldLabels(kind, suggestion.suggestion).join(", ")}.
                     </p>
                   </div>
                 ) : null}

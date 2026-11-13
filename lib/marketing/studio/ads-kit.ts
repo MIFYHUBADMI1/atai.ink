@@ -52,6 +52,14 @@ export interface AdsKitSlotView {
   label: string
   description: string
   kind: AdsKitSlot["kind"]
+  /** Free posts the founder publishes, or paid ad pieces. */
+  group: AdsKitSlot["group"]
+  /** Step-by-step: exactly where this draft gets pasted. */
+  whereToPost: string
+  /** What a good version of this looks like. */
+  whatGoodLooksLike: string
+  /** The places this piece makes sense on. */
+  channelIds: AdsKitSlot["channelIds"]
   item: AdsKitItemView | null
 }
 
@@ -152,6 +160,10 @@ export async function listAdsKit(projectId: string): Promise<AdsKitSlotView[]> {
       label: slot.label,
       description: slot.description,
       kind: slot.kind,
+      group: slot.group,
+      whereToPost: slot.whereToPost,
+      whatGoodLooksLike: slot.whatGoodLooksLike,
+      channelIds: slot.channelIds,
       item: doc ? toItemView(doc, slot.kind) : null,
     }
   })

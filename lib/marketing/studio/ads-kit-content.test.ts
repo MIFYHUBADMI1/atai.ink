@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { adsKitBrief, adsKitSlotById, ADS_KIT_SLOTS, buildAdsKitContext } from "./ads-kit-content"
+import { adsKitBrief, adsKitSlotById, ADS_KIT_SLOTS, buildAdsKitContext, defaultBenchSlots } from "./ads-kit-content"
 import { MARKET_CHANNELS, MARKET_CONTENT_KINDS, MARKET_ASPECT_RATIOS } from "./market-content"
 
 /** The service caps briefs at 2000 chars — every composed bench brief must fit. */
@@ -31,15 +31,40 @@ describe("ADS_KIT_SLOTS", () => {
     }
   })
 
-  it("covers the ads bench: platform copy plus square and story creatives", () => {
+  it("tells a first-timer where each piece goes and what good looks like", () => {
+    for (const slot of ADS_KIT_SLOTS) {
+      expect(slot.whereToPost.trim().length).toBeGreaterThan(20)
+      expect(slot.whatGoodLooksLike.trim().length).toBeGreaterThan(20)
+      expect(slot.group === "posts" || slot.group === "ads").toBe(true)
+    }
+  })
+
+  it("covers free posts first, then the paid ad pieces", () => {
     expect(ADS_KIT_SLOTS.map((slot) => slot.slot)).toEqual([
+      "first-post",
+      "business-profile",
+      "customer-message",
+      "content-plan",
       "facebook-copy",
       "instagram-copy",
       "tiktok-copy",
       "image-square",
       "image-story",
     ])
-    const copySlots = ADS_KIT_SLOTS.filter((slot) => slot.kind === "copy")
+    const free = ADS_KIT_SLOTS.filter((slot) => slot.group === "posts")
+    const paid = ADS_KIT_SLOTS.filter((slot) => slot.group === "ads")
+    expect(free.map((slot) => slot.slot)).toEqual(["first-post", "business-profile", "customer-message", "content-plan"])
+    expect(paid.map((slot) => slot.slot)).toEqual([
+      "facebook-copy",
+      "instagram-copy",
+      "tiktok-copy",
+      "image-square",
+      "image-story",
+    ])
+  })
+
+  it("keeps the paid ad slots on the studio's platform vocabulary", () => {
+    const copySlots = ADS_KIT_SLOTS.filter((slot) => slot.group === "ads" && slot.kind === "copy")
     const imageSlots = ADS_KIT_SLOTS.filter((slot) => slot.kind === "image")
     expect(copySlots.length).toBe(3)
     expect(imageSlots.map((slot) => slot.aspectRatio)).toEqual(["1:1", "9:16"])
@@ -47,7 +72,29 @@ describe("ADS_KIT_SLOTS", () => {
 
   it("resolves slots by id and rejects unknown ones", () => {
     expect(adsKitSlotById("tiktok-copy")?.label).toBe("TikTok ad")
+    expect(adsKitSlotById("first-post")?.group).toBe("posts")
     expect(adsKitSlotById("nope")).toBeNull()
+  })
+})
+
+describe("defaultBenchSlots", () => {
+  it("starts a beginner on the free posts, never on paid ad pieces", () => {
+    const slots = defaultBenchSlots(["facebook", "google-business"])
+    expect(slots).toEqual(["first-post", "business-profile", "content-plan"])
+    expect(slots).not.toContain("facebook-copy")
+    expect(slots).not.toContain("image-square")
+  })
+
+  it("adds the customer message when they already talk to people on email or WhatsApp", () => {
+    expect(defaultBenchSlots(["whatsapp"])).toContain("customer-message")
+    expect(defaultBenchSlots(["email"])).toContain("customer-message")
+    expect(defaultBenchSlots(["facebook"])).not.toContain("customer-message")
+  })
+
+  it("only ever returns slots that exist", () => {
+    for (const slots of ADS_KIT_SLOTS.map((slot) => defaultBenchSlots([slot.channelIds[0] ?? "facebook"]))) {
+      for (const id of slots) expect(ADS_KIT_SLOTS.some((slot) => slot.slot === id)).toBe(true)
+    }
   })
 })
 
@@ -128,6 +175,13 @@ describe("buildAdsKitContext", () => {
 })
 
 describe("adsKitBrief", () => {
+  it("defines an ask for every slot, so no piece can fail to brief", () => {
+    const context = buildAdsKitContext({ projectName: "Tea Kiosk", offer: "Ten-bag breakfast tea bundle" })
+    for (const slot of ADS_KIT_SLOTS) {
+      expect(() => adsKitBrief(slot, context)).not.toThrow()
+    }
+  })
+
   it("fits the service brief cap for every slot with the most verbose context", () => {
     const context = buildAdsKitContext(MAXIMAL_INPUT)
     for (const slot of ADS_KIT_SLOTS) {

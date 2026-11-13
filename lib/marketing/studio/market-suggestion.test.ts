@@ -55,6 +55,14 @@ describe("buildSuggestionMessages", () => {
     expect(prompt).toContain("video concept")
   })
 
+  it("includes the plan's value proposition when there is one", () => {
+    const { prompt } = buildSuggestionMessages({
+      ...base,
+      valueProposition: "Turns customer calls into searchable transcripts.",
+    })
+    expect(prompt).toContain("Turns customer calls into searchable transcripts.")
+  })
+
   it("carries the founder's ask and standing instructions", () => {
     const { prompt } = buildSuggestionMessages({
       ...base,
@@ -78,6 +86,13 @@ describe("buildSuggestionMessages", () => {
   it("asks for a direction, not the finished deliverable", () => {
     const { prompt } = buildSuggestionMessages({ ...base, kind: "email" })
     expect(prompt).toContain("do not write the full email")
+  })
+
+  it("never puts a copyable placeholder shape in the prompt", () => {
+    const { system, prompt } = buildSuggestionMessages(base)
+    expect(system).not.toContain('"title":"..."')
+    expect(prompt).not.toContain('"title":"..."')
+    expect(prompt).toContain("title, brief, audience")
   })
 })
 
@@ -136,6 +151,12 @@ describe("parseSuggestion", () => {
   it("rejects a reply with no title or brief", () => {
     expect(() => parseSuggestion(JSON.stringify({ rationale: "why" }))).toThrow()
     expect(() => parseSuggestion("not json at all")).toThrow()
+  })
+
+  it("rejects a reply that only echoes placeholders", () => {
+    expect(() =>
+      parseSuggestion(JSON.stringify({ title: "...", brief: "...", rationale: "..." })),
+    ).toThrow()
   })
 
   it("bounds the brief it returns", () => {
