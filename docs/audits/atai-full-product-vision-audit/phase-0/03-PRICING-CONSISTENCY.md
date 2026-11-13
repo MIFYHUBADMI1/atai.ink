@@ -72,6 +72,9 @@ of R-01 fails the suite rather than passing code review.
 - Naming trap worth a follow-up: `TIER_COSTS` in `credits.ts` (25k/50k/75k) is **not** the
   charging default — it exists as the heavy-mode ratio baseline. `BUILD_TIERS` is the default.
   Two similarly-named tables with different roles is how R-01 happened in the first place.
-- The pricing page now performs billing-config reads during render, so prerendering requires the
-  database to be reachable at build time (already the pattern for other pages, and one of the
-  three CI gates).
+- The pricing page reads the billing authority during render, but it was already a **dynamic**
+  route before this change (it calls `getCurrentUser()`), so the read happens per request and the
+  build does not need the database for it. Verified in the production build: `/pricing` is listed
+  as `ƒ (Dynamic) — server-rendered on demand`, and the build completed 190/190 static pages with
+  exit code 0. The earlier draft of this report claimed a build-time DB dependency for this page;
+  that was wrong and is corrected here.

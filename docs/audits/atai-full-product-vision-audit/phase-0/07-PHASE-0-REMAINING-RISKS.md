@@ -34,8 +34,10 @@ decision left to the founder.
 - **Naming trap.** `TIER_COSTS` in `credits.ts` (25k/50k/75k) is the heavy-mode *ratio baseline*, not
   the charging default; `BUILD_TIERS` (50k/75k/100k) is the default. Two similarly-named tables with
   different roles is how R-01 happened. Worth a rename follow-up.
-- **Build-time DB dependency.** The pricing page now reads billing config during render, so
-  prerendering requires the database to be reachable at build time (already a CI gate pattern).
+- **Build-time DB dependency — resolved, not a risk.** An earlier draft claimed the pricing page
+  now needs the database at build time. It does not: `/pricing` was already dynamic (it calls
+  `getCurrentUser()`), so the billing read happens per request. Confirmed in the production build
+  (`/pricing` → `ƒ (Dynamic)`, 190/190 static pages, exit code 0).
 
 ### W4 — Co-founder multi-turn memory
 - **Character budget, not token-exact.** The 12,000-char ceiling is a conservative proxy for a token
@@ -44,33 +46,47 @@ decision left to the founder.
   §7.1 explicitly scopes this phase to conversational memory, not a business-memory system.
 
 ### W5 — Honest product messaging
-- **Broader §8.2 sweep not claimed complete.** This pass remediated the confirmed build-progress
-  corpus and added guards. A surface-by-surface copy audit of dashboard, market/growth, competition,
-  finances, hosting, resources/lessons, empty states, onboarding and pricing copy remains. The main
-  session has been landing honest-messaging work on some of these separately; that work was left
-  untouched (additive scope).
+- **Broader §8.2 sweep not done — this workstream is PARTIAL, not PASS.** This pass remediated the
+  confirmed build-progress corpus and added guards. A surface-by-surface copy audit of dashboard,
+  market/growth, competition, finances, hosting, resources/lessons, empty states, onboarding and
+  pricing copy **remains outstanding**, and §12 makes "user-facing claims have been reviewed" and
+  "empty states are truthful" acceptance criteria for W5. The main session has been landing
+  honest-messaging work on several of those surfaces separately; that work was left untouched
+  (additive scope) and a concurrent sweep would have collided with it.
+- **Residual copy risk in the build corpus.** Two lines keep a rhetorical "real users" phrasing
+  ("…seen what real users type", "…worth proving with real users once it is live"). Both now frame
+  the work as something to prove *later*, not as something already measured, so they pass the
+  honesty guards — but a full §8.2 read-through should re-judge them in context.
 
 ## Test-infrastructure / environmental items (not Phase 0 regressions)
 
 - **Provisioning e2e (`lib/runtime/provisioning/e2e.test.ts`, 2 tests):** fails with
   "MONGODB_URI is not configured" / 503-vs-403 because the vitest process does not inject
-  `MONGODB_URI` (it exists in `.env`/`.env.local`, which Next.js loads but the test runner does not).
-  Environmental and pre-existing — it also failed in the earlier side-chat full run before any
-  competition work landed. To run these, the test process needs `MONGODB_URI` exported.
-- **Competition snapshot (`lib/marketing/competition-snapshot.test.ts`, 1 test):** fails because the
-  main session's in-flight `competition-research.ts` now charges credits (`getBalance → usersCol`)
-  and the test's `@/lib/db/collections` mock does not export `usersCol`. This belongs to the main
-  session's uncommitted competition work, **not** Phase 0; left untouched to avoid conflicting with
-  active work.
+  `MONGODB_URI` (it exists in `.env`/`.env.local`, which Next.js loads but the test runner does not —
+  `vitest.config.ts` loads no env file). Environmental and pre-existing. To run these, the test
+  process needs `MONGODB_URI` exported.
+- **Ads bench / ads kit / market studio (3 files, 4 tests):** `components/marketing/ads-bench.test.tsx`,
+  `lib/marketing/studio/ads-kit.test.ts` and `lib/marketing/studio/market-service.test.ts` fail
+  against the main session's **in-flight, uncommitted** ads/market-studio work (a `BenchTab`
+  signature change and a `brandProfilesCol` export missing from the test's `vi.mock`). These belong
+  to that work, **not** Phase 0, and were left untouched to avoid conflicting with it.
+- **Competition snapshot (`lib/marketing/competition-snapshot.test.ts`):** was failing for the same
+  in-flight reason; the main session's fix landed and it now passes.
 - **Referrals (`lib/referrals/referrals.test.ts`, 2 tests):** timed out / mis-counted under full-suite
   load, but **pass on isolated re-run** (14/14). Classified flaky-under-load, not a real regression.
 
 ## Operational / process risks
 
-- **Uncommitted shared worktree.** All Phase 0 changes are uncommitted alongside the main session's
-  in-flight lessons/competition work. No commit was made (not requested). The founder should decide
-  how to group commits; Phase 0 files are listed in report 00. Scratch `.tmp-*` logs and
-  `public/the rise of atai.ink/` founder drafts should stay out of any commit.
+- **A production-build regression was introduced by W3 and has been fixed.** The manual-build
+  pricing change (`d36bf44`) called `getTierCost` in `lib/projects/project-actions.ts` without
+  importing it, so the file failed to type-check and `next build` failed. The missing import is
+  added; the fix is **uncommitted** in the shared worktree. Evidence in report 06.
+- **Phase 0 code is committed; one fix is not.** Committed: `d36bf44` (W3), `db2d8f3` (W4),
+  `62affd0` (W1), `cf760df` (W5), `32e5c38` (reports). Uncommitted: the one-line import fix in
+  `lib/projects/project-actions.ts`. The worktree also holds the main session's in-flight
+  ads/market-studio work, so the founder should decide the commit grouping rather than have this
+  side chat commit across it. Scratch `.tmp-*` logs and `public/the rise of atai.ink/` founder
+  drafts should stay out of any commit.
 - **OpenRouter credits (operational context, not Phase 0):** paid capabilities remain blocked until
   purchased credits exist on the account; `:free` model pins work regardless. This affects live
   co-founder/build runs but not the correctness of the Phase 0 changes or their tests.
@@ -79,6 +95,7 @@ decision left to the founder.
 
 1. Founder: shut down external hosted app/domain/subscriptions after a project deletion (W2).
 2. Founder: decide whether a complete project payment history (cursor/projection) is needed (W1).
-3. Founder: decide commit grouping for the uncommitted Phase 0 work.
-4. Optional follow-ups: rename the `TIER_COSTS`/`BUILD_TIERS` trap (W3); token-exact history budget
-   (W4); full §8.2 copy sweep (W5); export `MONGODB_URI` for the provisioning e2e suite.
+3. Founder: decide commit grouping for the one-line build fix (the rest of Phase 0 is committed).
+4. Founder: schedule the §8.2 user-facing copy sweep (W5) once the main session's surface work lands.
+5. Optional follow-ups: rename the `TIER_COSTS`/`BUILD_TIERS` trap (W3); token-exact history budget
+   (W4); export `MONGODB_URI` for the provisioning e2e suite.

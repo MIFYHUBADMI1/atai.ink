@@ -5,7 +5,7 @@
 ## Unsupported claims discovered (audit finding G)
 
 The build-progress commentary (`lib/build-messages.ts`, surfaced live by
-`components/build/build-stage-overlay.tsx`) narrated work as completed fact that the platform never
+`components/workspace/build-stage-overlay.tsx`) narrated work as completed fact that the platform never
 performed. The audit-named claims, verified verbatim in the tree before this pass:
 
 | Former claim | Bank | Why it was false |
