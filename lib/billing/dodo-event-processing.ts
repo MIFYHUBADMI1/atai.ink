@@ -7,6 +7,7 @@ import {
   reverseCredits,
 } from "@/lib/billing/credit-service"
 import { SUBSCRIPTION_PLANS } from "@/lib/billing/config"
+import { getCommercialPlanById, resolveCommercialPlanByDodoProductId } from "@/lib/billing/entitlements/commercial-plans"
 import { activatePaidSubscription } from "@/lib/billing/activate-subscription"
 import { logger } from "@/lib/logging/logger"
 import { cryptoId } from "@/lib/store/id"
@@ -354,7 +355,9 @@ async function handleSubscriptionRenewed(data: Record<string, unknown> | undefin
 
   const userId = metadata?.userId as string | undefined
   const planId = metadata?.planId as string | undefined
-  const plan = planId ? SUBSCRIPTION_PLANS.find((p) => p.id === planId) : undefined
+  const plan =
+    (planId ? SUBSCRIPTION_PLANS.find((p) => p.id === planId) : undefined) ??
+    (planId ? getCommercialPlanById(planId) : undefined)
   const credits = plan?.mirrorCredits ?? positiveIntegerCredits(metadata?.credits) ?? 0
 
   if (!userId || !credits) {
@@ -462,7 +465,9 @@ async function handleSubscriptionPlanChanged(data: Record<string, unknown> | und
   if (!data) return
   const subscriptionId = data.subscription_id as string
   const productId = data.product_id as string
-  const newPlan = SUBSCRIPTION_PLANS.find((p) => p.dodoProductId === productId)
+  const newPlan =
+    SUBSCRIPTION_PLANS.find((p) => p.dodoProductId === productId) ??
+    resolveCommercialPlanByDodoProductId(productId)
   if (newPlan) {
     const subCol = await subscriptionRecordsCol()
     await subCol.updateOne(

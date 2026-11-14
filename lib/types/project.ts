@@ -206,6 +206,8 @@ export interface ProjectPreferences {
 export interface MirrorProject {
   id: string
   userId: string
+  /** Workspace the project belongs to (ADR-7). Absent for legacy/personal projects. */
+  workspaceId?: string
   mode: ProjectMode
   name: string
   state: ProjectState

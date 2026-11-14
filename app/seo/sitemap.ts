@@ -13,6 +13,11 @@ type Freq = MetadataRoute.Sitemap[number]["changeFrequency"]
 
 const knowledgePages: Array<{ path: string; changeFrequency: Freq; priority: number }> = [
   { path: "/docs", changeFrequency: "weekly", priority: 0.95 },
+  { path: "/docs/onboarding", changeFrequency: "weekly", priority: 0.95 },
+  { path: "/docs/runtime-api", changeFrequency: "weekly", priority: 0.85 },
+  { path: "/docs/database-manager", changeFrequency: "weekly", priority: 0.85 },
+  { path: "/docs/growth-marketing", changeFrequency: "weekly", priority: 0.8 },
+  { path: "/docs/troubleshooting", changeFrequency: "weekly", priority: 0.9 },
   { path: "/developers", changeFrequency: "weekly", priority: 0.85 },
   { path: "/sdk", changeFrequency: "weekly", priority: 0.8 },
   { path: "/lessons", changeFrequency: "weekly", priority: 0.6 },

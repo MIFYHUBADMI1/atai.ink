@@ -1,4 +1,6 @@
 import { SITE_URL } from "@/lib/env"
+import fs from "node:fs"
+import path from "node:path"
 import { CATEGORY_META, FORMAT_LABEL, TYPE_LABEL } from "@/lib/resources"
 import { publicResources } from "@/lib/resources/store"
 import { resourceBlocksToMarkdown, resourceFormat, formatFileSize } from "@/lib/resources/media"
@@ -55,6 +57,31 @@ export async function GET() {
   const resources = await publicResources()
   const latest = resources.map((resource) => resource.updatedAt).sort().at(-1)
 
+  // The extended onboarding guide is the canonical end-to-end manual. Include
+  // it in full so AI assistants and search engines get the complete picture
+  // of how Atai works without scraping individual product pages.
+  let onboardingGuide = ""
+  try {
+    onboardingGuide = fs
+      .readFileSync(path.join(process.cwd(), "docs", "ONBOARDING_GUIDE.md"), "utf8")
+      .trim()
+  } catch {
+    onboardingGuide = `(The extended onboarding guide could not be loaded here. Read it at ${SITE_URL}/docs/onboarding.)`
+  }
+  const onboardingLines = onboardingGuide.split(/\r?\n/)
+
+  const loadDoc = (file: string, fallbackUrl: string): string[] => {
+    try {
+      return fs.readFileSync(path.join(process.cwd(), "docs", file), "utf8").trim().split(/\r?\n/)
+    } catch {
+      return [`(The guide at ${fallbackUrl} could not be loaded here. Read it at ${fallbackUrl}.)`]
+    }
+  }
+  const runtimeLines = loadDoc("RUNTIME_API_SDK_KEYS.md", `${SITE_URL}/docs/runtime-api`)
+  const dbLines = loadDoc("DATABASE_MANAGER.md", `${SITE_URL}/docs/database-manager`)
+  const growthLines = loadDoc("GROWTH_MARKETING_PLAYBOOK.md", `${SITE_URL}/docs/growth-marketing`)
+  const troubleshootingLines = loadDoc("TROUBLESHOOTING_USER.md", `${SITE_URL}/docs/troubleshooting`)
+
   const lines: string[] = [
     "# Atai — full knowledge corpus",
     "",
@@ -69,6 +96,39 @@ export async function GET() {
     `The Atai documentation is one page with anchored sections: ${SITE_URL}/docs`,
     "",
     ...DOC_SECTIONS.map(([id, label]) => `- ${label}: ${SITE_URL}/docs#${id}`),
+    "",
+    "## Extended onboarding guide (canonical end-to-end manual)",
+    "",
+    `The most complete, authoritative guide to using Atai is the extended onboarding guide. Canonical URL: ${SITE_URL}/docs/onboarding`,
+    "It covers what Atai is, how to start, plan, build, publish, operate, grow and scale a business, an exact URL directory for every page, the billing and credit reference, and solutions to common problems.",
+    "",
+    "### Full text of the onboarding guide",
+    "",
+    ...onboardingLines,
+    "",
+    "## Runtime API, SDK & API Keys (extended doc)",
+    "",
+    `Canonical URL: ${SITE_URL}/docs/runtime-api`,
+    "",
+    ...runtimeLines,
+    "",
+    "## Database Manager handbook (extended doc)",
+    "",
+    `Canonical URL: ${SITE_URL}/docs/database-manager`,
+    "",
+    ...dbLines,
+    "",
+    "## Growth & marketing playbook (extended doc)",
+    "",
+    `Canonical URL: ${SITE_URL}/docs/growth-marketing`,
+    "",
+    ...growthLines,
+    "",
+    "## Troubleshooting & error reference (extended doc)",
+    "",
+    `Canonical URL: ${SITE_URL}/docs/troubleshooting`,
+    "",
+    ...troubleshootingLines,
     "",
     "## Resources",
     "",

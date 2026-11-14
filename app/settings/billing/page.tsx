@@ -4,9 +4,10 @@ import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { AppHeader } from "@/components/app-header"
-import { ArrowRight, Calendar, Check } from "lucide-react"
+import { ArrowRight, Calendar, Check, AlertTriangle } from "lucide-react"
 import { useSession, jsonFetcher } from "@/lib/client/api"
 import { PERMANENT_CREDIT_PACKS, SUBSCRIPTION_PLANS, CREDIT_UNIT_NAME, formatUSD } from "@/lib/billing/config"
+import type { SubscriptionPlan } from "@/lib/billing/config"
 import { cn } from "@/lib/utils"
 import { CheckoutButton } from "@/components/billing/checkout-button"
 import { PlanCard } from "@/components/billing/plan-card"
@@ -18,6 +19,20 @@ type BillingOverview = {
   balance: { total: number; subscription: number; permanent: number }
   history: Array<{ id: string; reason: string; creditType: string; createdAt: number; amount: number }>
   subscription: { planId: string; currentPeriodEnd: number | null; cancelAtPeriodEnd: boolean } | null
+  usageAlerts?: {
+    creditsNearLimit: boolean
+    creditsAtLimit: boolean
+    creditUsageRatio: number | null
+    businessCapReached: boolean
+    businessCapNear: boolean
+    warnings: string[]
+  } | null
+  /** Active plan catalog (commercial when the flag is on, else legacy). */
+  plans?: SubscriptionPlan[]
+  /** The commercial plan id the user's subscription maps to (flag on only). */
+  activeCommercialPlanId?: string | null
+  /** The user's current business count. */
+  businessCount?: number
 }
 
 function formatCredits(amount: number): string {
@@ -68,13 +83,19 @@ export default function BillingSettingsPage() {
   const balance = billingData?.balance ?? { total: 0, subscription: 0, permanent: 0 }
   const creditHistory = billingData?.history ?? []
   const activeSubscription = billingData?.subscription ?? null
+  const usageAlerts = billingData?.usageAlerts ?? null
+  const usageWarnings = usageAlerts?.warnings ?? []
 
-  const FREE_PLAN = SUBSCRIPTION_PLANS.find((p) => p.id === "free")!
+  // Active catalog comes from the server (commercial when the flag is on), so
+  // the in-app upgrade list matches the public pricing page.
+  const plans: SubscriptionPlan[] = billingData?.plans ?? SUBSCRIPTION_PLANS
+  const FREE_PLAN = plans.find((p) => p.id === "free") ?? plans.find((p) => p.priceUSD === 0) ?? plans[0]
+  const activePlanId = billingData?.activeCommercialPlanId ?? activeSubscription?.planId ?? "free"
   const activePlan = activeSubscription
-    ? (SUBSCRIPTION_PLANS.find((p) => p.id === activeSubscription.planId) ?? FREE_PLAN)
+    ? (plans.find((p) => p.id === activePlanId) ?? FREE_PLAN)
     : FREE_PLAN
   const currentPeriodEnd: number | null = activeSubscription?.currentPeriodEnd ?? null
-  const activePlanId = activeSubscription?.planId ?? "free"
+  const currentBusinesses = billingData?.businessCount ?? 0
 
   return (
     <main className="min-h-svh bg-background text-foreground">
@@ -120,6 +141,58 @@ export default function BillingSettingsPage() {
           </p>
         </section>
 
+        {/* ── Usage alerts (advisory) ── */}
+        {usageWarnings.length > 0 && (
+          <section
+            className={cn(
+              "rounded-lg border p-5",
+              usageAlerts?.creditsAtLimit || usageAlerts?.businessCapReached
+                ? "border-red-500/30 bg-red-500/5"
+                : "border-amber-500/30 bg-amber-500/5",
+            )}
+          >
+            <div className="flex items-start gap-3">
+              <AlertTriangle
+                className={cn(
+                  "mt-0.5 size-5 shrink-0",
+                  usageAlerts?.creditsAtLimit || usageAlerts?.businessCapReached
+                    ? "text-red-600 dark:text-red-400"
+                    : "text-amber-600 dark:text-amber-400",
+                )}
+              />
+              <div className="space-y-1.5">
+                <p className="text-sm font-medium">Plan usage</p>
+                <ul className="list-disc space-y-1 pl-4 text-sm text-muted-foreground">
+                  {usageWarnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+                {usageAlerts?.creditUsageRatio != null && (
+                  <div className="mt-2">
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-border">
+                      <div
+                        className={cn(
+                          "h-full rounded-full",
+                          usageAlerts.creditUsageRatio >= 1
+                            ? "bg-red-500"
+                            : usageAlerts.creditUsageRatio >= 0.8
+                              ? "bg-amber-500"
+                              : "bg-primary",
+                        )}
+                        style={{ width: `${Math.round(usageAlerts.creditUsageRatio * 100)}%` }}
+                      />
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {Math.round(usageAlerts.creditUsageRatio * 100)}% of this period&rsquo;s
+                      credits used
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* ── Current Plan ── */}
         <section className="rounded-lg border border-border bg-card/50 p-5">
           <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
@@ -133,7 +206,7 @@ export default function BillingSettingsPage() {
                   <Check className="size-3" /> Active
                 </span>
               </div>
-              {activePlan.id === "free" ? (
+              {activePlan.priceUSD === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   Free plan — upgrade to get monthly credits and more features.
                 </p>
@@ -199,22 +272,23 @@ export default function BillingSettingsPage() {
         <section className="border border-border bg-card p-6">
           <h2 className="text-xl font-medium">Subscription Plans</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            {activePlan.id === "free"
+            {activePlan.priceUSD === 0
               ? "Choose a plan to unlock monthly credits and more capabilities."
               : <>Monthly subscriptions with recurring credit grants.{" "}
-                <span className="font-medium text-primary">Business plan recommended</span> for best value.
+                <span className="font-medium text-primary">Our most popular plan is recommended</span> for best value.
               </>
             }
           </p>
-          {/* 5 columns: Free + Explorer + Starter + Business + Professional */}
           <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 items-start">
-            {SUBSCRIPTION_PLANS.filter((p) => !p.custom).map((plan) => (
+            {plans.filter((p) => !p.custom).map((plan) => (
               <PlanCard
                 key={plan.id}
                 plan={plan}
                 activePlanId={activePlanId}
                 currentPeriodEnd={currentPeriodEnd}
                 isLoggedIn={true}
+                allPlans={plans}
+                currentBusinesses={currentBusinesses}
               />
             ))}
           </div>

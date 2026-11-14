@@ -125,9 +125,13 @@ export async function getOrCreateSubscriptionProduct(
   description: string,
   priceUSD: number,
   credits: number,
+  /** Provisioned Dodo product id (commercial catalog). When supplied we use it
+   * directly — skipping name lookup and auto-creation — so a commercial plan
+   * never reuses or collides with a legacy product of the same display name. */
+  existingProductId?: string,
 ): Promise<DodoProductInfo> {
   // Check cache first
-  const cacheKey = `sub:${planId}`
+  const cacheKey = `sub:${existingProductId ?? planId}`
   const cached = createdProducts.get(cacheKey)
   if (
     cached &&
@@ -136,6 +140,22 @@ export async function getOrCreateSubscriptionProduct(
     Date.now() - cached.createdAt < PRODUCT_CACHE_TTL_MS
   ) {
     return cached
+  }
+
+  // Commercial path: the product was pre-provisioned by the product owner. Use
+  // it as-is; do not search by name or auto-create (which could match a legacy
+  // product sharing this display name).
+  if (existingProductId) {
+    const productInfo: DodoProductInfo = {
+      productId: existingProductId,
+      name,
+      priceUSD,
+      credits,
+      type: "subscription",
+      createdAt: Date.now(),
+    }
+    createdProducts.set(cacheKey, productInfo)
+    return productInfo
   }
 
   // Use a lock to prevent concurrent duplicate creation

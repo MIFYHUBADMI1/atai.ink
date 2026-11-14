@@ -6,6 +6,7 @@ import { checkRateLimit } from "@/lib/auth/rate-limit"
 import { getAvailableCredits, reserveCredits, releaseReservation, grantCredits } from "@/lib/billing/credit-service"
 import { type ForkTier } from "@/lib/billing/config"
 import { getForkPricingForTier } from "@/lib/billing/runtime-config"
+import { authorizeProjectFork, ENTITLEMENT_ENFORCEMENT_ENABLED } from "@/lib/billing/entitlements/require"
 import { logger } from "@/lib/logging/logger"
 import { ObjectId } from "mongodb"
 import type { MirrorProject } from "@/lib/types/project"
@@ -79,6 +80,18 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       limit: 10,
       windowMs: 60 * 60 * 1000,
     })
+
+    // Phase 3 entitlement gate (fail-open when flag is off — existing flows untouched).
+    if (ENTITLEMENT_ENFORCEMENT_ENABLED) {
+      try {
+        const auth = await authorizeProjectFork(user.id)
+        if (!auth.allowed) {
+          return fail(auth.code ?? "PLAN_LIMIT", auth.reason ?? "Your plan does not allow this.", 402)
+        }
+      } catch {
+        // Resolution failure must not break forking while enforcement is rolling out.
+      }
+    }
 
     const original = await store.getProject(id)
     if (!original) return fail("NOT_FOUND", "Project not found.", 404)

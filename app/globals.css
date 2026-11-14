@@ -2577,3 +2577,13 @@ html.heavy-mode-active>body>* {
     animation: none !important;
   }
 }
+
+/* ═══ Onboarding guide: keep the long page smooth on low-end devices ═══
+   Defers layout/paint of off-screen blocks so the page does not lag despite
+   its length. Content is fully present in the DOM, so search engines and AI
+   agents still read every word — content-visibility affects only rendering. */
+.onboarding-doc > *,
+.doc-body > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 120px;
+}

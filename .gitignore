@@ -30,3 +30,7 @@ tsconfig.*-check.json
 
 # Local caches
 .cache/
+
+# Local agent/tooling data (not project source)
+.arts/
+.workbuddy-ai/

@@ -3,6 +3,7 @@ import { fail } from "@/lib/api/respond"
 import { checkRateLimit } from "@/lib/auth/rate-limit"
 import { startProjectPipeline } from "@/lib/projects/pipeline-recovery"
 import { saveProjectAttachments } from "@/lib/projects/attachments"
+import { authorizeProjectCreation, ENTITLEMENT_ENFORCEMENT_ENABLED } from "@/lib/billing/entitlements/require"
 import { normalizeUrl } from "@/lib/integrations/firecrawl/service"
 import type { MirrorProject, ProjectPreferences, UserPipelineMode } from "@/lib/types/project"
 
@@ -18,6 +19,8 @@ export type CreateProjectInput = {
   githubRepoName?: string
   githubBranch?: string
   githubSubMode?: "clone" | "extend"
+  /** Workspace to attribute the project to (ADR-7). Optional; defaults to personal scope. */
+  workspaceId?: string
   userRequest?: string
   idempotencyKey?: string
   skipAnalysis?: boolean
@@ -48,6 +51,7 @@ function newProject(
   return {
     id: cryptoId(),
     userId,
+    workspaceId: partial.workspaceId,
     mode: partial.mode,
     name: partial.name,
     state: "created",
@@ -115,6 +119,18 @@ export async function createUserProject(userId: string, body: CreateProjectInput
     windowMs: 60 * 60 * 1000,
   })
 
+  // Phase 3 entitlement gate (fail-open when flag is off — existing flows untouched).
+  if (ENTITLEMENT_ENFORCEMENT_ENABLED) {
+    try {
+      const auth = await authorizeProjectCreation(userId)
+      if (!auth.allowed) {
+        return { error: fail(auth.code ?? "PLAN_LIMIT", auth.reason ?? "Your plan does not allow this.", 402) }
+      }
+    } catch {
+      // Resolution failure must not break creation while enforcement is rolling out.
+    }
+  }
+
   const mode = body.mode === "scratch" ? "scratch" : body.mode === "github" ? "github" : "website"
   const crawlMode = body.crawlMode === "deep" ? "deep" : "relevant"
   const pipelineMode: UserPipelineMode = body.pipelineMode === "heavy" ? "heavy" : body.pipelineMode === "legacy" ? "legacy" : "heavy"
@@ -140,6 +156,7 @@ export async function createUserProject(userId: string, body: CreateProjectInput
       preferences,
       pipelineMode,
       idea: originalIntent,
+      workspaceId: body.workspaceId,
     })
     await store.createProject(project)
     if (idempotencyKey) {
@@ -201,6 +218,7 @@ export async function createUserProject(userId: string, body: CreateProjectInput
       crawlMode,
       pipelineMode,
       idea: originalIntent,
+      workspaceId: body.workspaceId,
     })
     await store.createProject(project)
     if (idempotencyKey) {
@@ -221,7 +239,7 @@ export async function createUserProject(userId: string, body: CreateProjectInput
 
   const preferences = body.preferences
   const projectName = body.name?.trim() || preferences?.appName || titleFromIntent(idea, "New app")
-  const project = newProject(userId, { mode, idea, name: projectName, preferences, pipelineMode })
+  const project = newProject(userId, { mode, idea, name: projectName, preferences, pipelineMode, workspaceId: body.workspaceId })
   await store.createProject(project)
   if (idempotencyKey) {
     const { saveCreateIdempotency } = await import("@/lib/start/pending-store")

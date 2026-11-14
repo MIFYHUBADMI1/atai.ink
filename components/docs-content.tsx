@@ -23,6 +23,9 @@ import {
   Database,
   GitCompare,
   DollarSign,
+  KeyRound,
+  LifeBuoy,
+  Megaphone,
   BookOpen,
   Shield,
   Users,
@@ -106,6 +109,20 @@ export function DocsContent() {
             running business — with app, database, payments, users, marketing and
             infrastructure included.
           </p>
+          <div className="mt-7 flex flex-wrap items-center gap-3 rounded-xl border border-primary/25 bg-primary/5 px-5 py-4">
+            <BookOpen className="size-5 shrink-0 text-primary" />
+            <p className="min-w-0 flex-1 text-sm leading-6 text-muted-foreground">
+              <strong className="text-foreground">New to Atai?</strong> Read the complete onboarding
+              guide — every page URL, every step from start to scale, billing &amp; credits, and
+              fixes for common problems.
+            </p>
+            <Link
+              href="/docs/onboarding"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+            >
+              Extended guide <ArrowRight className="size-3.5" />
+            </Link>
+          </div>
         </div>
       </section>
 
@@ -128,6 +145,11 @@ export function DocsContent() {
             <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Quick links — all pages</p>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {[
+                { href: "/docs/onboarding", icon: BookOpen, label: "New User Onboarding Guide", desc: "Extended manual — every URL, every step, every fix", color: "text-primary", bg: "bg-primary/10" },
+                { href: "/docs/runtime-api", icon: KeyRound, label: "Runtime API, SDK & API Keys", desc: "Unified capability API, @atai-group/sdk, key create/rotate & endpoints", color: "text-cyan-600 dark:text-cyan-400", bg: "bg-cyan-500/10" },
+                { href: "/docs/database-manager", icon: Database, label: "Database Manager Handbook", desc: "Modeling tables & records, field types, relations, and the REST API", color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-500/10" },
+                { href: "/docs/growth-marketing", icon: Megaphone, label: "Growth & Marketing Playbook", desc: "Growth overview, Studio, SEO audit, ads, market research & referrals", color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10" },
+                { href: "/docs/troubleshooting", icon: LifeBuoy, label: "Troubleshooting & Error Reference", desc: "Symptom → cause → fix for every common Atai problem, with URLs", color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-500/10" },
                 { href: "/sdk", icon: Code2, label: "Atai SDK & API", desc: "@atai-group/sdk + Runtime API reference — keys, endpoints, limits", color: "text-cyan-600 dark:text-cyan-400", bg: "bg-cyan-500/10" },
                 { href: "/developers", icon: Zap, label: "Developer Portal", desc: "Infrastructure services, quickstart, and API access", color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-500/10" },
                 { href: "/pricing", icon: DollarSign, label: "Pricing", desc: "Plans, credit packs & build costs", color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10" },
@@ -136,7 +158,7 @@ export function DocsContent() {
                 { href: "/new", icon: Lightbulb, label: "New Project", desc: "Start building a new app", color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10" },
                 { href: "/account", icon: Settings, label: "Account & Settings", desc: "Profile, security & billing", color: "text-sky-600 dark:text-sky-400", bg: "bg-sky-500/10" },
                 { href: "/referrals", icon: Users, label: "Refer & Earn", desc: "Share your referral link for credits", color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-500/10" },
-                { href: "/billing", icon: CreditCard, label: "Billing", desc: "Manage your subscription & credits", color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-500/10" },
+                { href: "/settings/billing", icon: CreditCard, label: "Billing", desc: "Manage your subscription & credits", color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-500/10" },
                 { href: "/resources", icon: BookOpen, label: "Resources", desc: "Guides, tutorials & more", color: "text-teal-600 dark:text-teal-400", bg: "bg-teal-500/10" },
                 { href: "/about", icon: Shield, label: "About Atai", desc: "Our mission and story", color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-500/10" },
               ].map(({ href, icon: Icon, label, desc, color, bg }) => (
@@ -1032,7 +1054,7 @@ export function DocsContent() {
             <div className="mt-8 grid gap-2 sm:grid-cols-3 border-t border-border pt-6">
               {[
                 { href: "/dashboard", icon: Rocket, label: "Go to dashboard" },
-                { href: "/billing", icon: CreditCard, label: "Manage billing" },
+                { href: "/settings/billing", icon: CreditCard, label: "Manage billing" },
                 { href: "/referrals", icon: Users, label: "Refer & earn credits" },
               ].map(({ href, icon: Icon, label }) => (
                 <Link

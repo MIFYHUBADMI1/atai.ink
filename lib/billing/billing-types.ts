@@ -147,6 +147,34 @@ export interface SubscriptionRecord {
   cancelledAt?: number
   /** When the subscription actually expired */
   expiredAt?: number
+  // ─── Phase 3 entitlement migration fields (additive, non-breaking) ──────────
+  /** New canonical commercial plan id (explorer/starter/growth/scale/enterprise). */
+  commercialPlanId?: string
+  /** Original Dodo-linked plan id, retained for renewal resolution. Never rename. */
+  legacyPlanId?: string
+  /**
+   * The Dodo product id the customer actually purchased. Preserved verbatim
+   * (ADR-2) so renewal resolution keeps working — the new free Explorer uses a
+   * distinct product id (`DODO_PRODUCT_EXPLORER_V2`) so legacy + new never
+   * collide. Additive; not used for renewal matching logic changes.
+   */
+  dodoProductId?: string
+  /** Billing cadence. Additive — drives annual monthly-issuance scheduling. */
+  billingCycle?: "monthly" | "annual"
+  /** References entitlement_versions / plan_catalog_versions. */
+  entitlementVersion?: string
+  /** Frozen entitlement snapshot at migration/activation time. */
+  entitlementSnapshot?: Record<string, unknown>
+  /** References the priced plan_catalog_versions the subscriber is locked to. */
+  pricingVersion?: string
+  /** True if this subscriber is grandfathered onto legacy entitlements. */
+  grandfathered?: boolean
+  /** Until this timestamp the subscriber keeps legacy pricing/entitlements. */
+  grandfatheredUntil?: number
+  /** When the migration script set the fields above. */
+  migratedAt?: number
+  /** Batch id of the migration that touched this record (idempotency/reconciliation). */
+  migrationBatchId?: string
   metadata?: Record<string, unknown>
   createdAt: number
   updatedAt: number

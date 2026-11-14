@@ -75,6 +75,19 @@ export const BUILD_TIERS: Record<string, BuildTier> = {
 
 // ─── Subscription Plans ──────────────────────────────────────────────────────
 
+/** Whether a plan can be purchased through checkout right now. */
+export type PurchaseState = "available" | "contact" | "soon"
+
+/**
+ * Gates UI advertising of not-yet-launched capabilities (hard rule #3).
+ * Mirrors the entitlement catalog's `availability` shape.
+ */
+export interface PlanAvailability {
+  agents: boolean
+  marketingAutomation: boolean
+  knowledgeBase: boolean
+}
+
 export interface SubscriptionPlan {
   id: string
   name: string
@@ -93,6 +106,18 @@ export interface SubscriptionPlan {
   dodoProductId?: string
   /** Dodo price ID — set in environment or database */
   dodoPriceId?: string
+  /** Display/checkout status for the commercial catalog reconciliation. */
+  purchaseState?: PurchaseState
+  /** Gates UI advertising of not-yet-launched features (hard rule #3). */
+  availability?: PlanAvailability
+  /** True when the displayed monthly credit grant is provisional (Phase 4 TBD). */
+  provisionalCredits?: boolean
+  /** Annual price in USD, when annual billing is offered. */
+  annualPriceUSD?: number | null
+  /** Approx. annual savings vs. 12× monthly, when annual is offered. */
+  annualSavingsPct?: number | null
+  /** Canonical commercial plan id (entitlement catalog). */
+  commercialPlanId?: string
 }
 
 export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [

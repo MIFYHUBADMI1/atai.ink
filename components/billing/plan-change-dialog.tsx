@@ -30,6 +30,16 @@ interface PlanChangeDialogProps {
   onConfirm: () => void
   /** True while the checkout redirect is in progress */
   loading?: boolean
+  /**
+   * Pre-computed downgrade consequences (Phase 3, Gate 6 Flow A). Only supplied
+   * when the target is a genuine downgrade; renders the business-cap impact so
+   * the user sees what changes before confirming.
+   */
+  downgradeImpact?: {
+    allowedBusinessesInToPlan: number | "unlimited"
+    overLimit: number
+    consequences: string[]
+  } | null
 }
 
 function formatTimeRemaining(endMs: number): string {
@@ -65,6 +75,7 @@ export function PlanChangeDialog({
   currentPeriodEnd,
   onConfirm,
   loading = false,
+  downgradeImpact = null,
 }: PlanChangeDialogProps) {
   const upgrade = isUpgrade(currentPlan, targetPlan)
   const timeRemaining = currentPeriodEnd ? formatTimeRemaining(currentPeriodEnd) : null
@@ -164,6 +175,33 @@ export function PlanChangeDialog({
                   <span className="font-medium text-foreground">{endDate}</span>.
                 </p>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Downgrade consequences — shown before confirmation (Gate 6, Flow A) */}
+        {!upgrade && downgradeImpact && downgradeImpact.consequences.length > 0 && (
+          <div
+            className={cn(
+              "flex items-start gap-3 rounded-lg border p-3",
+              downgradeImpact.overLimit > 0
+                ? "border-red-500/30 bg-red-500/5"
+                : "border-amber-500/30 bg-amber-500/5",
+            )}
+          >
+            <AlertTriangle
+              className={cn(
+                "size-4 shrink-0 mt-0.5",
+                downgradeImpact.overLimit > 0 ? "text-red-500" : "text-amber-500",
+              )}
+            />
+            <div>
+              <p className="text-sm font-medium">What changes when you downgrade</p>
+              <ul className="mt-1 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+                {downgradeImpact.consequences.map((consequence) => (
+                  <li key={consequence}>{consequence}</li>
+                ))}
+              </ul>
             </div>
           </div>
         )}

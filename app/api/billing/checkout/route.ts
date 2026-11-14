@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth/session"
 import { getDodoConfig } from "@/lib/env"
 import { SUBSCRIPTION_PLANS, PERMANENT_CREDIT_PACKS } from "@/lib/billing/config"
+import { getCommercialPlanById, COMMERCIAL_PRICING_ENABLED } from "@/lib/billing/entitlements/commercial-plans"
 import { logger } from "@/lib/logging/logger"
 import {
   getOrCreateSubscriptionProduct,
@@ -110,7 +111,12 @@ export async function POST(req: Request) {
 
     try {
       if (body.type === "subscription") {
-        const plan = SUBSCRIPTION_PLANS.find((p) => p.id === body.productId)
+        // Prefer the commercial catalog (new five-plan model) when the page is
+        // live. A commercial plan carries its own pre-provisioned Dodo product id,
+        // so we never fall through to — or charge — a legacy product/price.
+        const commercial =
+          COMMERCIAL_PRICING_ENABLED ? getCommercialPlanById(body.productId) : undefined
+        const plan = commercial ?? SUBSCRIPTION_PLANS.find((p) => p.id === body.productId)
         if (!plan) {
           return NextResponse.json(
             { ok: false, error: { code: "INVALID_REQUEST", message: "Unknown plan ID" } },
@@ -126,13 +132,25 @@ export async function POST(req: Request) {
           )
         }
 
-        // Auto-provision the product if not configured
+        // A commercial plan whose Dodo product has not yet been provisioned must
+        // not fall through to a legacy product or price (hard rule #4). Refuse
+        // explicitly; the UI shows "Contact sales" for exactly this state.
+        if (commercial && !commercial.dodoProductId) {
+          return NextResponse.json(
+            { ok: false, error: { code: "PLAN_UNAVAILABLE", message: "This plan is not yet available for purchase. Please contact sales." } },
+            { status: 400 },
+          )
+        }
+
+        // Auto-provision the product if not configured. For commercial plans we
+        // pass the pre-provisioned product id so creation is skipped entirely.
         const product = await getOrCreateSubscriptionProduct(
           plan.id,
           `Atai — ${plan.name}`,
           `${plan.mirrorCredits.toLocaleString()} Atai Credits per month. ${plan.name} plan.`,
           plan.priceUSD,
           plan.mirrorCredits,
+          commercial?.dodoProductId,
         )
 
         logger.info("checkout", "Creating subscription checkout session", {

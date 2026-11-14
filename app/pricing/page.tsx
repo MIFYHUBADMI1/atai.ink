@@ -14,6 +14,7 @@ import {
   formatUSD,
   WELCOME_BONUS_CREDITS,
 } from "@/lib/billing/config"
+import { getCommercialPlans, COMMERCIAL_PRICING_ENABLED } from "@/lib/billing/entitlements/commercial-plans"
 import { getBuildTierCosts, getDeploymentCosts } from "@/lib/billing/runtime-config"
 import { PlanCard } from "@/components/billing/plan-card"
 import { CheckoutButton } from "@/components/billing/checkout-button"
@@ -79,6 +80,63 @@ const PLAN_GUIDANCE: Record<string, { bestFor: string; outcomes: string[] }> = {
     ],
   },
 }
+
+/**
+ * Commercial-model guidance (shown only when ATAI_COMMERCIAL_PRICING_ENABLED).
+ * Keyed by the commercial plan ids (explorer/starter/growth/scale/enterprise).
+ */
+const COMMERCIAL_PLAN_GUIDANCE: Record<string, { bestFor: string; outcomes: string[] }> = {
+  explorer: {
+    bestFor: "Map it out first",
+    outcomes: [
+      "Plan your business with the AI co-founder before spending a cent",
+      "500 planning credits on email verification — enough to explore, not to launch",
+      "Upgrade when you are ready to go live",
+    ],
+  },
+  starter: {
+    bestFor: "Your first live business",
+    outcomes: [
+      "Launch one business and take real customers",
+      "A production app on your Atai subdomain, with sign-in and records",
+      "SEO and content marketing so people can find you",
+    ],
+  },
+  growth: {
+    bestFor: "Running several businesses",
+    outcomes: [
+      "Launch up to four businesses in the same month",
+      "Your own domain, ads, and competition monitoring",
+      "Direct support when you need a person",
+    ],
+  },
+  scale: {
+    bestFor: "Operating at full tilt",
+    outcomes: [
+      "Unlimited businesses and production apps",
+      "Premium AI co-founder, full BI suite and priority compute",
+      "Premium support",
+    ],
+  },
+  enterprise: {
+    bestFor: "A portfolio or an organisation",
+    outcomes: [
+      "Credit volume and integrations shaped around your operation",
+      "Dedicated infrastructure, an uptime commitment and an account manager",
+      "We help your first businesses go out the door",
+    ],
+  },
+}
+
+/**
+ * When the commercial pricing flag is on, the page renders the new five-plan
+ * catalog (with availability-gated features) instead of the legacy one. The flag
+ * is OFF by default, so the live page is unchanged until the product owner is
+ * ready to flip — zero regression.
+ */
+const ACTIVE_COMMERCIAL = COMMERCIAL_PRICING_ENABLED
+const resolvedPlans = ACTIVE_COMMERCIAL ? getCommercialPlans() : SUBSCRIPTION_PLANS
+const planGuidance = ACTIVE_COMMERCIAL ? COMMERCIAL_PLAN_GUIDANCE : PLAN_GUIDANCE
 
 /** What launching costs, in the size of business rather than lines of work. */
 const LAUNCH_SIZES = [
@@ -201,7 +259,7 @@ const pricingStructuredData = {
     "Atai.ink is the business builder for founders: launch, run and grow a real business with an AI team — customers, sales and your own admin console included. No code.",
   image: `${SITE_URL}/og-image.png`,
   brand: { "@type": "Brand", name: "Atai" },
-  offers: SUBSCRIPTION_PLANS.filter((p) => !p.custom).map((plan) => ({
+  offers: resolvedPlans.filter((p) => !p.custom).map((plan) => ({
     "@type": "Offer",
     name: `${plan.name} Plan`,
     price: plan.priceUSD,
@@ -350,29 +408,31 @@ export default async function PricingPage() {
         </div>
 
         <div className="mt-10 grid gap-5 lg:grid-cols-2">
-          {SUBSCRIPTION_PLANS.filter((plan) => !plan.custom).map((plan) => (
+          {resolvedPlans.filter((plan) => !plan.custom).map((plan) => (
             <PlanCard
               key={plan.id}
               plan={plan}
               isLoggedIn={!!user}
-              bestFor={PLAN_GUIDANCE[plan.id]?.bestFor}
-              outcomes={PLAN_GUIDANCE[plan.id]?.outcomes}
+              bestFor={planGuidance[plan.id]?.bestFor}
+              outcomes={planGuidance[plan.id]?.outcomes}
               translateLabels
+              allPlans={ACTIVE_COMMERCIAL ? resolvedPlans : undefined}
             />
           ))}
         </div>
 
         {(() => {
-          const enterprise = SUBSCRIPTION_PLANS.find((plan) => plan.custom)
+          const enterprise = resolvedPlans.find((plan) => plan.custom)
           if (!enterprise) return null
           return (
             <div className="mt-5">
               <PlanCard
                 plan={enterprise}
                 isLoggedIn={!!user}
-                bestFor={PLAN_GUIDANCE[enterprise.id]?.bestFor}
-                outcomes={PLAN_GUIDANCE[enterprise.id]?.outcomes}
+                bestFor={planGuidance[enterprise.id]?.bestFor}
+                outcomes={planGuidance[enterprise.id]?.outcomes}
                 translateLabels
+                allPlans={ACTIVE_COMMERCIAL ? resolvedPlans : undefined}
               />
             </div>
           )
