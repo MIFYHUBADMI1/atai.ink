@@ -8,6 +8,12 @@ vi.mock("@/lib/client/api", async (importOriginal) => ({
   postJson: vi.fn(),
 }))
 
+// The panel calls useRouter() for the post-create refresh; the test renders
+// through renderToStaticMarkup, where no app-router context exists.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
+}))
+
 const { AdsStrategyPanel } = await import("./ads-strategy-panel")
 
 const SAVED = {
@@ -33,7 +39,7 @@ const DRAFT = {
 }
 
 const render = (props: Record<string, unknown>) =>
-  renderToStaticMarkup(createElement(AdsStrategyPanel, { projectId: "proj_1", prefill: {}, creditsAvailable: null, aiTextReady: true, initialRecommendations: [], ...props } as never))
+  renderToStaticMarkup(createElement(AdsStrategyPanel, { projectId: "proj_1", prefill: {}, creditsAvailable: null, aiTextReady: true, initialRecommendations: [], campaignsEnabled: false, ...props } as never))
 
 describe("AdsStrategyPanel — the Strategy tab surface", () => {
   it("renders every founder field with its bound and the free-to-save framing", () => {

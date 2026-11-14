@@ -3,14 +3,14 @@ import { renderToStaticMarkup } from "react-dom/server"
 vi.mock("@/lib/client/api", () => ({ postJson: vi.fn() }))
 import {
   buildCompetitionQueryMessages,
-  buildCompetitionResearchMessages,
   dedupeSources,
   fallbackCompetitionQueries,
   normalizeMultiSearch,
   parseCompetitionQueries,
   COMPETITION_RESEARCH_MAX_SOURCES,
 } from "@/lib/marketing/competition-research-context"
-import { CompetitionSnapshotPanel } from "@/components/marketing/competition-snapshot-panel"
+import { buildCompetitionReportMessages, classifySources } from "@/lib/marketing/competition-report"
+import { CompetitionDashboard } from "@/components/marketing/competition-dashboard"
 
 describe("competition research evidence shaping", () => {
   it("normalizes web, news, research-category and data-tool results, dropping unsafe URLs", () => {
@@ -55,7 +55,7 @@ describe("competition research evidence shaping", () => {
       { projectName: "Cakely", description: "A custom cake ordering app for neighborhood bakeries. More text.", targetUsers: ["Home bakers"] },
       2026,
     )
-    expect(fallback).toHaveLength(3)
+    expect(fallback).toHaveLength(5)
     expect(fallback[0]).toContain("competitors alternatives")
     expect(fallback[1]).toContain("market size valuation 2026")
     expect(fallback.every((q) => q.length <= 120)).toBe(true)
@@ -69,28 +69,31 @@ describe("competition research evidence shaping", () => {
     expect(parseCompetitionQueries('{"market": "  "}')).toBeNull()
   })
 
-  it("builds the grounded analysis prompt with numbered sources, citation rules, and honest empty state", () => {
+  it("builds the structured JSON prompt with classified sources, citation rules, and honest empty state", () => {
     const research = {
       queries: ["cake ordering apps competitors"],
-      sources: normalizeMultiSearch(
-        {
-          data: {
-            web: [{ title: "Acme rival", url: "https://acme.com", description: "Rival bakery app", markdown: "Details here" }],
-            news: [{ title: "Acme raises", url: "https://news.example.com/a", snippet: "Funding", date: "2026-10-02" }],
+      sources: classifySources(
+        normalizeMultiSearch(
+          {
+            data: {
+              web: [{ title: "Acme rival", url: "https://acme.com", description: "Rival bakery app", markdown: "Details here" }],
+              news: [{ title: "Acme raises", url: "https://news.example.com/a", snippet: "Funding", date: "2026-10-02" }],
+            },
           },
-        },
-        0,
+          0,
+        ),
+        { projectName: "Cakely", description: "Custom cake ordering" },
       ),
     }
-    const messages = buildCompetitionResearchMessages({
+    const messages = buildCompetitionReportMessages({
       projectName: "Cakely",
       description: "Custom cake ordering",
       marketingPlan: "Positioning: warm neighborhood bakery ordering.",
       research,
     })
-    expect(messages.system).toContain("cite")
-    expect(messages.prompt).toContain("(source: example.com)".slice(0, 15))
-    expect(messages.prompt).toContain("[1] web · Acme rival — acme.com")
+    expect(messages.system).toContain("JSON")
+    expect(messages.prompt).toContain("[s1]")
+    expect(messages.prompt).toContain("acme.com")
     expect(messages.prompt).toContain("2026-10-02")
     expect(messages.prompt).toContain("Details here")
     expect(messages.prompt).toContain("Positioning: warm neighborhood bakery ordering.")
@@ -98,13 +101,25 @@ describe("competition research evidence shaping", () => {
     // The plan + sources fit the explicit budget.
     expect(messages.prompt.length).toBeLessThan(18_000)
 
-    const empty = buildCompetitionResearchMessages({ projectName: "Cakely", research: { queries: [], sources: [] } })
+    const empty = buildCompetitionReportMessages({ projectName: "Cakely", research: { queries: [], sources: [] } })
     expect(empty.prompt).toContain("returned nothing usable")
   })
 })
 
 describe("competition snapshot panel research rendering", () => {
   const base = { id: "n1", title: "Snapshot", body: "## Positioning\n\nGrounded analysis.", createdAt: 1700000000000, creditsCharged: 5 }
+  const dashProps = {
+    projectId: "p1",
+    creditsAvailable: 100,
+    textReady: true,
+    researchReady: true,
+    hasPlan: true,
+    researchEnabled: true,
+    positioning: "",
+    valueProposition: "",
+    targetUsers: [],
+    intelligence: null,
+  }
 
   const research = {
     queries: ["cake ordering apps competitors", "cake market size valuation 2026"],
@@ -119,7 +134,7 @@ describe("competition snapshot panel research rendering", () => {
 
   it("renders the live-sources section with groups, safe external links, queries and the honesty stamp", () => {
     const html = renderToStaticMarkup(
-      <CompetitionSnapshotPanel projectId="p1" snapshot={{ ...base, research }} creditsAvailable={100} textReady researchReady hasPlan />,
+      <CompetitionDashboard {...dashProps} snapshot={{ ...base, research }} />,
     )
     expect(html).toContain("Live research 2023-11-14 · 3 sources · 15 credits")
     expect(html).toContain("Live sources (3)")
@@ -134,13 +149,13 @@ describe("competition snapshot panel research rendering", () => {
 
   it("keeps the plan-only label for pre-research drafts and blocks the button honestly", () => {
     const legacy = renderToStaticMarkup(
-      <CompetitionSnapshotPanel projectId="p1" snapshot={base} creditsAvailable={100} textReady researchReady hasPlan />,
+      <CompetitionDashboard {...dashProps} snapshot={base} />,
     )
     expect(legacy).toContain("from your plan, not market data")
     expect(legacy).not.toContain("Live sources")
 
     const blocked = renderToStaticMarkup(
-      <CompetitionSnapshotPanel projectId="p1" snapshot={null} creditsAvailable={100} textReady researchReady={false} hasPlan />,
+      <CompetitionDashboard {...dashProps} snapshot={null} researchReady={false} />,
     )
     expect(blocked).toContain("Live web research isn&#x27;t configured on this deployment yet.")
     expect(blocked).not.toContain("Run live competitor research\n")

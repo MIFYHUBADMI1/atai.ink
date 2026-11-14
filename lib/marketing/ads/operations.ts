@@ -128,6 +128,32 @@ export async function listPerformance(requestId: string): Promise<AdCampaignPerf
     .toArray()) as unknown as AdCampaignPerformanceDoc[]
 }
 
+/**
+ * Every recorded result for a project (optionally one request, optionally a
+ * time window). Read-only and free — the analytics surface aggregates these
+ * without charging. Bounded so a long-running promotion cannot dump unbounded
+ * rows into a page render.
+ */
+export async function listProjectPerformance(
+  projectId: string,
+  opts: { requestId?: string; from?: number; to?: number; limit?: number } = {},
+): Promise<AdCampaignPerformanceDoc[]> {
+  await ensureAdsIndexes()
+  const filter: Record<string, unknown> = { projectId }
+  if (opts.requestId) filter.requestId = opts.requestId
+  if (opts.from !== undefined || opts.to !== undefined) {
+    filter.reportedAt = {
+      ...(opts.from !== undefined ? { $gte: opts.from } : {}),
+      ...(opts.to !== undefined ? { $lte: opts.to } : {}),
+    }
+  }
+  return (await (await adCampaignPerformanceCol())
+    .find(filter)
+    .sort({ reportedAt: -1 })
+    .limit(Math.min(Math.max(opts.limit ?? 500, 1), 1000))
+    .toArray()) as unknown as AdCampaignPerformanceDoc[]
+}
+
 export async function addPerformance(input: {
   requestId: string
   adminId: string

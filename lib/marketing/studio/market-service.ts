@@ -15,6 +15,7 @@ import { routeRuntimeRequest } from "@/lib/runtime/router/router"
 import type { RuntimeAuthContext } from "@/runtime/contracts/auth"
 import type { CapabilityScope } from "@/runtime/contracts/capabilities"
 import type { RuntimeResponse } from "@/runtime/contracts/router"
+import type { CompetitionReport } from "@/lib/marketing/competition-report"
 import type {
   ContentItemDoc,
   MarketAssetBrief,
@@ -213,6 +214,13 @@ export interface GenerateMarketInput extends MarketBrief {
   messages?: { system: string; prompt: string }
   /** Output token cap override (default stays the per-length value). */
   maxTokens?: number
+  /**
+   * Post-generation, PRE-persistence validation for kit services with a
+   * structured contract (competition). Receives the raw model text; returns
+   * the founder-safe body plus the validated report. Throwing aborts the run
+   * before anything is persisted — raw model output never reaches the library.
+   */
+  finalizeText?: (raw: string) => { body: string; competitionReport?: CompetitionReport }
 }
 
 export interface MarketCallView {
@@ -238,6 +246,8 @@ export interface MarketContentView {
   kitInput?: Record<string, string>
   /** Live-research evidence behind the analysis (competition snapshots). */
   research?: MarketAssetResearch
+  /** Validated structured competition report, when the run produced one. */
+  competitionReport?: CompetitionReport
   runtime: {
     keySource: "project_api_key" | "workspace"
     keyLabel: string
@@ -272,6 +282,7 @@ export async function generateMarketContent(input: GenerateMarketInput): Promise
   let body = ""
   let model: string | undefined
   let media: MarketAssetMedia | undefined
+  let competitionReport: CompetitionReport | undefined
 
   const brief: MarketBrief = {
     kind: input.kind,
@@ -376,7 +387,14 @@ export async function generateMarketContent(input: GenerateMarketInput): Promise
     if (!audio) throw new AppError("AI_UNAVAILABLE")
     media = { kind: "audio", dataUrl: audio.dataUrl, mimeType: audio.mimeType }
   } else {
-    body = await generateTextBody({ identity, projectName: project.name, brandVoice, brief, calls, messages: input.messages, maxTokens: input.maxTokens })
+    const raw = await generateTextBody({ identity, projectName: project.name, brandVoice, brief, calls, messages: input.messages, maxTokens: input.maxTokens })
+    if (input.finalizeText) {
+      const finalized = input.finalizeText(raw)
+      body = finalized.body
+      competitionReport = finalized.competitionReport
+    } else {
+      body = raw
+    }
   }
 
   forcedMediaBound(media)
@@ -414,6 +432,7 @@ export async function generateMarketContent(input: GenerateMarketInput): Promise
     ...(input.kitSlot ? { kitSlot: input.kitSlot } : {}),
     ...(input.kitInput ? { kitInput: input.kitInput } : {}),
     ...(input.research ? { research: input.research } : {}),
+    ...(competitionReport ? { competitionReport } : {}),
     createdAt: now,
     updatedAt: now,
   }
@@ -878,6 +897,7 @@ function toView(doc: ContentItemDoc, options: { includeMedia: boolean }): Market
     ...(media ? { media } : {}),
     ...(doc.kitInput ? { kitInput: doc.kitInput } : {}),
     ...(doc.research ? { research: doc.research } : {}),
+    ...(doc.competitionReport ? { competitionReport: doc.competitionReport } : {}),
     runtime: {
       keySource: doc.runtime?.keySource ?? "workspace",
       keyLabel: doc.runtime?.keyLabel ?? "Workspace session",

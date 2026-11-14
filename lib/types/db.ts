@@ -795,9 +795,29 @@ export interface ContentItemDoc {
    * anything else.
    */
   research?: MarketAssetResearch
+  /**
+   * Validated structured competition report (live-research runs from Nov 2026
+   * onward). The body is a founder-facing rendering of THIS object; raw model
+   * output is never persisted. Absent on legacy markdown-only snapshots.
+   */
+  competitionReport?: import("@/lib/marketing/competition-report").CompetitionReport
   createdAt: number
   updatedAt: number
 }
+
+/** Relevance category assigned to a live-research source at collection time. */
+export type MarketSourceCategory =
+  | "competitor_website"
+  | "competitor_product"
+  | "pricing_page"
+  | "industry_report"
+  | "customer_research"
+  | "news"
+  | "market_data"
+  | "data_tool"
+  | "irrelevant"
+
+export type MarketSourceRelevance = "high" | "medium" | "low" | "irrelevant"
 
 /** One live-search source behind a competition snapshot's analysis. */
 export interface MarketResearchSource {
@@ -817,6 +837,10 @@ export interface MarketResearchSource {
   provider?: string
   /** Which derived search query (0-based) produced this source. */
   queryIndex?: number
+  /** Deterministic relevance classification (absent on pre-classification runs). */
+  category?: MarketSourceCategory
+  relevance?: MarketSourceRelevance
+  relevanceReason?: string
 }
 
 export interface MarketAssetResearch {
@@ -960,6 +984,12 @@ export interface CampaignDoc {
   startDate: number | null
   endDate: number | null
   notes?: string
+  /**
+   * Studio asset ids attached to this plan. Validated against the project's own
+   * content library on every write — references only, never a copy of the asset,
+   * and never an asset from another project. Absent on plans with no attachments.
+   */
+  assetIds?: string[]
   origin: CampaignOrigin
   createdAt: number
   updatedAt: number
@@ -989,6 +1019,7 @@ export interface CampaignHistoryDoc {
     | "startDate"
     | "endDate"
     | "notes"
+    | "assetIds"
   from?: string | null
   to?: string | null
   changedBy: string

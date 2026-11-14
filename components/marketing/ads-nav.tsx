@@ -5,7 +5,9 @@ export const ADS_TABS = [
   { key: "overview", label: "Overview" },
   { key: "strategy", label: "Strategy" },
   { key: "bench", label: "Ad bench" },
+  { key: "analytics", label: "Analytics" },
   { key: "promote", label: "Promote with Atai" },
+  { key: "requests", label: "My requests" },
   { key: "history", label: "History" },
 ] as const
 

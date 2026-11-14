@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { renderToStaticMarkup } from "react-dom/server"
 vi.mock("@/lib/client/api", () => ({ postJson: vi.fn() }))
-import { CompetitionSnapshotPanel } from "@/components/marketing/competition-snapshot-panel"
+import { CompetitionDashboard } from "@/components/marketing/competition-dashboard"
 import { CompetitorIntelligenceList } from "@/components/project-resources/competitor-intelligence-list"
 import { CompetitorsSection } from "@/components/project-resources/competitors-section"
 import { readResourcesCompetitors } from "@/lib/resources/competitor-schema"
@@ -9,9 +9,22 @@ import type { ApplicationSpecification } from "@/lib/types/specification"
 
 const snapshot = { id: "new", title: "Snapshot", body: '##Positioning\n\n- **Bookkeepers**\n\n[Bad](javascript:alert(1))\n\n<script>alert(1)</script>', createdAt: 1700000000000, creditsCharged: 2 }
 
+const dashboardProps = {
+  projectId: "p1",
+  creditsAvailable: 100,
+  textReady: true,
+  researchReady: true,
+  hasPlan: true,
+  researchEnabled: true,
+  positioning: "",
+  valueProposition: "",
+  targetUsers: [],
+  intelligence: null,
+}
+
 describe("Competition and Resources rendering", () => {
   it("renders safe Markdown and accessible historical drafts, not raw headings or active HTML", () => {
-    const html = renderToStaticMarkup(<CompetitionSnapshotPanel projectId="p1" snapshot={snapshot} history={[{ ...snapshot, id: "old", body: "## Earlier draft\n\nHistorical plan." }]} creditsAvailable={100} textReady researchReady hasPlan />)
+    const html = renderToStaticMarkup(<CompetitionDashboard {...dashboardProps} snapshot={snapshot} history={[{ ...snapshot, id: "old", body: "## Earlier draft\n\nHistorical plan." }]} />)
     expect(html).toContain("<h2")
     expect(html).toContain("<ul")
     expect(html).toContain("<strong")
@@ -23,7 +36,7 @@ describe("Competition and Resources rendering", () => {
     expect(html).not.toContain("##Positioning")
   })
   it("does not flag matching context as stale", () => {
-    const html = renderToStaticMarkup(<CompetitionSnapshotPanel projectId="p1" snapshot={{ ...snapshot, contextHash: "current" }} currentContextHash="current" creditsAvailable={0} textReady researchReady hasPlan />)
+    const html = renderToStaticMarkup(<CompetitionDashboard {...dashboardProps} snapshot={{ ...snapshot, contextHash: "current" }} currentContextHash="current" creditsAvailable={0} />)
     expect(html).not.toContain("planning context has changed")
     expect(html).not.toContain("freshness is unknown")
   })

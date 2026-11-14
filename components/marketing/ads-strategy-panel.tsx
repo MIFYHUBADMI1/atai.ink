@@ -2,9 +2,13 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { Check, Copy, FileText, Loader2, Save, Sparkles, TriangleAlert } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
+import { ArrowRight, Check, Copy, FileText, Loader2, Save, Sparkles, Target, TriangleAlert } from "lucide-react"
 import { postJson, putJson } from "@/lib/client/api"
 import { AD_STRATEGY_BOUNDS } from "@/lib/marketing/ads/strategy-content"
+import { campaignNameFromStrategy, mapStrategyChannels } from "@/lib/marketing/ads/center-model"
+import { slugify } from "@/lib/marketing/campaigns/utm"
 
 export interface AdStrategyView {
   positioning: string
@@ -82,6 +86,7 @@ export function AdsStrategyPanel({
   creditsAvailable,
   aiTextReady,
   initialRecommendations,
+  campaignsEnabled,
 }: {
   projectId: string
   strategy: AdStrategyView | null
@@ -89,6 +94,7 @@ export function AdsStrategyPanel({
   creditsAvailable: number | null
   aiTextReady: boolean
   initialRecommendations: StrategyDraftView[]
+  campaignsEnabled: boolean
 }) {
   const saved = initialStrategy ?? null
   const base = saved ?? { ...emptyStrategy, positioning: prefill.positioning ?? "", icp: prefill.icp ?? "" }
@@ -111,6 +117,18 @@ export function AdsStrategyPanel({
   const [generating, setGenerating] = useState(false)
   const [generateError, setGenerateError] = useState<string | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+
+  const router = useRouter()
+  const [creatingCampaign, setCreatingCampaign] = useState(false)
+  const [campaignError, setCampaignError] = useState<string | null>(null)
+  const [createdCampaign, setCreatedCampaign] = useState<{ id: string; name: string } | null>(null)
+
+  // Live preview of the plan the strategy words would produce — updates as the
+  // founder types, so "Create campaign plan" never surprises them.
+  const objectiveLines = parseLines(objectives)
+  const mappedChannels = mapStrategyChannels(parseLines(channels))
+  const derivedCampaignName = campaignNameFromStrategy({ objectives: objectiveLines, positioning })
+  const derivedObjective = objectiveLines[0] ?? positioning.trim()
 
   async function save() {
     setSaving(true)
@@ -165,6 +183,36 @@ export function AdsStrategyPanel({
       window.setTimeout(() => setCopiedId((current) => (current === item.id ? null : current)), 1600)
     } catch {
       // Clipboard blocked — the founder can still select the text.
+    }
+  }
+
+  async function createCampaignFromStrategy() {
+    if (creatingCampaign) return
+    setCreatingCampaign(true)
+    setCampaignError(null)
+    try {
+      const noteParts: string[] = []
+      if (budgetNote.trim()) noteParts.push(`Budget: ${budgetNote.trim()}`)
+      const priorityLines = parseLines(priorities)
+      if (priorityLines.length) noteParts.push(`Priorities:\n${priorityLines.map((line) => `• ${line}`).join("\n")}`)
+      const created = await postJson<{ id: string; name: string }>(
+        `/api/projects/${encodeURIComponent(projectId)}/campaigns`,
+        {
+          name: derivedCampaignName,
+          objective: derivedObjective.slice(0, 500),
+          channels: mappedChannels,
+          notes: noteParts.join("\n\n").slice(0, 2000),
+          utmCampaign: slugify(derivedCampaignName) || null,
+          origin: "user_created",
+        },
+      )
+      setCreatedCampaign({ id: created.id, name: created.name })
+      toast.success("Campaign plan created as a draft.")
+      router.refresh()
+    } catch (e) {
+      setCampaignError(e instanceof Error ? e.message : "The campaign plan couldn't be created — try again.")
+    } finally {
+      setCreatingCampaign(false)
     }
   }
 
@@ -347,6 +395,96 @@ export function AdsStrategyPanel({
           </p>
         )}
       </section>
+
+      {campaignsEnabled && (
+        <section aria-labelledby="ads-strategy-campaign-heading" className="rounded-2xl border border-border bg-card p-4 sm:p-5">
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Target className="size-4" aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <h3 id="ads-strategy-campaign-heading" className="text-lg font-semibold tracking-tight">
+                Turn this strategy into a campaign plan
+              </h3>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+                Start a free campaign plan pre-filled from the words above. It lands in Campaigns as a draft you run
+                yourself — Atai spends nothing, posts nothing, and schedules nothing.
+              </p>
+            </div>
+          </div>
+
+          {createdCampaign ? (
+            <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+              <p className="flex items-center gap-2 text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                <Check className="size-4" aria-hidden /> Campaign plan created
+              </p>
+              <p className="mt-1 break-words text-sm text-muted-foreground">
+                &ldquo;{createdCampaign.name}&rdquo; is waiting in Campaigns as a draft.
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Link
+                  href={`/project/${projectId}/campaigns`}
+                  className="inline-flex items-center gap-1 rounded-full bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                >
+                  Open in Campaigns <ArrowRight className="size-3.5" aria-hidden />
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setCreatedCampaign(null)}
+                  className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted"
+                >
+                  Create another
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <dl className="mt-4 grid gap-3 rounded-xl border border-border bg-background p-4 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <dt className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Plan name</dt>
+                  <dd className="mt-1 break-words text-sm font-medium">{derivedCampaignName}</dd>
+                </div>
+                <div>
+                  <dt className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Channels</dt>
+                  <dd className="mt-1 flex flex-wrap gap-1">
+                    {mappedChannels.length > 0 ? (
+                      mappedChannels.map((ch) => (
+                        <span key={ch} className="rounded-full border border-border px-2 py-0.5 text-xs capitalize">{ch}</span>
+                      ))
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Add preferred channels above to map them here.</span>
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Objective</dt>
+                  <dd className="mt-1 break-words text-sm text-muted-foreground">
+                    {derivedObjective || "Add an objective or positioning above."}
+                  </dd>
+                </div>
+              </dl>
+
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void createCampaignFromStrategy()}
+                  disabled={creatingCampaign}
+                  className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {creatingCampaign ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Target className="size-4" aria-hidden />}
+                  {creatingCampaign ? "Creating plan…" : "Create campaign plan"}
+                </button>
+                <span className="text-xs text-muted-foreground">Free · saved as a draft · you run it yourself</span>
+              </div>
+              {campaignError && (
+                <p role="alert" className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-700 dark:text-amber-400">
+                  {campaignError}
+                </p>
+              )}
+            </>
+          )}
+        </section>
+      )}
 
       <section aria-labelledby="ads-recommendations-heading" className="rounded-2xl border border-border bg-card p-4 sm:p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

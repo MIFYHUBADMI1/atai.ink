@@ -6,11 +6,14 @@ import "server-only"
  * At the founder's request this runs REAL web research via Firecrawl
  * /v2/search and hands the evidence to the snapshot writer:
  *
- *   1. The founder's plan → three search queries (one metered ai.text call;
+ *   1. The founder's plan → five search queries (one metered ai.text call;
  *      a deterministic plan-derived fallback fills any gaps).
- *   2. Three scoped multi-source searches — competitors (web + Alexandria
+ *   2. Five scoped multi-source searches — competitors (web + Alexandria
  *      data tools, pages scraped), market & valuation (web filtered to the
- *      "research" category + news), recent funding/news (news, past year).
+ *      "research" category + news), recent funding/news (news, past year),
+ *      competitor pricing (web, pages scraped) and funding/valuation news
+ *      (web + news, past year) — so the report can show real prices,
+ *      valuations and funding instead of guessing them.
  *   3. Every response is zod-validated and URL-sanitized into display-safe
  *      sources (pure module: ./competition-research-context), which both
  *      ground the analysis prompt and persist on the snapshot as references.
@@ -48,6 +51,7 @@ import {
   parseCompetitionQueries,
   type CompetitionSource,
 } from "./competition-research-context"
+import { classifySources } from "./competition-report"
 
 // ─── Billing (same discipline as lib/marketing/seo/credits.ts) ──────────────
 
@@ -140,7 +144,7 @@ export async function refundCompetitionResearchCredits(
 // ─── Query derivation ───────────────────────────────────────────────────────
 
 /**
- * Turn the plan into three search queries. One metered ai.text call drafts
+ * Turn the plan into five search queries. One metered ai.text call drafts
  * them; any unusable output or failure falls back to the deterministic
  * plan-derived queries. Both sets are derived from the plan only — no client
  * input reaches the search engine verbatim (injection surface stays closed).
@@ -178,16 +182,20 @@ export async function deriveCompetitionQueries(input: {
           { role: "user", content: messages.prompt },
         ],
         temperature: 0.3,
-        max_tokens: 300,
+        max_tokens: 450,
       },
     })
     const content = (response.data as { content?: unknown } | null)?.content
     if (typeof content !== "string") return fallback
     const parsed = parseCompetitionQueries(content)
     if (!parsed) return fallback
-    return [parsed.competitors ?? fallback[0], parsed.market ?? fallback[1], parsed.news ?? fallback[2]].filter(
-      (q): q is string => Boolean(q),
-    )
+    return [
+      parsed.competitors ?? fallback[0],
+      parsed.market ?? fallback[1],
+      parsed.news ?? fallback[2],
+      parsed.pricing ?? fallback[3],
+      parsed.funding ?? fallback[4],
+    ].filter((q): q is string => Boolean(q))
   } catch (e) {
     logger.warn("marketing.competition.research", "query derivation failed — using plan-derived fallback", {
       projectId: input.projectId,
@@ -202,9 +210,9 @@ export async function deriveCompetitionQueries(input: {
 const SEARCH_LIMIT = 6
 
 /**
- * Run the three scoped searches. Partial failure is honest and tolerated —
+ * Run the five scoped searches. Partial failure is honest and tolerated —
  * the founder sees whichever sources did land; total failure throws so the
- * caller refunds.
+ * caller refunds. The fixed run charge does not depend on the query count.
  */
 export async function runCompetitionSearches(queries: string[]): Promise<MarketResearchSource[]> {
   const searches = [
@@ -222,6 +230,16 @@ export async function runCompetitionSearches(queries: string[]): Promise<MarketR
       label: "recent news",
       query: queries[2],
       options: { sources: ["news"] as const, limit: SEARCH_LIMIT, tbs: "qdr:y" },
+    },
+    {
+      label: "competitor pricing",
+      query: queries[3],
+      options: { sources: ["web"] as const, limit: SEARCH_LIMIT, scrapeWeb: true },
+    },
+    {
+      label: "funding & valuations",
+      query: queries[4],
+      options: { sources: ["web", "news"] as const, limit: SEARCH_LIMIT, tbs: "qdr:y" },
     },
   ].filter((search) => Boolean(search.query))
 
@@ -290,11 +308,22 @@ export async function runCompetitionResearch(input: {
   })
 
   const sources = await runCompetitionSearches(queries)
+  const classified = classifySources(sources, {
+    projectName: input.project.name,
+    description: spec?.description,
+    idea: input.project.idea,
+    targetUsers: spec?.targetUsers,
+  })
   return {
     research: {
       queries,
       collectedAt: Date.now(),
-      sources: sources as MarketResearchSource[],
+      sources: classified.map((s) => ({
+        ...stripPromptOnlyWeight(s),
+        category: s.category,
+        relevance: s.relevance,
+        relevanceReason: s.relevanceReason,
+      })),
       researchCreditsCharged: 0,
     },
   }

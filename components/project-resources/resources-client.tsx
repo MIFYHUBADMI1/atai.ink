@@ -59,7 +59,7 @@ export function ResourcesClient({
   marketingChannels: MarketingChannel[]
   valuationSnapshot: ValuationSnapshot
   filteredResources: ResourceSummary[]
-  learningPaths: { id: string; title: string; description: string; resources: any[] }[]
+  learningPaths: { id: string; title: string; description: string; resources: ResourceSummary[] }[]
   cachedData: CachedData
   availableCredits: number
   initialSection?: "next-steps" | "competitors"

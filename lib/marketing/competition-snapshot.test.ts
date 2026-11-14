@@ -91,4 +91,32 @@ describe("Competition snapshot service", () => {
     await expect(generateCompetitionSnapshot({ userId: "u1", projectId: "p1", project })).rejects.toThrow("text failed")
     expect(refund).toHaveBeenCalledWith("u1", "p1", 15)
   })
+
+  it("hands the studio a pre-persistence validator that rejects leaked model reasoning", async () => {
+    generate.mockImplementation(async (input: { finalizeText?: (raw: string) => unknown }) => {
+      expect(input.finalizeText).toBeTypeOf("function")
+      input.finalizeText?.("The user wants a snapshot. Let me analyze the sources first. Sources provided:")
+      return { id: "never" }
+    })
+    await expect(generateCompetitionSnapshot({ userId: "u1", projectId: "p1", project })).rejects.toThrow()
+    expect(refund).toHaveBeenCalledWith("u1", "p1", 15)
+  })
+
+  it("validator turns a clean structured report into a founder-safe body plus report", async () => {
+    const clean = {
+      keyFindings: [], limitations: [], opportunities: [], competitors: [], marketFigures: [],
+      customerBehaviour: [], news: [], featureComparison: [], pricingComparison: [],
+      positioningNotes: [], gaps: [], questions: [],
+    }
+    let finalized: { body: string; competitionReport?: unknown } | undefined
+    generate.mockImplementation(async (input: { finalizeText?: (raw: string) => { body: string; competitionReport?: unknown } }) => {
+      finalized = input.finalizeText?.(JSON.stringify(clean))
+      return { id: "ok" }
+    })
+    await generateCompetitionSnapshot({ userId: "u1", projectId: "p1", project })
+    expect(finalized?.competitionReport).toEqual(clean)
+    expect(finalized?.body).toContain("## Competitors found in the live research")
+    expect(finalized?.body).not.toContain("The user wants")
+    expect(refund).not.toHaveBeenCalled()
+  })
 })

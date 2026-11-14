@@ -22,7 +22,7 @@ import "server-only"
 import { ObjectId } from "mongodb"
 import { store } from "@/lib/store/store"
 import { cryptoId } from "@/lib/store/store"
-import { campaignsCol, campaignHistoryCol } from "@/lib/db/collections"
+import { campaignsCol, campaignHistoryCol, contentItemsCol } from "@/lib/db/collections"
 import { AppError } from "@/lib/errors"
 import { logger } from "@/lib/logging/logger"
 import type {
@@ -93,6 +93,34 @@ function normalizeChannels(values: unknown): CampaignChannel[] {
   return out
 }
 
+/** Upper bound on assets attached to one plan — keeps the reference list bounded. */
+const MAX_CAMPAIGN_ASSETS = 24
+
+/**
+ * Keep only asset ids that actually exist in THIS project's content library,
+ * de-duplicated and bounded. Reads the same `content_items` collection the
+ * Studio lists, so a campaign can never reference another project's asset (or a
+ * deleted one). Unknown ids are dropped silently — the picker only offers real
+ * ids, and a stale reference must never block saving the rest of the plan.
+ */
+async function normalizeAssetIds(values: unknown, projectId: string): Promise<string[]> {
+  if (!Array.isArray(values)) return []
+  const ids: string[] = []
+  for (const v of values) {
+    if (typeof v !== "string") continue
+    const id = v.trim()
+    if (id && !ids.includes(id)) ids.push(id)
+    if (ids.length >= MAX_CAMPAIGN_ASSETS) break
+  }
+  if (ids.length === 0) return []
+  const col = await contentItemsCol()
+  const found = await col
+    .find({ projectId, kind: "marketing_asset", id: { $in: ids } }, { projection: { id: 1 } })
+    .toArray()
+  const valid = new Set(found.map((doc) => (doc as { id: string }).id))
+  return ids.filter((id) => valid.has(id))
+}
+
 /** Create one campaign plan. Fails closed on missing name or a non-owned project. */
 export async function createCampaign(input: {
   userId: string
@@ -105,6 +133,7 @@ export async function createCampaign(input: {
   startDate?: number | null
   endDate?: number | null
   notes?: string
+  assetIds?: unknown
   origin: CampaignOrigin
 }): Promise<CampaignDoc> {
   const name = (input.name ?? "").trim()
@@ -116,6 +145,7 @@ export async function createCampaign(input: {
     throw new AppError("UNAUTHORIZED_PROJECT_ACCESS")
   }
 
+  const assetIds = await normalizeAssetIds(input.assetIds, input.projectId)
   const origin = isCampaignOrigin(input.origin) ? input.origin : "user_created"
   const now = Date.now()
   const id = `campaign_${cryptoId()}`
@@ -136,6 +166,7 @@ export async function createCampaign(input: {
     startDate: finiteOrNull(input.startDate),
     endDate: finiteOrNull(input.endDate),
     ...(input.notes && input.notes.trim() ? { notes: input.notes.trim() } : {}),
+    ...(assetIds.length ? { assetIds } : {}),
     origin,
     createdAt: now,
     updatedAt: now,
@@ -252,6 +283,7 @@ export async function updateCampaignFields(input: {
   startDate?: number | null
   endDate?: number | null
   notes?: string | null
+  assetIds?: unknown
 }): Promise<CampaignDoc> {
   const project = await store.getProject(input.projectId)
   if (!project || project.userId !== input.userId) {
@@ -328,6 +360,14 @@ export async function updateCampaignFields(input: {
       if (notes) set.notes = notes
       else set.notes = ""
       changes.push({ field: "notes", from: current || null, to: notes || null })
+    }
+  }
+  if (input.assetIds !== undefined) {
+    const assetIds = await normalizeAssetIds(input.assetIds, input.projectId)
+    const current = existing.assetIds ?? []
+    if (assetIds.join(",") !== current.join(",")) {
+      set.assetIds = assetIds
+      changes.push({ field: "assetIds", from: current.join(",") || null, to: assetIds.join(",") || null })
     }
   }
 

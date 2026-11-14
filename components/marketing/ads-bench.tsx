@@ -21,7 +21,14 @@ import {
 import { postNdjson } from "@/lib/client/api"
 import { downloadDataUrl } from "@/lib/client/download"
 import { defaultBenchSlots } from "@/lib/marketing/studio/ads-kit-content"
-import type { BenchGuide, BenchInputSource, GuideChannelId } from "@/lib/marketing/ads/beginner-guide"
+import {
+  GUIDE_CHANNELS,
+  type BenchGuide,
+  type BenchInputSource,
+  type GuideChannelId,
+} from "@/lib/marketing/ads/beginner-guide"
+
+const CHANNEL_LABELS = new Map(GUIDE_CHANNELS.map((channel) => [channel.id, channel.label]))
 
 export interface AdsBenchItem {
   id: string
@@ -350,7 +357,7 @@ export function AdsBench({
           <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
             For:{" "}
             {matches
-              .map((id) => guide.channels.find((channel) => channel.id === id)?.label ?? id)
+              .map((id) => guide.channels.find((channel) => channel.id === id)?.label ?? CHANNEL_LABELS.get(id) ?? id)
               .join(", ")}
           </p>
         )}

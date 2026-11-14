@@ -11,6 +11,7 @@ import {
   allSummaries,
   LEARNING_PATHS,
   pathResources,
+  summarize,
   type ResourceSummary,
 } from "@/lib/resources"
 
@@ -451,6 +452,6 @@ export function getRelevantLearningPaths(state: ProjectState) {
 
   return LEARNING_PATHS.filter((p) => pathMap[stage].includes(p.id)).map((path) => ({
     ...path,
-    resources: pathResources(path.steps),
+    resources: pathResources(path.steps).map(summarize),
   }))
 }

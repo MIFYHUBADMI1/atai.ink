@@ -173,7 +173,7 @@ export const AD_ESTIMATE_DISCLAIMER =
   "Estimated impressions and reach are planning ranges, not guaranteed delivery. They are not customers, sales, or revenue."
 
 export function founderRequestPath(projectId: string, requestId: string): string {
-  return `/project/${projectId}/ads?tab=promote&request=${encodeURIComponent(requestId)}`
+  return `/project/${projectId}/ads?tab=requests&request=${encodeURIComponent(requestId)}`
 }
 
 export function adminRequestPath(requestId: string): string {

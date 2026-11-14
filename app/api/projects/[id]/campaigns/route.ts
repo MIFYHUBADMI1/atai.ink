@@ -33,6 +33,9 @@ const ChannelEnum = z.enum(["email", "social", "content", "seo", "referral", "ot
 /** Origins a client is allowed to create. "ai_generated" is intentionally absent. */
 const ClientOrigin = z.enum(["user_created"])
 
+/** Studio asset references — the service re-validates each id against the project's library. */
+const AssetIds = z.array(z.string().min(1).max(80)).max(24)
+
 const CreateSchema = z
   .object({
     name: z.string().min(3).max(120),
@@ -43,6 +46,7 @@ const CreateSchema = z
     startDate: z.number().int().positive().nullable().optional(),
     endDate: z.number().int().positive().nullable().optional(),
     notes: z.string().max(2000).optional(),
+    assetIds: AssetIds.optional(),
     origin: ClientOrigin.default("user_created"),
   })
   .strip()
@@ -59,6 +63,7 @@ const PatchSchema = z
     startDate: z.number().int().positive().nullable().optional(),
     endDate: z.number().int().positive().nullable().optional(),
     notes: z.string().max(2000).nullable().optional(),
+    assetIds: AssetIds.optional(),
   })
   .strip()
 
@@ -75,6 +80,7 @@ function present(doc: CampaignDoc) {
     startDate: doc.startDate,
     endDate: doc.endDate,
     notes: doc.notes ?? null,
+    assetIds: doc.assetIds ?? [],
     origin: doc.origin,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
@@ -129,6 +135,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       startDate: parsed.data.startDate ?? null,
       endDate: parsed.data.endDate ?? null,
       notes: parsed.data.notes,
+      assetIds: parsed.data.assetIds,
       origin: parsed.data.origin,
     })
     return ok(present(campaign))
@@ -164,6 +171,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       startDate,
       endDate,
       notes,
+      assetIds,
     } = parsed.data
 
     const wantsFieldEdit =
@@ -174,7 +182,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       utmCampaign !== undefined ||
       startDate !== undefined ||
       endDate !== undefined ||
-      notes !== undefined
+      notes !== undefined ||
+      assetIds !== undefined
     if (!status && !wantsFieldEdit) return fail("VALIDATION", "Nothing to update.", 422)
 
     let updated: CampaignDoc | null = null
@@ -192,6 +201,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         ...(startDate !== undefined ? { startDate } : {}),
         ...(endDate !== undefined ? { endDate } : {}),
         ...(notes !== undefined ? { notes } : {}),
+        ...(assetIds !== undefined ? { assetIds } : {}),
       })
     }
     if (status && isCampaignStatus(status)) {

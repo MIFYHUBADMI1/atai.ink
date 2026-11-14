@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 import useSWR from "swr"
 import { jsonFetcher, postJson } from "@/lib/client/api"
 import { AD_ESTIMATE_DISCLAIMER, AD_PERFORMANCE_SOURCE_LABELS, AD_REQUEST_STATUS_LABELS } from "@/lib/marketing/ads/request-shared"
+import { LifecycleStepper, StatusGroupBadge } from "@/components/marketing/request-lifecycle"
 
 type PublicRequest = {
   id: string
@@ -67,21 +68,31 @@ export function AdRequestPanel({ projectId, requestId }: { projectId: string; re
   }
 
   const { request, events, activities, performance, creditsAvailable } = data
-  const status = AD_REQUEST_STATUS_LABELS[request.status] ?? request.status
   const canCancel = !["completed", "rejected", "cancelled", "refunded"].includes(request.status)
 
   return (
     <div className="flex flex-col gap-6">
       <div className="rounded-2xl border border-border bg-card p-5">
-        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{request.id}</p>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{request.id}</p>
+          <StatusGroupBadge status={request.status} />
+        </div>
         <h2 className="mt-1 text-xl font-semibold tracking-tight">{request.business.name}</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Status: <span className="font-medium text-foreground">{status}</span>
-        </p>
         <a href={request.business.liveUrl} className="mt-2 block break-all text-sm text-primary hover:underline" target="_blank" rel="noopener noreferrer">
           {request.business.liveUrl}
         </a>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">{request.promote.pitch}</p>
+      </div>
+
+      <div className="rounded-2xl border border-border bg-card p-5">
+        <h3 className="text-base font-semibold tracking-tight">Where your request is</h3>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+          Atai&apos;s team walks these stages by hand. Nothing publishes automatically, and estimated visibility is never
+          a guaranteed result.
+        </p>
+        <div className="mt-4">
+          <LifecycleStepper status={request.status} />
+        </div>
       </div>
 
       {request.proposal ? (
@@ -96,6 +107,31 @@ export function AdRequestPanel({ projectId, requestId }: { projectId: string; re
             </p>
           ) : null}
           <p className="mt-2 text-xs italic leading-5 text-muted-foreground">{request.proposal.estimateNote || AD_ESTIMATE_DISCLAIMER}</p>
+          <dl className="mt-3 grid gap-2 sm:grid-cols-2">
+            {request.proposal.platforms.length > 0 ? (
+              <div className="rounded-xl border border-border bg-background px-3 py-2">
+                <dt className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Platforms</dt>
+                <dd className="mt-0.5 text-sm">{request.proposal.platforms.join(", ")}</dd>
+              </div>
+            ) : null}
+            {request.proposal.duration ? (
+              <div className="rounded-xl border border-border bg-background px-3 py-2">
+                <dt className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Duration</dt>
+                <dd className="mt-0.5 text-sm">{request.proposal.duration}</dd>
+              </div>
+            ) : null}
+          </dl>
+          {request.proposal.conditions ? (
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">
+              <span className="font-medium text-foreground">Conditions: </span>
+              {request.proposal.conditions}
+            </p>
+          ) : null}
+          {request.proposal.expiresAt ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Quotation expires {new Date(request.proposal.expiresAt).toLocaleDateString()}
+            </p>
+          ) : null}
           {request.status === "awaiting_approval" ? (
             <div className="mt-4 flex flex-wrap gap-2">
               <button type="button" disabled={!!busy} onClick={() => act("accept_proposal")} className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground">

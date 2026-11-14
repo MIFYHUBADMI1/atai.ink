@@ -61,7 +61,7 @@ export default async function ProjectResourcesPage({
         marketingChannels={marketingChannels}
         valuationSnapshot={valuationSnapshot}
         filteredResources={filteredResources}
-        learningPaths={learningPaths as any}
+        learningPaths={learningPaths}
         cachedData={cachedData}
         availableCredits={availableCredits}
         initialSection={section === "competitors" ? "competitors" : "next-steps"}

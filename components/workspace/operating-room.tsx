@@ -567,7 +567,7 @@ export function ProjectWorkspace({ projectId, initialState }: { projectId: strin
             <div className="mt-4 grid gap-2">
               {[
                 { href: `/project/${projectId}/market`, title: "Market & grow" },
-                { href: `/project/${projectId}/ads`, title: "Ads & marketing" },
+                { href: `/project/${projectId}/ads`, title: "Ads & Growth" },
                 { href: `/project/${projectId}/finances`, title: "Business finances" },
                 { href: `/project/${projectId}/lessons`, title: "Business lessons" },
                 { href: `/project/${projectId}/resources`, title: "Resources" },

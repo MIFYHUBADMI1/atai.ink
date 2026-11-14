@@ -33,7 +33,12 @@ import type { ContentItemDoc, MarketAssetResearch } from "@/lib/types/db"
 import type { MirrorProject } from "@/lib/types/project"
 import type { ApplicationSpecification } from "@/lib/types/specification"
 import { COMPETITION_SNAPSHOT_TITLE } from "./competition-snapshot-context"
-import { buildCompetitionResearchMessages } from "./competition-research-context"
+import {
+  buildCompetitionReportMessages,
+  parseCompetitionReport,
+  renderCompetitionReportMarkdown,
+  type ClassifiedSource,
+} from "./competition-report"
 import {
   chargeCompetitionResearchCredits,
   getCompetitionResearchCost,
@@ -42,7 +47,7 @@ import {
 } from "./competition-research"
 import { generateMarketContent, type MarketContentView } from "./studio/market-service"
 
-const SNAPSHOT_MAX_TOKENS = 1_600
+const SNAPSHOT_MAX_TOKENS = 4_000
 
 export interface CompetitionSnapshotView {
   id: string
@@ -53,6 +58,8 @@ export interface CompetitionSnapshotView {
   contextHash?: string
   /** Live-research evidence behind this snapshot (absent on pre-research drafts). */
   research?: MarketAssetResearch
+  /** Validated structured report (absent on legacy markdown-only snapshots). */
+  competitionReport?: import("./competition-report").CompetitionReport
 }
 
 export function competitionContextHash(project: MirrorProject, goals?: OwnerGoals | null): string {
@@ -98,7 +105,18 @@ export async function generateCompetitionSnapshot(input: {
       project: input.project,
     })
 
-    const messages = buildCompetitionResearchMessages({
+    // Evidence ids are positional (s1…sN); the persisted array order is the
+    // same order the prompt numbers, so citations stay resolvable in the UI.
+    const sources: ClassifiedSource[] = research.sources.map((s, i) => ({
+      ...s,
+      id: `s${i + 1}`,
+      category: s.category ?? "irrelevant",
+      relevance: s.relevance ?? "irrelevant",
+      relevanceScore: 0,
+      relevanceReason: s.relevanceReason ?? "Unclassified source.",
+    }))
+
+    const messages = buildCompetitionReportMessages({
       projectName: input.project.name,
       description: spec.description,
       idea: input.project.idea,
@@ -107,7 +125,7 @@ export async function generateCompetitionSnapshot(input: {
       siteUrl:
         input.project.deployment?.status === "success" ? input.project.deployment?.productionUrl : undefined,
       goals: input.ownerGoals ?? undefined,
-      research: { queries: research.queries, sources: research.sources },
+      research: { queries: research.queries, sources },
     })
 
     return await generateMarketContent({
@@ -119,6 +137,15 @@ export async function generateCompetitionSnapshot(input: {
       brief: messages.prompt,
       messages,
       maxTokens: SNAPSHOT_MAX_TOKENS,
+      // Validation happens BEFORE persistence: leakage or a malformed report
+      // throws here, the catch below refunds, and no raw model text is saved.
+      finalizeText: (raw) => {
+        const { report, notes } = parseCompetitionReport(raw, { sources })
+        return {
+          body: renderCompetitionReportMarkdown(report, sources, notes),
+          competitionReport: report,
+        }
+      },
       title: COMPETITION_SNAPSHOT_TITLE,
       kit: "competition",
       kitSlot: "snapshot",
@@ -145,6 +172,7 @@ function toSnapshotView(doc: ContentItemDoc): CompetitionSnapshotView {
     createdAt: doc.createdAt,
     contextHash: doc.kitInput?.contextHash,
     ...(doc.research ? { research: doc.research } : {}),
+    ...(doc.competitionReport ? { competitionReport: doc.competitionReport } : {}),
   }
 }
 
@@ -165,6 +193,7 @@ export async function listCompetitionSnapshots(
           createdAt: 1,
           "kitInput.contextHash": 1,
           research: 1,
+          competitionReport: 1,
         },
       },
     )

@@ -10,10 +10,14 @@ const toArray = vi.fn()
 const findChain = { sort: vi.fn(() => findChain), limit: vi.fn(() => findChain), toArray }
 const find = vi.fn(() => findChain)
 const histFind = vi.fn(() => findChain)
+const contentToArray = vi.fn()
+const contentFindChain = { toArray: contentToArray }
+const contentFind = vi.fn(() => contentFindChain)
 
 vi.mock("@/lib/db/collections", () => ({
   campaignsCol: vi.fn(async () => ({ insertOne: insertCampaign, findOne, find, findOneAndUpdate })),
   campaignHistoryCol: vi.fn(async () => ({ insertOne: insertHistory, find: histFind })),
+  contentItemsCol: vi.fn(async () => ({ find: contentFind })),
 }))
 
 const getProject = vi.fn()
@@ -47,6 +51,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   insertCampaign.mockResolvedValue({ acknowledged: true })
   insertHistory.mockResolvedValue({ acknowledged: true })
+  contentToArray.mockResolvedValue([])
 })
 
 describe("createCampaign", () => {
@@ -187,6 +192,67 @@ describe("updateCampaignFields", () => {
     expect(out.name).toBe("Same")
     expect(findOneAndUpdate).not.toHaveBeenCalled()
     expect(insertHistory).not.toHaveBeenCalled()
+  })
+})
+
+describe("campaign asset attachments", () => {
+  it("createCampaign keeps only ids that exist in THIS project's library, de-duplicated", async () => {
+    getProject.mockResolvedValue(project())
+    contentToArray.mockResolvedValue([{ id: "content_a" }, { id: "content_b" }])
+    const doc = await createCampaign({
+      userId: "owner",
+      projectId: "proj_1",
+      name: "With assets",
+      assetIds: ["content_a", "content_ghost", "content_b", "content_a"],
+      origin: "user_created",
+    })
+    expect(doc.assetIds).toEqual(["content_a", "content_b"])
+    // Scoped to this project's marketing_asset library — never another tenant's.
+    expect(contentFind).toHaveBeenCalledWith(
+      { projectId: "proj_1", kind: "marketing_asset", id: { $in: ["content_a", "content_ghost", "content_b"] } },
+      { projection: { id: 1 } },
+    )
+  })
+
+  it("createCampaign omits assetIds when none of the references are valid", async () => {
+    getProject.mockResolvedValue(project())
+    contentToArray.mockResolvedValue([])
+    const doc = await createCampaign({ userId: "owner", projectId: "proj_1", name: "No assets", assetIds: ["content_ghost"], origin: "user_created" })
+    expect(doc.assetIds).toBeUndefined()
+  })
+
+  it("createCampaign bounds the attachment list to 24", async () => {
+    getProject.mockResolvedValue(project())
+    const many = Array.from({ length: 40 }, (_, i) => `content_${i}`)
+    contentToArray.mockResolvedValue(many.map((id) => ({ id })))
+    const doc = await createCampaign({ userId: "owner", projectId: "proj_1", name: "Many assets", assetIds: many, origin: "user_created" })
+    expect(doc.assetIds).toHaveLength(24)
+  })
+
+  it("createCampaign does not query the library when no assets are passed", async () => {
+    getProject.mockResolvedValue(project())
+    await createCampaign({ userId: "owner", projectId: "proj_1", name: "Plain plan", origin: "user_created" })
+    expect(contentFind).not.toHaveBeenCalled()
+  })
+
+  it("updateCampaignFields replaces attachments and logs an assetIds history row", async () => {
+    getProject.mockResolvedValue(project())
+    findOne.mockResolvedValue({ id: "campaign_1", userId: "owner", projectId: "proj_1", status: "draft", name: "Plan", objective: "", channels: [], plannedBudgetCents: null, utmCampaign: null, startDate: null, endDate: null, assetIds: ["content_old"] })
+    findOneAndUpdate.mockResolvedValue({ id: "campaign_1", userId: "owner", projectId: "proj_1", status: "draft", name: "Plan", assetIds: ["content_a"] })
+    contentToArray.mockResolvedValue([{ id: "content_a" }])
+    const out = await updateCampaignFields({ userId: "owner", projectId: "proj_1", campaignId: "campaign_1", assetIds: ["content_a", "content_ghost"] })
+    expect(out.assetIds).toEqual(["content_a"])
+    expect(findOneAndUpdate.mock.calls[0][1].$set.assetIds).toEqual(["content_a"])
+    expect(insertHistory.mock.calls.some((c) => c[0].field === "assetIds")).toBe(true)
+  })
+
+  it("updateCampaignFields clears attachments to an empty list", async () => {
+    getProject.mockResolvedValue(project())
+    findOne.mockResolvedValue({ id: "campaign_1", userId: "owner", projectId: "proj_1", status: "draft", name: "Plan", objective: "", channels: [], plannedBudgetCents: null, utmCampaign: null, startDate: null, endDate: null, assetIds: ["content_old"] })
+    findOneAndUpdate.mockResolvedValue({ id: "campaign_1", userId: "owner", projectId: "proj_1", status: "draft", name: "Plan", assetIds: [] })
+    const out = await updateCampaignFields({ userId: "owner", projectId: "proj_1", campaignId: "campaign_1", assetIds: [] })
+    expect(out.assetIds).toEqual([])
+    expect(findOneAndUpdate.mock.calls[0][1].$set.assetIds).toEqual([])
   })
 })
 

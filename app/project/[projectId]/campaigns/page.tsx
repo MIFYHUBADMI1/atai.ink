@@ -48,6 +48,7 @@ export default async function ProjectCampaignsPage({ params }: { params: Promise
     startDate: d.startDate,
     endDate: d.endDate,
     notes: d.notes ?? null,
+    assetIds: d.assetIds ?? [],
     origin: d.origin,
     createdAt: d.createdAt,
     updatedAt: d.updatedAt,
@@ -57,7 +58,21 @@ export default async function ProjectCampaignsPage({ params }: { params: Promise
 
   return (
     <DashboardShell title={project.name} projectId={project.id}>
-      <div className="mx-auto max-w-3xl px-6 pb-16">
+      <div className="mx-auto w-full max-w-5xl px-4 pb-12 pt-6 sm:px-6 sm:pt-8 lg:px-8 lg:pb-16">
+        <header className="mb-5 flex flex-col gap-2">
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Ads &amp; growth</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h1 className="break-words text-2xl font-semibold tracking-tight text-balance sm:text-3xl">
+              Campaigns for {project.name}
+            </h1>
+            <a
+              href={`/project/${project.id}/ads`}
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              <span aria-hidden>←</span> Back to Growth Center
+            </a>
+          </div>
+        </header>
         <CampaignsPanel projectId={project.id} state={{ enabled: true, campaigns }} />
       </div>
     </DashboardShell>
