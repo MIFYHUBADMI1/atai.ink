@@ -133,6 +133,33 @@ default. Flipping it requires the product-owner steps below (new Dodo products).
 - [x] Admin force-invalidate endpoint: `POST /api/admin/billing/entitlements/invalidate`
   with `{ userId }` or `{ workspaceId }`.
 
+## 9. Execution runbook (run where the DB / Dodo are reachable)
+
+> The build agent could not execute these: its environment has **no outbound
+> network** (MongoDB Atlas SRV + Dodo DNS both fail). Everything below is one
+> command on a machine that can reach them.
+
+**Migration (Gate 4):**
+```bash
+npx tsx --env-file=.env.local scripts/migrate-entitlements.ts dry-run   # review
+npx tsx --env-file=.env.local scripts/migrate-entitlements.ts apply     # persist
+npx tsx --env-file=.env.local scripts/migrate-entitlements.ts dry-run   # expect changed=0
+```
+(Equivalently, the admin routes `GET` / `POST {mode:"apply"}`
+`/api/admin/billing/entitlements/migrate`.)
+
+**Dodo products (Gate 5 prerequisite):**
+```bash
+npx tsx --env-file=.env.local scripts/provision-commercial-dodo-products.ts          # plan only
+npx tsx --env-file=.env.local scripts/provision-commercial-dodo-products.ts --apply   # create
+```
+Then set the printed `DODO_COMMERCIAL_PRODUCT_STARTER|GROWTH|SCALE` in your
+environment **and** the Vercel project, and set `ATAI_COMMERCIAL_PRICING_ENABLED=true`.
+
+**Annual sweep cron:** `vercel.json` now schedules
+`GET /api/admin/billing/entitlements/annual-sweep` daily at 06:15 UTC. Set a
+`CRON_SECRET` env var in Vercel — Vercel sends it as `Authorization: Bearer …`.
+
 ---
 
 **Do not flip `ENTITLEMENT_ENFORCEMENT_ENABLED=true` until items 1–7 are  
