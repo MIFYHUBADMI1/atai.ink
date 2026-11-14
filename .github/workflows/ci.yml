@@ -23,24 +23,31 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     env:
-      MONGODB_URI: mongodb://localhost:27017/mirrorsiteai-ci
+      # Test-only database on the disposable CI service. Never a shared cluster.
+      MONGODB_URI: mongodb://127.0.0.1:27017/atai-ci-test
       NEXT_PUBLIC_APP_URL: https://atai.ink
     steps:
       - uses: actions/checkout@v4
 
+      # pnpm is the declared packageManager and the only lockfile that matches
+      # package.json; the workspace package @atai-group/sdk needs it too.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.0
+
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: npm
+          cache: pnpm
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Typecheck
-        run: npx tsc --noEmit
+        run: pnpm exec tsc --noEmit
 
       - name: Unit suite
-        run: npm test
+        run: pnpm test
 
       - name: Build
-        run: npx next build
+        run: pnpm exec next build

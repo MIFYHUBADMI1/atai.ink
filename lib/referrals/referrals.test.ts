@@ -41,7 +41,7 @@ const h = vi.hoisted(() => {
     if (state.fail) throw new Error("write failed")
     return { success: true }
   })
-  return { state, session, referrals, users, runs, grant }
+  return { state, session, referrals, users, runs, grant, resetGate: () => { gate = Promise.resolve() } }
 })
 vi.mock("@/lib/db/collections", () => ({ ensureIndexes: async () => {}, referralsCol: async () => h.referrals, usersCol: async () => h.users, buildRunsCol: async () => h.runs }))
 vi.mock("@/lib/db/mongodb", () => ({ getMongoClient: async () => ({ startSession: () => h.session }) }))
@@ -52,6 +52,7 @@ import { processMilestoneCheck, processVerificationReward } from "./referrals"
 
 beforeEach(() => {
   vi.clearAllMocks()
+  h.resetGate()
   Object.assign(h.state, { referral: { _id: "r", id: "r", referredUserId: "child", referrerUserId: "parent", verificationRewardIssued: false, milestoneRewardIssued: false, eligibleUsage: 0, status: "registered", createdAt: 1 }, users: [{ id: "child", emailVerified: true, referredBy: "parent" }, { id: "parent" }], credits: 0, ledger: [], usage: 0, count: 1, fail: false })
 })
 

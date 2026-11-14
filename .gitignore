@@ -22,5 +22,11 @@ tsconfig.tsbuildinfo
 # One-off agent scratch scripts
 .ohmyagent/tmp-*
 
+# Local scratch: agent logs, probe scripts and one-off typecheck configs
+.tmp-*
+tsconfig.tmp-*
+tsconfig.*-check.json
+*.tsbuildinfo
+
 # Local caches
 .cache/

@@ -1,4 +1,5 @@
 import "server-only"
+import { setTimeout as delay } from "node:timers/promises"
 import { logger } from "@/lib/logging/logger"
 import type {
   ProviderExecutionRequest,
@@ -6,7 +7,7 @@ import type {
 } from "@/runtime/contracts/router"
 import type { RuntimeProviderAdapter } from "@/lib/runtime/router/adapter"
 import { executeChatCompletion, executeOpenRouterJsonPost, executeOpenRouterSpeech } from "./client"
-import { toChatResult, toOpenRouterCompletionRequest, toOpenRouterRequest } from "./mapper"
+import { toChatResult, toOpenRouterCompletionRequest, toOpenRouterRequest, assistantText } from "./mapper"
 import {
   toOpenRouterImageRequest,
   toImageResult,
@@ -48,6 +49,11 @@ import { configToModelPolicy } from "@/lib/runtime/control/model-policy"
  */
 
 export const OPENROUTER_PROVIDER_ID = "openrouter"
+
+// Free-tier models intermittently answer 200 with zero content; a bounded
+// same-request retry absorbs that flake before it becomes a customer 502.
+const EMPTY_COMPLETION_MAX_ATTEMPTS = 3
+const EMPTY_COMPLETION_RETRY_DELAY_MS = 1_000
 
 class OpenRouterAdapter implements RuntimeProviderAdapter {
   readonly provider = OPENROUTER_PROVIDER_ID
@@ -138,7 +144,23 @@ class OpenRouterAdapter implements RuntimeProviderAdapter {
         : toOpenRouterRequest(request.request.input, request, policy)
 
     // 2. Call OpenRouter (network failures → normalized ProviderExecutionError).
-    const { response, latencyMs } = await executeChatCompletion(orRequest)
+    let executed = await executeChatCompletion(orRequest)
+    for (
+      let attempt = 2;
+      attempt <= EMPTY_COMPLETION_MAX_ATTEMPTS &&
+      assistantText(executed.response.choices[0]?.message) === null;
+      attempt++
+    ) {
+      logger.warn("runtime.openrouter", "empty completion — retrying", {
+        requestId: request.requestId,
+        model: orRequest.model,
+        attempt,
+        finishReason: executed.response.choices[0]?.finish_reason ?? "unknown",
+      })
+      await delay(EMPTY_COMPLETION_RETRY_DELAY_MS)
+      executed = await executeChatCompletion(orRequest)
+    }
+    const { response, latencyMs } = executed
 
     // 3. Normalize to the provider-neutral result (model = the one actually used).
     const result = toChatResult(response, request)

@@ -24,10 +24,18 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 
 vi.mock("server-only", () => ({}))
 
-const { mockFindOne, mockUpdateOne, mockInsertOne } = vi.hoisted(() => ({
+const { mockFindOne, mockUpdateOne, mockInsertOne, mockProjectFindOne } = vi.hoisted(() => ({
   mockFindOne: vi.fn().mockResolvedValue(null),
   mockUpdateOne: vi.fn().mockResolvedValue({ modifiedCount: 0 }),
   mockInsertOne: vi.fn().mockResolvedValue({ insertedId: "mock-id" }),
+  mockProjectFindOne: vi.fn().mockResolvedValue(null),
+}))
+
+// The runtime auth path reads the project row through projectsCol to reject
+// deleted projects. Without this the unmocked getter throws DATABASE_UNAVAILABLE
+// (503) before scope enforcement runs, so the 403 assertions below never execute.
+vi.mock("@/lib/db/collections", () => ({
+  projectsCol: vi.fn().mockResolvedValue({ findOne: mockProjectFindOne }),
 }))
 
 vi.mock("@/lib/store/store", () => ({
@@ -162,6 +170,10 @@ beforeEach(() => {
   vi.mocked(store.getProject).mockResolvedValue(makeProject())
   vi.mocked(store.getRuntimeProvisioning).mockResolvedValue(null)
   vi.mocked(store.claimRuntimeProvisioning).mockResolvedValue({ status: "PROVISIONING" })
+  mockProjectFindOne.mockImplementation(async (query: Record<string, unknown>) => {
+    const project = makeProject()
+    return query.id === project.id && query.userId === project.userId ? { _id: project.id } : null
+  })
   vi.mocked(store.findApiKeyMeta).mockImplementation(async (apiKeyId: string) => {
     const doc = insertedKeys.find((d) => d.id === apiKeyId)
     if (!doc) return null

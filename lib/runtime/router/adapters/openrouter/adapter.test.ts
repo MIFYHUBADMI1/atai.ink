@@ -32,7 +32,12 @@ vi.mock("@/lib/logging/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 
+vi.mock("@/lib/runtime/control/config-store", () => ({
+  getCachedProjectRuntimeConfig: vi.fn().mockResolvedValue(null),
+}))
+
 import { toOpenRouterRequest, toChatResult, ChatInputSchema, RECOMMENDED_DEFAULT_MODEL } from "./mapper"
+import { openRouterAdapter } from "./adapter"
 import { executeChatCompletion, getOpenRouterTimeoutMs } from "./client"
 import { categoryForStatus, openRouterFailure, categoryForNetworkError } from "./errors"
 import { getOpenRouterBaseUrl, openRouterHeaders } from "./config"
@@ -472,5 +477,65 @@ describe("secret safety", () => {
       headers: { authorization: "attacker" },
     })
     expect(result.success).toBe(false)
+  })
+})
+
+// ─── Empty-completion retry (free-tier flake) ──────────────────────────────
+
+describe("openRouterAdapter empty-completion retry", () => {
+  const chatInput = { messages: [{ role: "user", content: "hi" }] }
+  const emptyBody = () =>
+    openRouterResponse({ choices: [{ finish_reason: "stop", message: { role: "assistant", content: null } }] })
+
+  it("retries a 200 with no content and returns the next attempt's answer", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(200, emptyBody()))
+      .mockResolvedValueOnce(jsonResponse(200, openRouterResponse()))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const result = await openRouterAdapter.execute(executionRequest(chatInput))
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect((result.data as { content: string }).content).toBe("Hello there!")
+  })
+
+  it("gives up after the bounded attempts with the normalized provider error", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => jsonResponse(200, emptyBody()))
+    vi.stubGlobal("fetch", fetchMock)
+
+    await expect(openRouterAdapter.execute(executionRequest(chatInput))).rejects.toMatchObject({
+      category: "provider_error",
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it("does not retry HTTP failures — they propagate on the first attempt", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(async () => jsonResponse(500, { error: { code: 500, message: "boom" } }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    await expect(openRouterAdapter.execute(executionRequest(chatInput))).rejects.toMatchObject({
+      category: "provider_error",
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("reasoning-only answers count as content and are not retried", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () =>
+      jsonResponse(
+        200,
+        openRouterResponse({
+          choices: [{ finish_reason: "stop", message: { role: "assistant", content: null, reasoning: "thought" } }],
+        }),
+      ),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const result = await openRouterAdapter.execute(executionRequest(chatInput))
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect((result.data as { content: string }).content).toBe("thought")
   })
 })
