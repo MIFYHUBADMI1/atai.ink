@@ -88,6 +88,7 @@ describe("onboarding state", () => {
   it("leads with the theme picker before every other beat", () => {
     expect(missionBeatList(false, false, false).slice(0, 2)).toEqual(["theme", "vision"])
     expect(missionBeatList(true, true, true).slice(0, 2)).toEqual(["theme", "vision"])
+    expect(missionBeatList(true, false, false)).toHaveLength(10)
     expect(missionBeatList(false, false, true)).toHaveLength(10)
   })
 

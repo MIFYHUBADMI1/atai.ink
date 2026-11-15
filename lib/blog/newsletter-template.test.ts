@@ -65,6 +65,18 @@ describe("buildAnnouncementEmail", () => {
     expect(email.html).toMatch(/Unsubscribe from Atai Insights/)
     expect(email.text).toMatch(/you subscribed to Atai Insights on Atai/)
   })
+
+  it("uses the shared email-safe shell", () => {
+    const email = buildAnnouncementEmail(input)
+
+    expect(email.html).toContain("<!DOCTYPE html>")
+    expect(email.html).toContain('role="presentation"')
+    expect(email.html).toContain('bgcolor="#f4f4f5"')
+    expect(email.html).toContain("prefers-color-scheme: dark")
+    expect(email.html).not.toContain("linear-gradient")
+    expect(email.html).not.toContain("backdrop-filter")
+    expect(email.html).not.toContain("@keyframes")
+  })
 })
 
 describe("escapeHtml", () => {

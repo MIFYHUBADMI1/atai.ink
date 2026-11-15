@@ -34,7 +34,6 @@ import {
   followUpPrompt,
   missionBeatList,
   missionProgress,
-  needsFollowUp,
   parseFirstMissionDraft,
   pathWithoutMissionParam,
   resolveFirstMissionSurface,
@@ -212,22 +211,19 @@ function FirstMissionInner() {
 
   const detected = useMemo(() => detectStartMode(vision), [vision])
   const effectiveMode = modeTouched ? mode : (detected ?? mode)
-  const includeContext = beat === "context" || needsFollowUp(effectiveMode, vision)
   useEffect(() => {
     if (beat !== "verify") return
     if (session?.user.emailVerified) {
-      if (needsFollowUp(effectiveMode, vision)) setBeat("context")
-      else setBeat("source")
+      setBeat("context")
       return
     }
     void resendVerificationEmail().catch(() => undefined)
-  }, [beat, session?.user.emailVerified, effectiveMode, vision])
+  }, [beat, session?.user.emailVerified])
 
   const includeVerify = Boolean(session && !session.user.emailVerified) || beat === "verify"
   const includeVideo = Boolean(videoEmbed) || beat === "tour"
-  const countOptionalBeats = beat !== "theme" && beat !== "vision"
-  const beats = missionBeatList(includeContext && countOptionalBeats, includeVerify && countOptionalBeats, includeVideo)
-  const progress = missionProgress(beat, includeContext && countOptionalBeats, includeVerify && countOptionalBeats, includeVideo)
+  const beats = missionBeatList(true, includeVerify, includeVideo)
+  const progress = missionProgress(beat, true, includeVerify, includeVideo)
 
   useEffect(() => {
     if (surface !== "mission" || !session) return
@@ -318,11 +314,7 @@ function FirstMissionInner() {
   }
 
   function previousBeat() {
-    const list = missionBeatList(
-      includeContext && countOptionalBeats,
-      includeVerify && countOptionalBeats,
-      includeVideo,
-    )
+    const list = missionBeatList(true, includeVerify, includeVideo)
     const index = list.indexOf(beat)
     if (index <= 0) {
       setBeat("theme")
@@ -356,8 +348,7 @@ function FirstMissionInner() {
   /** The beat that follows the vision step when no tour video is queued. */
   function postVisionBeat(): MissionBeat {
     if (session && !session.user.emailVerified) return "verify"
-    if (needsFollowUp(effectiveMode, vision)) return "context"
-    return "source"
+    return "context"
   }
 
   async function finish() {
@@ -478,11 +469,7 @@ function FirstMissionInner() {
                       businessDescription: draft.prompt.trim(),
                       businessGoal: draft.prompt.trim(),
                     })
-                    const next = session && !session.user.emailVerified
-                      ? "verify"
-                      : needsFollowUp(draft.mode, draft.prompt)
-                        ? "context"
-                        : "source"
+                    const next = session && !session.user.emailVerified ? "verify" : "context"
                     go(includeVideo ? "tour" : next)
                   }}
                   autoDetectMode
@@ -686,10 +673,7 @@ function FirstMissionInner() {
           ) : null}
           {beat === "verify" ? (
             <Button
-              onClick={() => {
-                if (needsFollowUp(effectiveMode, vision)) go("context")
-                else go("source")
-              }}
+              onClick={() => go("context")}
               disabled={busy || !session?.user.emailVerified}
             >
               Continue

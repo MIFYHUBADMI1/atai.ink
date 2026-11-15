@@ -8,19 +8,20 @@ import "server-only"
  */
 
 import { sendMail } from "@/lib/email/mailer"
+import {
+  emailButton,
+  emailMetaTable,
+  emailNote,
+  emailParagraph,
+  emailStrong,
+  escapeHtml,
+  renderEmailShell,
+} from "@/lib/email/layout"
 import { usersCol } from "@/lib/db/collections"
 import { getAppUrl } from "@/lib/env"
 import { logger } from "@/lib/logging/logger"
 import type { AdCampaignRequestDoc } from "@/lib/types/ads"
 import { AD_REQUEST_STATUS_LABELS, adminRequestPath, founderRequestPath } from "./request-shared"
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-}
 
 function founderLink(request: AdCampaignRequestDoc): string {
   return `${getAppUrl()}${founderRequestPath(request.projectId, request.id)}`
@@ -92,17 +93,30 @@ export async function notifyAdRequestSubmitted(input: {
 }): Promise<void> {
   const { request, founderEmail, founderName } = input
   const link = founderLink(request)
-  const name = escapeHtml(founderName || "there")
-  const business = escapeHtml(request.business.name)
+  const status = AD_REQUEST_STATUS_LABELS[request.status]
+  const bodyHtml = [
+    emailParagraph(`Hey ${emailStrong(founderName || "there")},`),
+    emailParagraph(`Your promotion request for ${emailStrong(request.business.name)} has been received. Atai's team will review it and prepare a proposal — nothing is published yet, and nothing has been charged.`),
+    emailMetaTable([
+      { label: "Request ID", value: request.id },
+      { label: "Status", value: status },
+      { label: "Business", value: request.business.name },
+    ]),
+    emailButton(link, "View your request"),
+  ].join("")
 
   try {
     await sendMail({
       to: founderEmail,
       subject: `We received your promotion request (${request.id})`,
-      html: `<p>Hey ${name},</p>
-<p>Your promotion request for <strong>${business}</strong> has been received. Atai's team will review it and prepare a proposal — nothing is published yet, and nothing has been charged.</p>
-<p>Request ID: <strong>${request.id}</strong><br/>Status: Submitted</p>
-<p><a href="${link}">View your request</a></p>`,
+      html: renderEmailShell({
+        title: "We received your promotion request",
+        preheader: "Atai received your promotion request and will review it.",
+        eyebrow: "Promotion request",
+        heading: "Request received",
+        bodyHtml,
+        footerNote: "You received this because you submitted a promotion request to Atai.",
+      }),
       text: `Hey ${founderName || "there"}, your promotion request for ${request.business.name} has been received (${request.id}). Atai's team will review it and prepare a proposal — nothing is published yet, and nothing has been charged. View it: ${link}`,
     })
   } catch (error) {
@@ -122,12 +136,28 @@ export async function notifyAdRequestStatus(request: AdCampaignRequestDoc): Prom
     const founder = await (await usersCol()).findOne({ id: request.userId }, { projection: { email: 1, name: 1 } })
     if (!founder?.email) return
     const link = founderLink(request)
-    const name = escapeHtml(founder.name || "there")
     const status = AD_REQUEST_STATUS_LABELS[request.status]
+    const bodyHtml = [
+      emailParagraph(`Hey ${emailStrong(founder.name || "there")},`),
+      emailParagraph(escapeHtml(copy.body)),
+      emailMetaTable([
+        { label: "Request ID", value: request.id },
+        { label: "Status", value: status },
+        { label: "Business", value: request.business.name },
+      ]),
+      emailButton(link, "View your request"),
+    ].join("")
     await sendMail({
       to: founder.email,
       subject: `${copy.subject} (${request.id})`,
-      html: `<p>Hey ${name},</p><p>${escapeHtml(copy.body)}</p><p>Status: <strong>${escapeHtml(status)}</strong></p><p><a href="${link}">View your request</a></p>`,
+      html: renderEmailShell({
+        title: copy.subject,
+        preheader: copy.body,
+        eyebrow: "Promotion request",
+        heading: status,
+        bodyHtml,
+        footerNote: "You received this because you have an Atai promotion request.",
+      }),
       text: `Hey ${founder.name || "there"}, ${copy.body} Status: ${status}. View: ${link}`,
     })
   } catch (error) {
@@ -148,17 +178,33 @@ async function notifyAdmins(request: AdCampaignRequestDoc, subject: string): Pro
       .find({ isAdmin: true }, { projection: { email: 1 } })
       .limit(10)
       .toArray()
-    const business = escapeHtml(request.business.name)
     const link = adminLink(request)
+    const status = AD_REQUEST_STATUS_LABELS[request.status]
+    const bodyHtml = [
+      emailParagraph(escapeHtml(subject)),
+      emailMetaTable([
+        { label: "Business", value: request.business.name },
+        { label: "Request ID", value: request.id },
+        { label: "Live URL", value: request.business.liveUrl },
+        { label: "Status", value: status },
+      ]),
+      emailButton(link, "Open in the ads inbox"),
+      emailNote("Admin notification for Atai promotion requests."),
+    ].join("")
     for (const admin of admins) {
       if (!admin.email) continue
       try {
         await sendMail({
           to: admin.email,
           subject,
-          html: `<p>${escapeHtml(subject)}</p>
-<p>Business: <strong>${business}</strong><br/>Request ID: ${request.id}<br/>Live URL: ${escapeHtml(request.business.liveUrl)}<br/>Status: ${escapeHtml(AD_REQUEST_STATUS_LABELS[request.status])}</p>
-<p><a href="${link}">Open in the ads inbox</a></p>`,
+          html: renderEmailShell({
+            title: subject,
+            preheader: subject,
+            eyebrow: "Admin",
+            heading: subject,
+            bodyHtml,
+            footerNote: "Admin notification for Atai promotion requests.",
+          }),
           text: `${subject}. ${request.business.name} (${request.id}). Review: ${link}`,
         })
       } catch (error) {

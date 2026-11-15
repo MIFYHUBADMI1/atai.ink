@@ -9,18 +9,12 @@ import "server-only"
  */
 
 import { sendMail } from "@/lib/email/mailer"
+import { emailButton, emailNote, emailParagraph, escapeHtml, renderEmailShell } from "@/lib/email/layout"
 import { usersCol } from "@/lib/db/collections"
 import { getAppUrl } from "@/lib/env"
 import { logger } from "@/lib/logging/logger"
 import type { CofounderModelTier } from "./models"
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-}
 
 function costLabel(tier: CofounderModelTier): string {
   return tier.creditsPerMessage === 0 ? "Free" : `${tier.creditsPerMessage} credits per message`
@@ -28,9 +22,9 @@ function costLabel(tier: CofounderModelTier): string {
 
 function tierRow(tier: CofounderModelTier): string {
   return `<tr>
-<td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;"><strong>${escapeHtml(tier.name)}</strong></td>
-<td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;color:#4b5563;font-size:13px;">${escapeHtml(tier.strength)}</td>
-<td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;white-space:nowrap;">${escapeHtml(costLabel(tier))}</td>
+<td class="email-strong" style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:13px;font-weight:700;color:#18181b;">${escapeHtml(tier.name)}</td>
+<td class="email-text" style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:13px;line-height:1.5;color:#3f3f46;">${escapeHtml(tier.strength)}</td>
+<td class="email-faint" style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:13px;white-space:nowrap;color:#52525b;">${escapeHtml(costLabel(tier))}</td>
 </tr>`
 }
 
@@ -72,18 +66,29 @@ export async function notifyCofounderCatalogChange(notice: CatalogChangeNotice):
 
     const rows = notice.tiers.map(tierRow).join("")
     const subject = `Atai update — ${headline}`
-    const html = `<div style="font-family:system-ui,-apple-system,sans-serif;max-width:560px;color:#111827;">
-<p style="font-size:15px;line-height:1.6;">Hey there,</p>
-<p style="font-size:15px;line-height:1.6;">${escapeHtml(intro)}</p>
-<table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px;">
-<tr style="text-align:left;color:#6b7280;font-size:12px;text-transform:uppercase;letter-spacing:.05em;">
-<th style="padding:8px 12px;">Engine</th><th style="padding:8px 12px;">Strength</th><th style="padding:8px 12px;">Cost</th>
+    const tiersTable = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:16px 0 20px 0;border:1px solid #e4e4e7;border-radius:12px;overflow:hidden;">
+<tr>
+<td class="email-faint" style="padding:10px 12px;background-color:#f8fafc;border-bottom:1px solid #e4e4e7;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:#71717a;">Engine</td>
+<td class="email-faint" style="padding:10px 12px;background-color:#f8fafc;border-bottom:1px solid #e4e4e7;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:#71717a;">Strength</td>
+<td class="email-faint" style="padding:10px 12px;background-color:#f8fafc;border-bottom:1px solid #e4e4e7;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:#71717a;">Cost</td>
 </tr>
 ${rows}
-</table>
-<p style="font-size:15px;"><a href="${settingsUrl}" style="display:inline-block;background:#111827;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;">Choose your engine</a></p>
-<p style="font-size:13px;color:#6b7280;">Or open Settings → AI co-founder in the app. Switching takes one click and applies to your next message.</p>
-</div>`
+</table>`
+    const bodyHtml = [
+      emailParagraph("Hey there,"),
+      emailParagraph(escapeHtml(intro)),
+      tiersTable,
+      emailButton(settingsUrl, "Choose your engine"),
+      emailNote("Or open Settings → AI co-founder in the app. Switching takes one click and applies to your next message."),
+    ].join("")
+    const html = renderEmailShell({
+      title: headline,
+      preheader: intro,
+      eyebrow: "Product update",
+      heading: headline,
+      bodyHtml,
+      footerNote: "You received this because you have an Atai account.",
+    })
     const text = `Hey there,\n\n${intro}\n\n${notice.tiers.map((t) => `- ${t.name}: ${t.strength} (${costLabel(t)})`).join("\n")}\n\nChoose your engine: ${settingsUrl}`
 
     let sent = 0

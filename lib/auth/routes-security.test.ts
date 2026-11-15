@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   ingress: vi.fn(), accountLimit: vi.fn(), findUser: vi.fn(), verify: vi.fn(), dummy: vi.fn(),
   createUser: vi.fn(), session: vi.fn(), setCookie: vi.fn(), hash: vi.fn(), verification: vi.fn(),
   claim: vi.fn(), markVerified: vi.fn(), updateUser: vi.fn(), requireUser: vi.fn(), setPassword: vi.fn(), revoke: vi.fn(),
+  sessionLimit: vi.fn(),
 }))
 vi.mock("@/lib/auth/request-limit", () => ({ checkAuthRequest: mocks.ingress }))
 vi.mock("@/lib/auth/rate-limit", () => ({ checkRateLimit: mocks.accountLimit }))
@@ -18,6 +19,7 @@ vi.mock("@/lib/auth/crypto", () => ({
 }))
 vi.mock("@/lib/auth/session", () => ({
   createSession: mocks.session, setSessionCookie: mocks.setCookie, requireUser: mocks.requireUser, destroyAllSessionsForUser: mocks.revoke,
+  sessionLimitReached: mocks.sessionLimit,
 }))
 vi.mock("@/lib/auth/verification", () => ({ issueAndSendVerificationEmail: mocks.verification }))
 vi.mock("@/lib/referrals/referrals", () => ({ captureReferral: vi.fn(), processVerificationReward: vi.fn(async () => false) }))
@@ -55,6 +57,7 @@ beforeEach(() => {
   mocks.verification.mockResolvedValue({ sent: true })
   mocks.hash.mockResolvedValue("password-hash")
   mocks.setPassword.mockResolvedValue(true)
+  mocks.sessionLimit.mockResolvedValue(false)
 })
 
 describe("auth ingress ordering", () => {
