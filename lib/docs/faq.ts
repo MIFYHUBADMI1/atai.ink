@@ -35,19 +35,30 @@ export function extractFaqs(
   // Tolerate optional leading prefixes used across the docs:
   //   "## 8. Common problems"        → numbered section
   //   "## Part 10 — Common problems" → "Part N —" style (onboarding guide)
-  // and several equivalent section titles.
-  const sectionRe =
-    opts?.section ??
-    /^##\s+(?:part\s+\d+[.)]?\s*[—-]\s+)?(?:\d+[.)]\s+)?(faq|common problems|troubleshooting|error reference|errors?)\b/i
+  // Specific titles are tried before the generic "errors" fallback, so a
+  // heading like "## 4. Error message reference" cannot win over the real
+  // "## Common problems" section further down the page.
+  const patterns: RegExp[] = opts?.section
+    ? [opts.section]
+    : [
+        /^##\s+(?:part\s+\d+[.)]?\s*[—-]\s+)?(?:\d+[.)]\s+)?(?:faqs?|common problems|troubleshooting|error reference)\b/i,
+        /^##\s+(?:part\s+\d+[.)]?\s*[—-]\s+)?(?:\d+[.)]\s+)?errors?\s*$/i,
+      ]
   const limit = opts?.limit ?? 30
 
   const lines = md.split(/\r?\n/)
-  const start = lines.findIndex((l) => sectionRe.test(l))
+  let start = -1
+  for (const re of patterns) {
+    start = lines.findIndex((l) => re.test(l))
+    if (start !== -1) break
+  }
   if (start === -1) return []
 
   let end = lines.length
   for (let i = start + 1; i < lines.length; i++) {
-    if (/^#\s+/.test(lines[i])) {
+    // Stop at the next top-level section. Matching `##` (not just `#`) keeps
+    // later sections such as "Related guides" from being read as questions.
+    if (/^#{1,2}\s+/.test(lines[i])) {
       end = i
       break
     }

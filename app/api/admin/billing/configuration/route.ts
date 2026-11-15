@@ -4,11 +4,11 @@ import { z } from "zod"
 import {
   PERMANENT_CREDIT_PACKS,
   BUILD_TIERS,
-  SUBSCRIPTION_PLANS,
   DEFAULT_BILLING_CURRENCY,
   CREDITS_PER_BASELINE_UNIT,
   BASELINE_COST_MODEL_V1,
 } from "@/lib/billing/config"
+import { getCommercialPlans } from "@/lib/billing/entitlements/commercial-plans"
 import {
   getCollaborateCosts,
   getBuildTierCosts,
@@ -145,17 +145,22 @@ export async function GET() {
         environment: process.env.DODO_PAYMENTS_ENVIRONMENT ?? "not_configured",
       },
 
-      // ── Subscription Plans (USD) ──
-      subscriptionPlans: SUBSCRIPTION_PLANS.map((plan) => ({
+      // ── Subscription Plans (USD) — the live commercial catalog ──
+      subscriptionPlans: getCommercialPlans().map((plan) => ({
         id: plan.id,
         name: plan.name,
         tagline: plan.tagline,
         priceUSD: plan.priceUSD,
+        annualPriceUSD: plan.annualPriceUSD,
         mirrorCredits: plan.mirrorCredits,
         interval: plan.interval,
         active: plan.active,
         custom: plan.custom ?? false,
         popular: plan.popular ?? false,
+        purchaseState: plan.purchaseState,
+        annualPurchaseState: plan.annualPurchaseState,
+        dodoProductId: plan.dodoProductId ?? "",
+        annualDodoProductId: plan.annualDodoProductId ?? "",
         features: plan.features,
         notIncluded: plan.notIncluded ?? [],
       })),

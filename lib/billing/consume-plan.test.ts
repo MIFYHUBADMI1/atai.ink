@@ -53,4 +53,27 @@ describe("planCreditConsumption", () => {
     expect(results).toEqual([true, true, false])
     expect(balanceFromUser(state).total).toBe(100)
   })
+
+  it("partial consumption of one bucket leaves its sibling (same subscription) intact", () => {
+    const start = user({
+      credits: 600,
+      subscriptionCredits: 600,
+      permanentCredits: 0,
+      creditBuckets: [
+        { subscriptionId: "sub_1", bucketId: "b1", amount: 300, expiresAt: now + 86_400_000 },
+        { subscriptionId: "sub_1", bucketId: "b2", amount: 300, expiresAt: now + 2 * 86_400_000 },
+      ],
+    })
+    const decision = planCreditConsumption(start, 100, now)
+    expect(decision.ok).toBe(true)
+    if (!decision.ok) return
+    expect(decision.bucketDeductions).toEqual([
+      { subscriptionId: "sub_1", bucketId: "b1", deduct: 100, newAmount: 200 },
+    ])
+    const next = applyConsumePlan(start, decision)
+    expect(next.creditBuckets).toEqual([
+      { subscriptionId: "sub_1", bucketId: "b1", amount: 200, expiresAt: now + 86_400_000 },
+      { subscriptionId: "sub_1", bucketId: "b2", amount: 300, expiresAt: now + 2 * 86_400_000 },
+    ])
+  })
 })

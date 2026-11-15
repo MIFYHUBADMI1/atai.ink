@@ -108,7 +108,7 @@ function FirstMissionInner() {
   const [effortScale, setEffortScale] = useState<number | null>(null)
   const [hoursPerDay, setHoursPerDay] = useState("")
   const [intent, setIntent] = useState("")
-  const [selectedPlanId, setSelectedPlanId] = useState("free")
+  const [selectedPlanId, setSelectedPlanId] = useState("explorer")
   const [closed, setClosed] = useState(false)
   const hydrated = useRef(false)
   const advanceTimer = useRef<number | null>(null)
@@ -161,7 +161,7 @@ function FirstMissionInner() {
     if (existing?.effortScale) setEffortScale((current) => current ?? existing.effortScale ?? null)
     if (existing?.hoursPerDay) setHoursPerDay((current) => current || existing.hoursPerDay || "")
     if (existing?.intent) setIntent((current) => current || existing.intent || "")
-    if (existing?.selectedPlanId) setSelectedPlanId((current) => (current !== "free" ? current : existing.selectedPlanId || "free"))
+    if (existing?.selectedPlanId) setSelectedPlanId((current) => (current !== "explorer" ? current : existing.selectedPlanId || "explorer"))
     if (existing?.businessDescription) setVision((current) => current || existing.businessDescription || "")
   }, [surface, session])
 
@@ -645,7 +645,7 @@ function FirstMissionInner() {
           ) : null}
           {beat === "plan" ? (
             <Button onClick={() => void finish()} disabled={busy}>
-              {selectedPlanId === "free" ? ONBOARDING_COPY.primaryCta : "Continue with this plan"}
+              {selectedPlanId === "explorer" ? ONBOARDING_COPY.primaryCta : "Continue with this plan"}
             </Button>
           ) : null}
         </div>

@@ -8,6 +8,9 @@ describe("commercial-plans catalog", () => {
     "DODO_COMMERCIAL_PRODUCT_GROWTH",
     "DODO_COMMERCIAL_PRODUCT_SCALE",
     "DODO_COMMERCIAL_PRODUCT_ENTERPRISE",
+    "DODO_COMMERCIAL_PRODUCT_STARTER_ANNUAL",
+    "DODO_COMMERCIAL_PRODUCT_GROWTH_ANNUAL",
+    "DODO_COMMERCIAL_PRODUCT_SCALE_ANNUAL",
   ]
 
   beforeEach(() => {
@@ -36,10 +39,12 @@ describe("commercial-plans catalog", () => {
     expect(enterprise.purchaseState).toBe("contact")
   })
 
-  it("defaults paid plans to 'contact' when no Dodo product env var is set", async () => {
+  it("defaults paid plans to 'available' — checkout provisions the product on demand", async () => {
     const { getCommercialPlanById } = await import("./commercial-plans")
     for (const id of ["starter", "growth", "scale"]) {
-      expect(getCommercialPlanById(id)!.purchaseState).toBe("contact")
+      const plan = getCommercialPlanById(id)!
+      expect(plan.purchaseState).toBe("available")
+      expect(plan.dodoProductId).toBeUndefined()
     }
   })
 
@@ -62,6 +67,49 @@ describe("commercial-plans catalog", () => {
     expect(scale.dodoProductId).toBe("prod_scale_1")
     expect(scale.purchaseState).toBe("available")
     expect(resolveCommercialPlanByDodoProductId("prod_scale_1")?.id).toBe("scale")
+  })
+
+  it("reads the annual product env var separately from monthly", async () => {
+    process.env.DODO_COMMERCIAL_PRODUCT_GROWTH = "prod_growth_m"
+    process.env.DODO_COMMERCIAL_PRODUCT_GROWTH_ANNUAL = "prod_growth_y"
+    vi.resetModules()
+    const { getCommercialDodoProductId } = await import("./commercial-plans")
+    expect(getCommercialDodoProductId("growth")).toBe("prod_growth_m")
+    expect(getCommercialDodoProductId("growth", "annual")).toBe("prod_growth_y")
+  })
+
+  it("annual is purchasable without a pre-provisioned product when an annual price exists", async () => {
+    process.env.DODO_COMMERCIAL_PRODUCT_GROWTH = "prod_growth_m"
+    vi.resetModules()
+    const { getCommercialPlanById } = await import("./commercial-plans")
+    const growth = getCommercialPlanById("growth")!
+    expect(growth.purchaseState).toBe("available")
+    expect(growth.annualPurchaseState).toBe("available")
+    expect(growth.annualDodoProductId).toBeUndefined()
+  })
+
+  it("annual becomes purchasable once its product exists", async () => {
+    process.env.DODO_COMMERCIAL_PRODUCT_GROWTH = "prod_growth_m"
+    process.env.DODO_COMMERCIAL_PRODUCT_GROWTH_ANNUAL = "prod_growth_y"
+    vi.resetModules()
+    const { getCommercialPlanById } = await import("./commercial-plans")
+    const growth = getCommercialPlanById("growth")!
+    expect(growth.annualPurchaseState).toBe("available")
+    expect(growth.annualDodoProductId).toBe("prod_growth_y")
+    expect(growth.annualPriceUSD).toBe(2199.89)
+  })
+
+  it("resolveCommercialProduct maps monthly and annual ids back to plan + cycle", async () => {
+    process.env.DODO_COMMERCIAL_PRODUCT_STARTER = "prod_starter_m"
+    process.env.DODO_COMMERCIAL_PRODUCT_STARTER_ANNUAL = "prod_starter_y"
+    vi.resetModules()
+    const { resolveCommercialProduct } = await import("./commercial-plans")
+    expect(resolveCommercialProduct("prod_starter_m")).toMatchObject({ billingCycle: "monthly" })
+    expect(resolveCommercialProduct("prod_starter_m")?.plan.id).toBe("starter")
+    expect(resolveCommercialProduct("prod_starter_y")).toMatchObject({ billingCycle: "annual" })
+    expect(resolveCommercialProduct("prod_starter_y")?.plan.id).toBe("starter")
+    expect(resolveCommercialProduct("prod_legacy_unknown")).toBeUndefined()
+    expect(resolveCommercialProduct(undefined)).toBeUndefined()
   })
 
   it("hard rule #3: filterUnlaunchedFeatures drops gated capabilities", () => {

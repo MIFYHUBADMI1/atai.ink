@@ -6,8 +6,9 @@ import Link from "next/link"
 import { AppHeader } from "@/components/app-header"
 import { ArrowRight, Calendar, Check, AlertTriangle } from "lucide-react"
 import { useSession, jsonFetcher } from "@/lib/client/api"
-import { PERMANENT_CREDIT_PACKS, SUBSCRIPTION_PLANS, CREDIT_UNIT_NAME, formatUSD } from "@/lib/billing/config"
+import { PERMANENT_CREDIT_PACKS, CREDIT_UNIT_NAME, formatUSD } from "@/lib/billing/config"
 import type { SubscriptionPlan } from "@/lib/billing/config"
+import { getCommercialPlans } from "@/lib/billing/entitlements/commercial-plans"
 import { cn } from "@/lib/utils"
 import { CheckoutButton } from "@/components/billing/checkout-button"
 import { PlanCard } from "@/components/billing/plan-card"
@@ -86,11 +87,11 @@ export default function BillingSettingsPage() {
   const usageAlerts = billingData?.usageAlerts ?? null
   const usageWarnings = usageAlerts?.warnings ?? []
 
-  // Active catalog comes from the server (commercial when the flag is on), so
-  // the in-app upgrade list matches the public pricing page.
-  const plans: SubscriptionPlan[] = billingData?.plans ?? SUBSCRIPTION_PLANS
-  const FREE_PLAN = plans.find((p) => p.id === "free") ?? plans.find((p) => p.priceUSD === 0) ?? plans[0]
-  const activePlanId = billingData?.activeCommercialPlanId ?? activeSubscription?.planId ?? "free"
+  // Active catalog comes from the server (the commercial five-plan catalog),
+  // so the in-app upgrade list matches the public pricing page.
+  const plans: SubscriptionPlan[] = billingData?.plans ?? getCommercialPlans()
+  const FREE_PLAN = plans.find((p) => p.priceUSD === 0) ?? plans[0]
+  const activePlanId = billingData?.activeCommercialPlanId ?? activeSubscription?.planId ?? "explorer"
   const activePlan = activeSubscription
     ? (plans.find((p) => p.id === activePlanId) ?? FREE_PLAN)
     : FREE_PLAN

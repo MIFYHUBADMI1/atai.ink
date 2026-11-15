@@ -136,6 +136,22 @@ describe("malformed structured output", () => {
   })
 })
 
+describe("opportunity prioritization estimates", () => {
+  it("preserves optional AI impact/effort fields and labels them in the founder-facing body", () => {
+    const report = validReport()
+    report.opportunities[0].impact = "high"
+    report.opportunities[0].effort = "low"
+    report.opportunities[0].confidence = "medium"
+    report.opportunities[0].nextStep = "Validate demand with five target customers."
+    const { report: parsed } = parseCompetitionReport(JSON.stringify(report), { sources: SOURCES })
+    expect(parsed.opportunities[0].impact).toBe("high")
+    expect(parsed.opportunities[0].effort).toBe("low")
+    const markdown = renderCompetitionReportMarkdown(parsed, SOURCES)
+    expect(markdown).toContain("AI estimate")
+    expect(markdown).toContain("Next step: Validate demand")
+  })
+})
+
 describe("source relevance classification", () => {
   it("labels pizza-chain data tools irrelevant for a cake bakery and keeps them as leads", () => {
     const raw = normalizeMultiSearch(

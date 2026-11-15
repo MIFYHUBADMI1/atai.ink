@@ -116,170 +116,111 @@ export interface SubscriptionPlan {
   annualPriceUSD?: number | null
   /** Approx. annual savings vs. 12× monthly, when annual is offered. */
   annualSavingsPct?: number | null
+  /** Dodo product id for the annual variant, once provisioned. */
+  annualDodoProductId?: string
+  /** Whether the annual variant can actually be purchased right now. */
+  annualPurchaseState?: PurchaseState
   /** Canonical commercial plan id (entitlement catalog). */
   commercialPlanId?: string
 }
 
-export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
+/**
+ * ⚠️ LEGACY PLAN CATALOG — renewal attribution only. Not an offering.
+ *
+ * These are the six plans Atai sold before the commercial five-plan catalog
+ * (Explorer / Starter / Growth / Scale / Enterprise). They are kept because a
+ * pre-existing Dodo subscription is renewed against its ORIGINAL product id
+ * and plan id — renaming or deleting these rows would break that renewal and
+ * the credit grants attached to it (hard rule #4).
+ *
+ * Nothing new is ever sold from this list. New purchases only ever use the
+ * commercial catalog in `lib/billing/entitlements/commercial-plans.ts`
+ * (derived from `lib/billing/entitlements/catalog.ts`).
+ *
+ * The old marketing copy is deliberately gone: those feature claims described
+ * a catalogue that no longer exists, and the plan capabilities that survive
+ * now live in the entitlement catalog.
+ */
+export const LEGACY_SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
   // ── Free (default for all new accounts) ────────────────────────────────
   {
     id: "free",
     name: "Free",
-    tagline: "Your starting point. Verify your email and begin building.",
+    tagline: "Legacy free plan.",
     priceUSD: 0,
     mirrorCredits: 0,          // No monthly grant — one-time 500-credit welcome bonus on email verification
     interval: "monthly",
     active: true,
-    features: [
-      "500 welcome credits on email verification",
-      "Access to the Atai workspace",
-      "All generation models (crawl & scrape agents)",
-      "Advanced site analysis",
-      "Built-in database & infrastructure (limited)",
-      "Community support",
-    ],
-    notIncluded: [
-      "Monthly credit grants",
-      "Built-in code editor",
-      "AI code fixes & implementations",
-      "Edit code in editor or visually",
-      "Download source code",
-      "Sync with GitHub",
-      "Use your own domain",
-      "Parallel AI agents",
-      "Priority builds",
-      "Direct support",
-    ],
+    features: [],
   },
 
   // ── Explorer ────────────────────────────────────────────────────────────
   {
     id: "explorer",
     name: "Explorer",
-    tagline: "Get started and explore what Atai can do.",
+    tagline: "Legacy paid Explorer plan.",
     priceUSD: 12,
     mirrorCredits: 50_000,
     interval: "monthly",
     active: true,
     dodoProductId: process.env.DODO_PRODUCT_EXPLORER,
-    features: [
-      "Everything in Free, plus:",
-      "50,000 Atai Credits / month",
-      "Built-in code editor",
-      "AI code fixes & implementations",
-      "Limited multi-section code editing",
-      "Up to 30 parallel AI agents",
-      "Latest powered build models",
-      "Incoming API key & deployment access",
-      "Full application builds (no follow-ups needed)",
-      "Deployment system — sell & earn on marketplace",
-      "Database management & storage",
-      "Limited team support",
-    ],
-    notIncluded: [
-      "Edit code in editor or visually",
-      "Download source code",
-      "Sync with GitHub",
-      "Use your own domain",
-      "Priority builds",
-      "Direct support",
-    ],
+    features: [],
   },
 
   // ── Starter ─────────────────────────────────────────────────────────────
   {
     id: "starter",
     name: "Starter",
-    tagline: "More credits and full editing power for active builders.",
+    tagline: "Legacy Starter plan.",
     priceUSD: 79,
     mirrorCredits: 300_000,
     interval: "monthly",
     active: true,
     dodoProductId: process.env.DODO_PRODUCT_STARTER,
-    features: [
-      "Everything in Explorer, plus:",
-      "300,000 Atai Credits / month",
-      "Edit your code — in the editor or visually",
-      "Download your source code",
-      "Sync with GitHub",
-      "Use your own domain",
-      "Full multi-section code editing",
-      "Standard team support",
-    ],
-    notIncluded: [
-      "Priority builds",
-      "Direct support",
-    ],
+    features: [],
   },
 
   // ── Business ────────────────────────────────────────────────────────────
   {
     id: "business",
     name: "Business",
-    tagline: "The full Atai experience for serious builders.",
+    tagline: "Legacy Business plan.",
     priceUSD: 139,
     mirrorCredits: 600_000,
     interval: "monthly",
     active: true,
     popular: true,
     dodoProductId: process.env.DODO_PRODUCT_BUSINESS,
-    features: [
-      "Everything in Starter, plus:",
-      "600,000 Atai Credits / month",
-      "Priority builds",
-      "Team support",
-    ],
-    notIncluded: [
-      "Direct support",
-    ],
+    features: [],
   },
 
   // ── Professional ────────────────────────────────────────────────────────
   {
     id: "professional",
     name: "Professional",
-    tagline: "Maximum credits, priority access, and direct support.",
+    tagline: "Legacy Professional plan.",
     priceUSD: 219,
     mirrorCredits: 1_400_000,
     interval: "monthly",
     active: true,
     dodoProductId: process.env.DODO_PRODUCT_PROFESSIONAL,
-    features: [
-      "Everything in Business, plus:",
-      "1,400,000 Atai Credits / month",
-      "Direct support",
-      "Full team support",
-    ],
+    features: [],
   },
 
   // ── Enterprise ──────────────────────────────────────────────────────────
   {
     id: "enterprise",
     name: "Enterprise",
-    tagline: "Custom volume, dedicated infrastructure, and white-glove support.",
+    tagline: "Legacy Enterprise plan.",
     priceUSD: 499,
     mirrorCredits: 5_000_000,
     interval: "monthly",
     active: true,
     custom: true,
     dodoProductId: process.env.DODO_PRODUCT_ENTERPRISE,
-    features: [
-      "Everything in Professional, plus:",
-      "5,000,000+ Atai Credits / month",
-      "Custom credit volume",
-      "Dedicated infrastructure",
-      "SLA-backed uptime",
-      "White-glove onboarding",
-      "Dedicated account manager",
-      "Custom integrations on request",
-      "Enterprise team support",
-    ],
+    features: [],
   },
 ]
-
-export function getPlanById(id: string): SubscriptionPlan | undefined {
-  return SUBSCRIPTION_PLANS.find((p) => p.id === id)
-}
 
 // ─── Permanent Credit Packs ──────────────────────────────────────────────────
 
@@ -391,6 +332,7 @@ export type LedgerTransactionType =
   | "ai_collaboration"
   | "ad_campaign_charge"
   | "ad_campaign_refund"
+  | "feedback_reward"
   | RuntimeLedgerTransactionType
 
 // ─── Payment States ──────────────────────────────────────────────────────────

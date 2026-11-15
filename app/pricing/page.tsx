@@ -8,15 +8,14 @@ import { SITE_URL } from "@/lib/env"
 import { getCurrentUser } from "@/lib/auth/session"
 import {
   BUILD_TIERS,
-  SUBSCRIPTION_PLANS,
   PERMANENT_CREDIT_PACKS,
   CREDIT_UNIT_NAME,
   formatUSD,
   WELCOME_BONUS_CREDITS,
 } from "@/lib/billing/config"
-import { getCommercialPlans, COMMERCIAL_PRICING_ENABLED } from "@/lib/billing/entitlements/commercial-plans"
+import { getCommercialPlans } from "@/lib/billing/entitlements/commercial-plans"
 import { getBuildTierCosts, getDeploymentCosts } from "@/lib/billing/runtime-config"
-import { PlanCard } from "@/components/billing/plan-card"
+import { PricingPlanGrid } from "@/components/billing/pricing-plan-grid"
 import { CheckoutButton } from "@/components/billing/checkout-button"
 import { AuthTrigger } from "@/components/auth/auth-trigger"
 
@@ -31,61 +30,6 @@ import { AuthTrigger } from "@/components/auth/auth-trigger"
 
 /** Per plan: what a founder can actually do with it this month. */
 const PLAN_GUIDANCE: Record<string, { bestFor: string; outcomes: string[] }> = {
-  free: {
-    bestFor: "Looking around first",
-    outcomes: [
-      "Plan your business with Atai and see the working plan in your own workspace",
-      `${WELCOME_BONUS_CREDITS.toLocaleString()} credits on email verification — enough to try the work, not enough to launch`,
-      "Stay signed in as long as you like; upgrade when you want it built",
-    ],
-  },
-  explorer: {
-    bestFor: "Your first offer, live",
-    outcomes: [
-      "About one simple launch a month — the build, the hosting, the web address",
-      "Take real customers: sign-in, records of their orders, and the database to hold it",
-      "Publish it on the Atai marketplace so other owners can start from your business",
-    ],
-  },
-  starter: {
-    bestFor: "A business with customers already",
-    outcomes: [
-      "Launch on your own domain, so customers and search results find you by your name",
-      "Iterate as you learn: edits to pages, offers and pricing without starting over",
-      "About six simple launches' worth of work every month, or a bigger business at a time",
-    ],
-  },
-  business: {
-    bestFor: "Running two or three businesses",
-    outcomes: [
-      "Your builds and edits go to the front of the queue",
-      "Room to launch, change and market several businesses in the same month",
-      "A support team behind your builds, not just a form",
-    ],
-  },
-  professional: {
-    bestFor: "Several businesses, all running at once",
-    outcomes: [
-      "The heaviest monthly workload we offer without a custom contract",
-      "Talk to a person directly about the businesses you are running",
-      "Enough credits to keep launching, selling and growing without watching the meter",
-    ],
-  },
-  enterprise: {
-    bestFor: "A portfolio or an organisation",
-    outcomes: [
-      "Credit volume and integrations shaped around your operation",
-      "Dedicated infrastructure, an uptime commitment and an account manager",
-      "We help your first businesses go out the door",
-    ],
-  },
-}
-
-/**
- * Commercial-model guidance (shown only when ATAI_COMMERCIAL_PRICING_ENABLED).
- * Keyed by the commercial plan ids (explorer/starter/growth/scale/enterprise).
- */
-const COMMERCIAL_PLAN_GUIDANCE: Record<string, { bestFor: string; outcomes: string[] }> = {
   explorer: {
     bestFor: "Map it out first",
     outcomes: [
@@ -129,14 +73,11 @@ const COMMERCIAL_PLAN_GUIDANCE: Record<string, { bestFor: string; outcomes: stri
 }
 
 /**
- * When the commercial pricing flag is on, the page renders the new five-plan
- * catalog (with availability-gated features) instead of the legacy one. The flag
- * is OFF by default, so the live page is unchanged until the product owner is
- * ready to flip — zero regression.
+ * The commercial five-plan catalog is the live catalog. The legacy six-plan
+ * set is no longer offered on this page.
  */
-const ACTIVE_COMMERCIAL = COMMERCIAL_PRICING_ENABLED
-const resolvedPlans = ACTIVE_COMMERCIAL ? getCommercialPlans() : SUBSCRIPTION_PLANS
-const planGuidance = ACTIVE_COMMERCIAL ? COMMERCIAL_PLAN_GUIDANCE : PLAN_GUIDANCE
+const resolvedPlans = getCommercialPlans()
+const planGuidance = PLAN_GUIDANCE
 
 /** What launching costs, in the size of business rather than lines of work. */
 const LAUNCH_SIZES = [
@@ -218,7 +159,7 @@ const FAQS = [
   },
   {
     q: "How do I pay, and can I stop?",
-    a: "Plans are billed monthly by card through a secure checkout provider. You can change or cancel at any time, and your published business stays hosted.",
+    a: "Plans are billed by card through a secure checkout provider — monthly, or yearly at 12 months for the price of 11. Yearly plans are paid upfront and still receive credits every month. You can change or cancel at any time, and your published business stays hosted.",
   },
 ]
 
@@ -403,40 +344,16 @@ export default async function PricingPage() {
           <p className="mx-auto mt-3 max-w-2xl text-muted-foreground text-pretty">
             A simple launch is {simpleCredits.toLocaleString()} credits, so the plans below
             differ mainly in how much of your business&rsquo;s work they cover each month.
-            Not sure? Start on Free, then pick a plan when you see the plan for your business.
+            Not sure? Start on Explorer, then pick a plan when you see the plan for your business.
           </p>
         </div>
 
-        <div className="mt-10 grid gap-5 lg:grid-cols-2">
-          {resolvedPlans.filter((plan) => !plan.custom).map((plan) => (
-            <PlanCard
-              key={plan.id}
-              plan={plan}
-              isLoggedIn={!!user}
-              bestFor={planGuidance[plan.id]?.bestFor}
-              outcomes={planGuidance[plan.id]?.outcomes}
-              translateLabels
-              allPlans={ACTIVE_COMMERCIAL ? resolvedPlans : undefined}
-            />
-          ))}
-        </div>
-
-        {(() => {
-          const enterprise = resolvedPlans.find((plan) => plan.custom)
-          if (!enterprise) return null
-          return (
-            <div className="mt-5">
-              <PlanCard
-                plan={enterprise}
-                isLoggedIn={!!user}
-                bestFor={planGuidance[enterprise.id]?.bestFor}
-                outcomes={planGuidance[enterprise.id]?.outcomes}
-                translateLabels
-                allPlans={ACTIVE_COMMERCIAL ? resolvedPlans : undefined}
-              />
-            </div>
-          )
-        })()}
+        <PricingPlanGrid
+          plans={resolvedPlans}
+          isLoggedIn={!!user}
+          guidance={planGuidance}
+          allPlans={resolvedPlans}
+        />
       </section>
 
       {/* What launching costs */}
@@ -543,7 +460,8 @@ export default async function PricingPage() {
             <h2 className="mt-3 text-3xl font-semibold tracking-tight">Run short in the middle of a month?</h2>
             <p className="mx-auto mt-3 max-w-2xl text-muted-foreground text-pretty">
               Buy permanent credits and keep them. They are spent only after your monthly
-              ones, so nothing you pay for is wasted.
+              ones, so nothing you pay for is wasted. Explorer is for planning — building
+              and hosting a business needs a paid plan.
             </p>
           </div>
 
@@ -613,10 +531,6 @@ export default async function PricingPage() {
               </div>
             </div>
 
-            <div className="mb-5 rounded-lg bg-muted/50 p-3">
-              <p className="font-mono text-sm break-all">yourbusiness.totalum-project.com</p>
-            </div>
-
             <ul className="space-y-2 text-sm">
               {[
                 "Nothing to set up — no domain to buy, no settings to copy out",
@@ -642,7 +556,7 @@ export default async function PricingPage() {
 
           <div className="relative flex flex-col rounded-xl border border-border bg-card p-6">
             <div className="absolute -top-3 left-6 rounded-full border border-border bg-background px-3 py-1 text-xs font-medium">
-              From the Starter plan
+              From the Growth plan
             </div>
             <div className="mb-4 flex items-center gap-3">
               <div className="flex size-10 items-center justify-center rounded-lg bg-muted">

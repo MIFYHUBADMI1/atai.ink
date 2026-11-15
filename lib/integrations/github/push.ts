@@ -2,6 +2,7 @@ import "server-only"
 import { getSourceCode } from "@/lib/integrations/totalum/service"
 import { pushFilesToRepo } from "@/lib/integrations/github/client"
 import { projectGitHubCol } from "@/lib/db/collections"
+import { buildUpdate } from "@/lib/db/update"
 import { logger } from "@/lib/logging/logger"
 
 interface PushOptions {
@@ -60,7 +61,7 @@ export async function pushProjectToGitHub(opts: PushOptions): Promise<void> {
 
     await col.updateOne(
       { projectId: opts.projectId },
-      { $set: { pushStatus: "ok", lastPushedAt: Date.now(), lastPushedSha: result.commitSha, pushError: undefined, updatedAt: Date.now() } },
+      buildUpdate({ pushStatus: "ok", lastPushedAt: Date.now(), lastPushedSha: result.commitSha, pushError: undefined, updatedAt: Date.now() }),
     )
 
     logger.info("github.push", "push complete", { projectId: opts.projectId, commitSha: result.commitSha })

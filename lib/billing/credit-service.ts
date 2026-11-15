@@ -63,6 +63,12 @@ export interface CreditBalance {
  * ```
  */
 export async function getBalance(userId: string, session?: ClientSession): Promise<CreditBalance> {
+  // Session-less reads (billing UI, preflight, admin views) first clear
+  // overdue subscription buckets so the reported balance never includes
+  // expired credits. In-transaction callers skip this — the transaction
+  // owner (consumeCredits) sweeps explicitly before planning.
+  if (!session) await expireOverdueBuckets({ userId })
+
   const users = await usersCol()
   const user = await users.findOne({ id: userId }, session ? { session } : {})
 
@@ -429,7 +435,7 @@ export async function consumeCredits(params: {
 
   let subConsumed = 0
   let permConsumed = 0
-  let bucketDeductions: Array<{ subscriptionId: string; deduct: number; newAmount: number }> = []
+  let bucketDeductions: Array<{ subscriptionId: string; bucketId?: string; deduct: number; newAmount: number }> = []
 
   try {
     let success = false
@@ -450,6 +456,11 @@ export async function consumeCredits(params: {
         success = true
         return
       }
+
+      // Expire overdue subscription buckets BEFORE planning so expired credits
+      // can never fund a consumption and the flat balance matches what is
+      // actually spendable in this transaction.
+      await expireOverdueBuckets({ userId: params.userId, session })
 
       const fresh = await users.findOne({ id: params.userId }, { session })
       if (!fresh) {
@@ -503,18 +514,23 @@ export async function consumeCredits(params: {
       // We do this as a separate update since MongoDB doesn't support
       // updating array elements by a filter in the same operation.
       if (bucketDeductions.length > 0) {
-        for (const { subscriptionId, newAmount, deduct } of bucketDeductions) {
+        for (const { subscriptionId, bucketId, newAmount, deduct } of bucketDeductions) {
           if (newAmount <= 0) {
-            // Bucket fully consumed — remove it
+            // Bucket fully consumed — remove exactly this bucket. Keying on the
+            // unique bucketId keeps sibling buckets of the same subscription
+            // (annual: up to 12 monthly buckets) intact.
             await users.updateOne(
               { id: params.userId },
-              { $pull: { creditBuckets: { subscriptionId } } as Record<string, unknown> },
+              { $pull: { creditBuckets: bucketId ? { bucketId } : { subscriptionId } } as Record<string, unknown> },
               { session },
             )
           } else {
             // Partially consumed — update the amount
             await users.updateOne(
-              { id: params.userId, "creditBuckets.subscriptionId": subscriptionId },
+              {
+                id: params.userId,
+                [`creditBuckets.${bucketId ? "bucketId" : "subscriptionId"}`]: bucketId ?? subscriptionId,
+              },
               { $inc: { "creditBuckets.$.amount": -deduct } },
               { session },
             )
@@ -760,6 +776,7 @@ export async function grantSubscriptionCredits(params: {
   const newBalance = balance.total + params.amount
   const now = Date.now()
   const newBucket: import("@/lib/types/db").CreditBucket = {
+    bucketId: `bucket_${cryptoId()}`,
     subscriptionId: params.subscriptionId,
     planId: params.planId,
     amount: params.amount,
@@ -856,12 +873,16 @@ export async function grantSubscriptionCredits(params: {
 }
 
 /**
- * Expire subscription credits for a specific subscription.
+ * Expire ALL credit buckets belonging to one subscription (webhook-driven:
+ * renewal or subscription.expired). Annual subscriptions own up to 12 monthly
+ * buckets under the same subscription id, so a first-bucket-only match would
+ * strand the sweep-granted buckets — every bucket of this subscription is
+ * removed together; the old period's leftovers die here and the renewal
+ * grants the fresh purse afterwards.
  *
- * With the bucket model: removes the matching CreditBucket from the user's
- * creditBuckets array and decrements subscriptionCredits by that bucket's
- * remaining amount. If no matching bucket exists (e.g. older account without
- * buckets), falls back to expiring the full subscription balance.
+ * Only accounts granted before the bucket model existed (no buckets at all)
+ * fall back to expiring the full flat subscription balance — an account with
+ * buckets from OTHER subscriptions keeps those untouched.
  *
  * Idempotent — safe to call multiple times with the same params.
  */
@@ -875,23 +896,21 @@ export async function expireSubscriptionCredits(params: {
   const user = await users.findOne({ id: params.userId })
   if (!user) return false
 
-  // ── Bucket-aware path ────────────────────────────────────────────────────
-  const buckets: import("@/lib/types/db").CreditBucket[] = user.creditBuckets ?? []
-  const matchingBucket = buckets.find((b) => b.subscriptionId === params.subscriptionId)
-
   const balance = await getBalance(params.userId)
   if (balance.subscription <= 0) return true
 
-  // Amount to expire: the matching bucket's remaining amount, capped at the actual
-  // subscription balance to prevent over-expiration if the flat field is out of sync.
-  let amount: number
-  if (matchingBucket) {
-    // Only expire what's in this specific bucket — don't touch other buckets' credits
-    amount = Math.min(matchingBucket.amount, balance.subscription)
-  } else {
-    // Legacy account without buckets — expire the full subscription balance
-    amount = balance.subscription
-  }
+  const buckets: import("@/lib/types/db").CreditBucket[] = user.creditBuckets ?? []
+  const legacyFlatAccount = buckets.length === 0
+  const ownBuckets = buckets.filter((b) => b.subscriptionId === params.subscriptionId)
+
+  // Amount to expire: every own bucket's remaining amount (or the full flat
+  // balance for a legacy bucket-less account), capped at the actual
+  // subscription balance to prevent over-expiration if the flat field is out
+  // of sync.
+  let amount = legacyFlatAccount
+    ? balance.subscription
+    : ownBuckets.reduce((sum, b) => sum + b.amount, 0)
+  amount = Math.min(amount, balance.subscription)
 
   if (amount <= 0) return true
 
@@ -899,7 +918,12 @@ export async function expireSubscriptionCredits(params: {
   // for different periods produce different keys
   const idempotencyKey = params.periodStart
     ? `sub_expire_${params.subscriptionId}_${Math.floor(params.periodStart / 86400000)}`
-    : `sub_expire_${params.subscriptionId}`
+    : legacyFlatAccount
+      ? `sub_expire_${params.subscriptionId}`
+      : `sub_expire_bucket_${ownBuckets
+          .map((b) => b.bucketId ?? `${b.subscriptionId}_${Math.floor(b.expiresAt / 86400000)}`)
+          .sort()
+          .join(",")}`
 
   const client = (await import("@/lib/db/mongodb")).getMongoClient
   const mongoClient = await client()
@@ -924,20 +948,22 @@ export async function expireSubscriptionCredits(params: {
         return
       }
 
-      // Recalculate amount based on fresh data — bucket may have been partially consumed
+      // Recalculate amount based on fresh data — buckets may have been
+      // consumed or swept since the pre-transaction read. getBalance MUST run
+      // on the same session: a session-less call would open a parallel
+      // transaction that writes this same document and deadlocks.
       const freshBuckets: import("@/lib/types/db").CreditBucket[] = freshUser.creditBuckets ?? []
-      const freshMatchingBucket = freshBuckets.find((b) => b.subscriptionId === params.subscriptionId)
-      const freshBalance = await getBalance(params.userId)
+      const freshLegacyFlat = freshBuckets.length === 0
+      const freshOwnBuckets = freshBuckets.filter((b) => b.subscriptionId === params.subscriptionId)
+      const freshBalance = await getBalance(params.userId, session)
 
-      if (freshMatchingBucket) {
-        // Re-derive amount from the fresh bucket state — only expire what's actually in the bucket now
-        amount = Math.min(freshMatchingBucket.amount, freshBalance.subscription)
-      } else {
-        amount = freshBalance.subscription
-      }
+      const freshAmount = Math.min(
+        freshLegacyFlat ? freshBalance.subscription : freshOwnBuckets.reduce((sum, b) => sum + b.amount, 0),
+        freshBalance.subscription,
+      )
 
-      if (amount <= 0) {
-        // Nothing to expire (bucket already consumed or balance is 0)
+      if (freshAmount <= 0) {
+        // Nothing to expire (buckets already consumed/swept or balance is 0)
         // Record a no-op ledger entry to mark the idempotency key as used
         await recordLedgerEntry({
           userId: params.userId,
@@ -950,23 +976,24 @@ export async function expireSubscriptionCredits(params: {
           balanceBefore: freshBalance.subscription,
           balanceAfter: freshBalance.subscription,
           idempotencyKey,
-          metadata: { ...params.metadata, expiredAmount: 0, hadBucket: Boolean(freshMatchingBucket), reason: "no_credits_to_expire" },
+          metadata: { ...params.metadata, expiredAmount: 0, hadBucket: !freshLegacyFlat, reason: "no_credits_to_expire" },
           session,
         })
         success = true
         return
       }
 
-      // Debit subscriptionCredits by the bucket amount (not the full balance)
-      const filter = { id: params.userId, subscriptionCredits: { $gte: amount } }
+      // Debit subscriptionCredits by the expired amount (never the full balance
+      // when other subscriptions' buckets are present)
+      const filter = { id: params.userId, subscriptionCredits: { $gte: freshAmount } }
       const updateOps: Record<string, unknown> = {
-        $inc: { subscriptionCredits: -amount, credits: -amount },
+        $inc: { subscriptionCredits: -freshAmount, credits: -freshAmount },
         $set: { updatedAt: Date.now() },
       }
 
-      // Remove the matching bucket from the array if it existed
-      if (freshMatchingBucket) {
-        (updateOps as Record<string, unknown>).$pull = {
+      // Remove every bucket of THIS subscription (annual: up to 12)
+      if (freshOwnBuckets.length > 0) {
+        ;(updateOps as Record<string, unknown>).$pull = {
           creditBuckets: { subscriptionId: params.subscriptionId },
         }
       }
@@ -978,7 +1005,7 @@ export async function expireSubscriptionCredits(params: {
         await recordLedgerEntry({
           userId: params.userId,
           creditType: "subscription",
-          amount,
+          amount: freshAmount,
           direction: "debit",
           transactionType: "subscription_expiration",
           referenceType: "subscription",
@@ -986,7 +1013,7 @@ export async function expireSubscriptionCredits(params: {
           balanceBefore: freshBalance.subscription,
           balanceAfter: freshBalance.subscription,
           idempotencyKey,
-          metadata: { ...params.metadata, expiredAmount: amount, hadBucket: Boolean(freshMatchingBucket), reason: "update_failed" },
+          metadata: { ...params.metadata, expiredAmount: freshAmount, hadBucket: !freshLegacyFlat, reason: "update_failed" },
           session,
         })
         success = true
@@ -996,18 +1023,19 @@ export async function expireSubscriptionCredits(params: {
       await recordLedgerEntry({
         userId: params.userId,
         creditType: "subscription",
-        amount,
+        amount: freshAmount,
         direction: "debit",
         transactionType: "subscription_expiration",
         referenceType: "subscription",
         referenceId: params.subscriptionId,
         balanceBefore: freshBalance.subscription,
-        balanceAfter: freshBalance.subscription - amount,
+        balanceAfter: freshBalance.subscription - freshAmount,
         idempotencyKey,
         metadata: {
           ...params.metadata,
-          expiredAmount: amount,
-          hadBucket: Boolean(freshMatchingBucket),
+          expiredAmount: freshAmount,
+          expiredBuckets: freshOwnBuckets.length,
+          hadBucket: !freshLegacyFlat,
         },
         session,
       })
@@ -1018,6 +1046,179 @@ export async function expireSubscriptionCredits(params: {
     return success
   } finally {
     await session.endSession()
+  }
+}
+
+// ─── Overdue Expiry Sweep ────────────────────────────────────────────────────
+
+/**
+ * Grace window before legacy flat subscription credits (accounts granted
+ * before the bucket model existed) are expired by their stale
+ * subscriptionPeriodEnd. Shields against a renewal whose webhook/grant is
+ * still in flight when the period end passes.
+ */
+export const LEGACY_FLAT_EXPIRY_GRACE_MS = 3 * 24 * 60 * 60 * 1000
+
+/**
+ * Mongo filter matching any user document that holds expired subscription
+ * credits: a bucket whose expiresAt has passed, or a legacy bucket-less
+ * account whose subscription period ended beyond the grace window.
+ * Shared by the lazy sweep (getBalance/consumeCredits) and the daily cron.
+ */
+export function overdueCreditsFilter(now: number): Record<string, unknown> {
+  return {
+    $or: [
+      { "creditBuckets.expiresAt": { $lte: now } },
+      {
+        creditBuckets: { $in: [null, []] },
+        subscriptionCredits: { $gt: 0 },
+        subscriptionPeriodEnd: { $lt: now - LEGACY_FLAT_EXPIRY_GRACE_MS },
+      },
+    ],
+  }
+}
+
+/**
+ * Remove the user's expired credit buckets and debit the flat fields by what
+ * they still held. Runs lazily on every session-less balance read (getBalance)
+ * and at the top of every consumption, so expired subscription credits can
+ * never be reported or spent; the daily cron sweep uses the same function for
+ * accounts that never trigger a read.
+ *
+ * Idempotent: one ledger entry per expired bucket, keyed on the bucket's
+ * identity (bucketId, or subscriptionId+expiry-day for pre-bucketId grants).
+ * The legacy bucket-less path keys on the stale period end.
+ */
+export async function expireOverdueBuckets(params: {
+  userId: string
+  now?: number
+  session?: ClientSession
+  metadata?: Record<string, unknown>
+}): Promise<{ expiredCredits: number; expiredBuckets: number }> {
+  const now = params.now ?? Date.now()
+  const users = await usersCol()
+
+  if (!params.session) {
+    // Fast path: the overwhelming majority of reads have nothing overdue —
+    // one cheap probe, no transaction. Work found here is re-verified inside
+    // the transaction below.
+    const probe = await users.findOne(
+      { id: params.userId, ...overdueCreditsFilter(now) },
+      { projection: { id: 1 } },
+    )
+    if (!probe) return { expiredCredits: 0, expiredBuckets: 0 }
+  }
+
+  const client = (await import("@/lib/db/mongodb")).getMongoClient
+  const session = params.session ?? (await client()).startSession()
+
+  try {
+    let expiredCredits = 0
+    let expiredBuckets = 0
+
+    const run = async () => {
+      const fresh = await users.findOne({ id: params.userId }, { session })
+      if (!fresh) return
+
+      const freshBuckets: import("@/lib/types/db").CreditBucket[] = fresh.creditBuckets ?? []
+      const overdue = freshBuckets.filter((b) => b.expiresAt <= now)
+      const legacyFlatStale =
+        freshBuckets.length === 0 &&
+        (fresh.subscriptionCredits ?? 0) > 0 &&
+        typeof fresh.subscriptionPeriodEnd === "number" &&
+        (fresh.subscriptionPeriodEnd ?? 0) < now - LEGACY_FLAT_EXPIRY_GRACE_MS
+
+      const amount = legacyFlatStale && overdue.length === 0
+        ? Math.min(fresh.subscriptionCredits ?? 0, fresh.credits ?? 0)
+        : Math.min(
+            overdue.reduce((sum, b) => sum + b.amount, 0),
+            fresh.subscriptionCredits ?? 0,
+          )
+
+      if (amount <= 0) {
+        // Buckets are dead records but the flat field is already correct —
+        // just drop them, no ledger entry (the debit happened elsewhere).
+        if (overdue.length > 0 && (fresh.subscriptionCredits ?? 0) <= 0) {
+          await users.updateOne(
+            { id: params.userId },
+            { $pull: { creditBuckets: { expiresAt: { $lte: now } } } as Record<string, unknown> },
+            { session },
+          )
+        }
+        return
+      }
+
+      const keys = legacyFlatStale && overdue.length === 0
+        ? [`sub_expire_flat_${params.userId}_${Math.floor((fresh.subscriptionPeriodEnd ?? now) / 86400000)}`]
+        : overdue.map((b) =>
+            b.bucketId
+              ? `sub_expire_bucket_${b.bucketId}`
+              : `sub_expire_${b.subscriptionId}_${Math.floor(b.expiresAt / 86400000)}`,
+          )
+
+      const ledger = await creditLedgerCol()
+      const alreadyExpired = await ledger.findOne(
+        { idempotencyKey: { $in: keys } },
+        params.session ? { session } : {},
+      )
+      if (alreadyExpired) return
+
+      const result = await users.updateOne(
+        { id: params.userId, subscriptionCredits: { $gte: amount } },
+        {
+          $inc: { subscriptionCredits: -amount, credits: -amount },
+          ...(overdue.length > 0
+            ? { $pull: { creditBuckets: { expiresAt: { $lte: now } } } as Record<string, unknown> }
+            : {}),
+          $set: { updatedAt: now },
+        },
+        { session },
+      )
+      if (result.modifiedCount === 0) {
+        // Raced with a concurrent consume/renewal/sweep — the winner records
+        // the ledger entry; nothing to do here.
+        return
+      }
+
+      await recordLedgerEntry({
+        userId: params.userId,
+        creditType: "subscription",
+        amount,
+        direction: "debit",
+        transactionType: "subscription_expiration",
+        referenceType: legacyFlatStale ? "account" : "subscription",
+        referenceId: legacyFlatStale ? params.userId : overdue[0]!.subscriptionId,
+        balanceBefore: fresh.subscriptionCredits ?? 0,
+        balanceAfter: (fresh.subscriptionCredits ?? 0) - amount,
+        idempotencyKey: keys[0]!,
+        metadata: {
+          ...params.metadata,
+          kind: legacyFlatStale ? "legacy_flat_period_end" : "overdue_buckets",
+          expiredAmount: amount,
+          expiredBuckets: overdue.length,
+          bucketKeys: keys,
+        },
+        session,
+      })
+
+      expiredCredits = amount
+      expiredBuckets = overdue.length
+    }
+
+    if (params.session) await run()
+    else await session.withTransaction(run)
+
+    if (expiredCredits > 0) {
+      logger.info("credit.expire", "Overdue subscription credits expired", {
+        userId: params.userId,
+        expiredCredits,
+        expiredBuckets,
+      })
+    }
+
+    return { expiredCredits, expiredBuckets }
+  } finally {
+    if (!params.session) await session.endSession()
   }
 }
 

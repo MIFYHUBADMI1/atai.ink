@@ -6,8 +6,9 @@ import {
   expireSubscriptionCredits,
   reverseCredits,
 } from "@/lib/billing/credit-service"
-import { SUBSCRIPTION_PLANS } from "@/lib/billing/config"
-import { getCommercialPlanById, resolveCommercialPlanByDodoProductId } from "@/lib/billing/entitlements/commercial-plans"
+import { LEGACY_SUBSCRIPTION_PLANS } from "@/lib/billing/config"
+import { getCommercialPlanById, resolveCommercialProduct } from "@/lib/billing/entitlements/commercial-plans"
+import { addMonths } from "@/lib/billing/entitlements/annual-scheduler"
 import { activatePaidSubscription } from "@/lib/billing/activate-subscription"
 import { logger } from "@/lib/logging/logger"
 import { cryptoId } from "@/lib/store/id"
@@ -355,9 +356,16 @@ async function handleSubscriptionRenewed(data: Record<string, unknown> | undefin
 
   const userId = metadata?.userId as string | undefined
   const planId = metadata?.planId as string | undefined
+  // Commercial-first: a product id that matches a commercial product (monthly
+  // or annual) is decisive. Legacy planId lookup would mis-attribute commercial
+  // Starter to the legacy $79 starter (same id) and miss Growth/Scale entirely.
+  const commercialMatch = resolveCommercialProduct(data.product_id as string | undefined)
   const plan =
-    (planId ? SUBSCRIPTION_PLANS.find((p) => p.id === planId) : undefined) ??
+    commercialMatch?.plan ??
+    (planId ? LEGACY_SUBSCRIPTION_PLANS.find((p) => p.id === planId) : undefined) ??
     (planId ? getCommercialPlanById(planId) : undefined)
+  const billingCycle =
+    commercialMatch?.billingCycle ?? (metadata?.billingCycle === "annual" ? "annual" : "monthly")
   const credits = plan?.mirrorCredits ?? positiveIntegerCredits(metadata?.credits) ?? 0
 
   if (!userId || !credits) {
@@ -366,7 +374,10 @@ async function handleSubscriptionRenewed(data: Record<string, unknown> | undefin
   }
 
   const now = Date.now()
-  const periodEnd = nextBillingDate ? new Date(nextBillingDate).getTime() : now + 30 * 24 * 60 * 60 * 1000
+  const fullPeriodEnd = nextBillingDate ? new Date(nextBillingDate).getTime() : now + 30 * 24 * 60 * 60 * 1000
+  // Annual renewals collect a full year upfront: grant month 0 of the new year
+  // now; the annual sweep issues months 1–11, deduplicated by the grant window.
+  const periodEnd = billingCycle === "annual" ? addMonths(now, 1) : fullPeriodEnd
 
   // ── Idempotency: skip if this subscription+period already granted ──
   const grantKey = `sub_grant_${subscriptionId}_period_${Math.floor(periodEnd / 86400000)}`
@@ -398,7 +409,14 @@ async function handleSubscriptionRenewed(data: Record<string, unknown> | undefin
     const subCol = await subscriptionRecordsCol()
     await subCol.updateOne(
       { dodoSubscriptionId: subscriptionId },
-      { $set: { status: "active", currentPeriodStart: now, currentPeriodEnd: periodEnd, nextBillingDate: nextBillingDate ? new Date(nextBillingDate).getTime() : undefined, updatedAt: now } },
+      { $set: {
+        status: "active",
+        currentPeriodStart: now,
+        currentPeriodEnd: fullPeriodEnd,
+        ...(commercialMatch ? { commercialPlanId: commercialMatch.plan.commercialPlanId, billingCycle } : {}),
+        nextBillingDate: nextBillingDate ? new Date(nextBillingDate).getTime() : undefined,
+        updatedAt: now,
+      } },
     )
     logger.info("webhook.dodo", "subscription.renewed: renewal credits granted", { subscriptionId, userId, credits, planId })
   }
@@ -465,14 +483,20 @@ async function handleSubscriptionPlanChanged(data: Record<string, unknown> | und
   if (!data) return
   const subscriptionId = data.subscription_id as string
   const productId = data.product_id as string
-  const newPlan =
-    SUBSCRIPTION_PLANS.find((p) => p.dodoProductId === productId) ??
-    resolveCommercialPlanByDodoProductId(productId)
+  const commercial = resolveCommercialProduct(productId)
+  const newPlan = commercial?.plan ?? LEGACY_SUBSCRIPTION_PLANS.find((p) => p.dodoProductId === productId)
   if (newPlan) {
     const subCol = await subscriptionRecordsCol()
     await subCol.updateOne(
       { dodoSubscriptionId: subscriptionId },
-      { $set: { planId: newPlan.id, planName: newPlan.name, priceUSD: newPlan.priceUSD, mirrorCredits: newPlan.mirrorCredits, updatedAt: Date.now() } },
+      { $set: {
+        planId: newPlan.id,
+        planName: newPlan.name,
+        priceUSD: commercial?.billingCycle === "annual" ? (commercial.plan.annualPriceUSD ?? newPlan.priceUSD) : newPlan.priceUSD,
+        mirrorCredits: newPlan.mirrorCredits,
+        ...(commercial ? { commercialPlanId: commercial.plan.commercialPlanId, billingCycle: commercial.billingCycle } : {}),
+        updatedAt: Date.now(),
+      } },
     )
   }
   logger.info("webhook.dodo", "Subscription plan changed", { subscriptionId, productId })

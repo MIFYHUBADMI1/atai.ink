@@ -7,6 +7,7 @@ import {
   ArrowRight,
   ArrowUpRight,
   BarChart3,
+  Banknote,
   CalendarDays,
   Check,
   ExternalLink,
@@ -302,6 +303,9 @@ export function CompetitionDashboard({
   const competitorCount = report
     ? report.competitors.filter((c) => c.category !== "not_competitor").length
     : parse.competitors.length
+  const sourceCount = research?.sources.length
+  const pricingEvidenceCount = report ? report.competitors.filter((c) => c.pricing).length + report.pricingComparison.length : null
+  const opportunityCount = report?.opportunities.length ?? parse.opportunities.length
   const landscape = useMemo(() => buildLandscapeModel(parse.competitors, sources), [parse.competitors, sources])
   const categorySlices = useMemo(() => (report ? reportCategoryDistribution(report) : []), [report])
   const series = useMemo(() => buildScanSeries([snapshot, ...history].filter((s): s is CompetitionSnapshotItem => Boolean(s))), [snapshot, history])
@@ -363,7 +367,7 @@ export function CompetitionDashboard({
   )
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 pb-12 pt-6 sm:px-6 lg:px-8 lg:pb-16">
+    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-4 pb-12 pt-6 sm:px-6 lg:px-8 lg:pb-16">
       <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex items-start gap-4">
           <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -533,6 +537,50 @@ export function CompetitionDashboard({
               </p>
             </div>
             <Sparkline values={series.map((p) => p.competitors)} color="#38a1f7" />
+          </Card>
+          <Card className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <ExternalLink className="size-4 shrink-0 text-blue-500" aria-hidden /> Live Sources Retrieved
+              </p>
+              <p className="mt-2 text-2xl font-bold">{sourceCount ?? "—"}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {research ? `retrieved ${formatDay(research.collectedAt)}` : "No live run yet"}
+              </p>
+            </div>
+            <KindBars sources={sources} />
+          </Card>
+          <Card className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <Banknote className="size-4 shrink-0 text-emerald-500" aria-hidden /> Pricing Evidence
+              </p>
+              <p className="mt-2 text-2xl font-bold">{pricingEvidenceCount ?? "—"}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {pricingEvidenceCount === null
+                  ? "Available after a structured research run"
+                  : pricingEvidenceCount > 0
+                    ? "pricing facts or comparison rows found"
+                    : "no prices stated in the sources"}
+              </p>
+            </div>
+            <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+              <Banknote className="size-5" aria-hidden />
+            </span>
+          </Card>
+          <Card className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <Lightbulb className="size-4 shrink-0 text-emerald-500" aria-hidden /> Opportunities Identified
+              </p>
+              <p className="mt-2 text-2xl font-bold">{opportunityCount}</p>
+              <p className="mt-1 break-words text-xs text-muted-foreground">
+                {topOpportunity ? "AI suggestions — verify before acting" : "Run live research to surface opportunities"}
+              </p>
+            </div>
+            <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <Lightbulb className="size-5" aria-hidden />
+            </span>
           </Card>
           <Card className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -725,7 +773,7 @@ export function CompetitionDashboard({
             </button>
             {creditsAvailable !== null && (
               <p className="mt-3 border-t border-border pt-3 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                {creditsAvailable} credits available
+                Account credits available: {creditsAvailable}
               </p>
             )}
           </Card>
@@ -939,7 +987,7 @@ export function CompetitionDashboard({
 
       {/* ── Compare ──────────────────────────────────────────────────────── */}
       <section role="tabpanel" hidden={tab !== "Compare"} className={tab === "Compare" ? "flex flex-col gap-5" : "hidden"}>
-        {report && <ReportComparisons report={report} />}
+        {report && <ReportComparisons report={report} sources={sources} />}
         <Card>
           <h2 className="text-lg font-bold tracking-tight">Side-by-side comparison</h2>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
@@ -994,7 +1042,7 @@ export function CompetitionDashboard({
 
       {/* ── Opportunities & Strategy ─────────────────────────────────────── */}
       <section role="tabpanel" hidden={tab !== "Opportunities & Strategy"} className={tab === "Opportunities & Strategy" ? "grid gap-5 lg:grid-cols-2" : "hidden"}>
-        {report && <OpportunitiesPanel report={report} />}
+        {report && <OpportunitiesPanel report={report} sources={sources} />}
         {!report && (
         <>
         <Card>

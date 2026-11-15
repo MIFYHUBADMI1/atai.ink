@@ -1,6 +1,7 @@
 import { getCurrentUser } from "@/lib/auth/session"
 import { getAvailableCredits } from "@/lib/billing/credit-service"
-import { PERMANENT_CREDIT_PACKS, SUBSCRIPTION_PLANS } from "@/lib/billing/config"
+import { PERMANENT_CREDIT_PACKS } from "@/lib/billing/config"
+import { getCommercialPlans } from "@/lib/billing/entitlements/commercial-plans"
 import { adviseUpgrade, parseRequiredCredits } from "@/lib/billing/upgrade-options"
 import { fail, handleRouteError, ok } from "@/lib/api/respond"
 
@@ -22,7 +23,7 @@ export async function GET(req: Request) {
       adviseUpgrade({
         required,
         available,
-        plans: SUBSCRIPTION_PLANS,
+        plans: getCommercialPlans(),
         packs: PERMANENT_CREDIT_PACKS,
       }),
     )

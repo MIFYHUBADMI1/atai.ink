@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   classifyComplexity: vi.fn(),
   hasSufficientCredits: vi.fn(),
   buildInitialBuildPrompt: vi.fn(() => "build brief"),
+  authorizeProductionWork: vi.fn(),
 }))
 
 vi.mock("@/lib/store/store", () => ({
@@ -76,6 +77,11 @@ vi.mock("@/lib/analysis/specification", () => ({
 }))
 vi.mock("@/lib/projects/ai-artifacts", () => ({ recordAIArtifacts: vi.fn() }))
 vi.mock("@/lib/credits/credit-block", () => ({ recordCreditBlock: vi.fn() }))
+// The plan gate is exercised on its own; here it must not short-circuit the
+// launch reconciliation these tests are about.
+vi.mock("@/lib/billing/entitlements/require", () => ({
+  authorizeProductionWork: mocks.authorizeProductionWork,
+}))
 
 import { autoLaunchBuild } from "./pipeline"
 
@@ -109,6 +115,7 @@ describe("autoLaunchBuild — ambiguous launch reconciliation", () => {
     mocks.reserveCredits.mockResolvedValue(true)
     mocks.refundReservation.mockResolvedValue(true)
     mocks.initializeProjectInfrastructure.mockResolvedValue({})
+    mocks.authorizeProductionWork.mockResolvedValue(null)
   })
 
   afterEach(() => {

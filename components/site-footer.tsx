@@ -36,6 +36,7 @@ const FOOTER_COLS = [
       { href: "/about#team", label: "Your AI teams" },
       { href: "/docs", label: "Documentation" },
       { href: "/resources", label: "Resources" },
+      { href: "/blog", label: "Blog & comparisons" },
       { href: "/developers", label: "Developers" },
       { href: "/sdk", label: "SDK & API" },
     ],

@@ -4,6 +4,7 @@ import { getAvailableCredits } from "@/lib/billing/credit-service"
 import { ok, fail, failInsufficientCredits, handleRouteError } from "@/lib/api/respond"
 import { autoLaunchBuild } from "@/lib/analysis/pipeline"
 import { prepareRequestedProjectId } from "@/lib/projects/project-actions"
+import { authorizeProductionWork } from "@/lib/billing/entitlements/require"
 
 /**
  * POST /api/projects/[id]/launch
@@ -39,6 +40,15 @@ export async function POST(
 
     if (!project.specification) {
       return fail("VALIDATION", "This project has no application plan yet.", 409)
+    }
+
+    const planDenied = await authorizeProductionWork(user.id, "buildProduction")
+    if (planDenied) {
+      return fail(
+        planDenied.code ?? "PLAN_LIMIT",
+        planDenied.reason ?? "Your plan does not include production builds.",
+        402,
+      )
     }
 
     const preparedProjectId = await prepareRequestedProjectId(project, body.requestedProjectId)

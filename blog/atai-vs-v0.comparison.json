@@ -1,0 +1,87 @@
+{
+  "competitorName": "v0",
+  "competitorUrl": "https://v0.dev",
+  "competitorDescription": "v0 by Vercel turns a prompt into a working web app or component, with visual editing and GitHub sync. Plans are Free, Plus ($30/user/mo), Business ($100/user/mo) and Enterprise.",
+  "positioning": "Atai follows the business lifecycle — IDEA → BUILD → LAUNCH → MANAGE → GROW → SCALE. v0 is built around generating a front-end and deploying it to Vercel.",
+  "lastReviewed": "2026-11-15",
+  "limitations": "Plans, prices and entitlements on both sides change regularly. Every row below was checked on 2026-11-15 against the source linked in that row — re-verify before you decide.",
+  "rows": [
+    {
+      "dimension": "Primary purpose",
+      "atai": "Plan, build, launch, manage, grow and scale a business from one platform.",
+      "competitor": "Generate web apps and UI components from a prompt, then deploy them to Vercel.",
+      "evidence": "https://api2.v0.dev/pricing",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Business lifecycle coverage",
+      "atai": "Covers the full lifecycle: business planning and offer development, building the app, launching it, then running finances, marketing and growth.",
+      "competitor": "Covers generating the app and deploying it.",
+      "evidence": "https://api2.v0.dev/pricing",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Plans",
+      "atai": "Explorer (free), Starter ($89.99/mo or $989.89/yr), Growth ($199.99/mo or $2,199.89/yr), Scale ($499.99/mo or $5,499.89/yr) and Enterprise (custom).",
+      "competitor": "Free, Plus ($30 per user per month), Business ($100 per user per month) and Enterprise. The older Premium plan ($20/mo) is being sunset and is no longer available to new users.",
+      "evidence": "https://api2.v0.dev/docs/pricing",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "How usage is charged",
+      "atai": "Subscription plans with a monthly Atai Credit allowance; yearly plans are paid upfront for 12 months and still receive credits every month.",
+      "competitor": "Credits as a prepaid balance, plus $2 of daily login credits on Plus and Business; generations pause when the balance runs out.",
+      "evidence": "https://api2.v0.dev/docs/pricing",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Free tier",
+      "atai": "Explorer: plan your business with the AI co-founder on 500 planning credits, with community support. Production launches are a paid-plan capability.",
+      "competitor": "Free access to v0, deploy apps to Vercel, edit visually with Design Mode, sync with GitHub and a 7 message/day limit.",
+      "evidence": "https://api2.v0.dev/pricing",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Application generation",
+      "atai": "Full application builds from Starter upward, with up to four production apps on Growth and unlimited on Scale.",
+      "competitor": "The core product — prompt to a working app, with visual Design Mode editing on top.",
+      "evidence": "https://api2.v0.dev/pricing",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Code ownership and access",
+      "atai": "Starter and above: edit code in the editor or visually, download your source code and sync with GitHub. A custom domain of your own arrives with Growth.",
+      "competitor": "Sync with GitHub is included on the Free plan, and apps deploy to Vercel.",
+      "evidence": "https://api2.v0.dev/pricing",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Team features",
+      "atai": "Specialist teams from Starter, expanded teams on Growth and premium teams with customization on Scale and Enterprise.",
+      "competitor": "Plus and Business add shared projects, a shared credit pool, centralized billing and team-wide usage analytics.",
+      "evidence": "https://api2.v0.dev/docs/pricing",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Security and privacy",
+      "atai": "SLA-backed uptime and dedicated infrastructure from Enterprise.",
+      "competitor": "Business opts out of training by default and adds data opt-out; Enterprise adds SAML SSO, role-based access control and guaranteed support SLAs.",
+      "evidence": "https://api2.v0.dev/docs/pricing",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Support",
+      "atai": "Growth adds direct support; Enterprise adds a dedicated account manager and white-glove onboarding.",
+      "competitor": "Enterprise includes priority access and guaranteed customer support SLAs.",
+      "evidence": "https://api2.v0.dev/docs/pricing",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Known constraints",
+      "atai": "Monthly plan credits expire at the end of the month they were issued; permanent top-up credits never expire, so heavy use moves you up a plan.",
+      "competitor": "Unused monthly credits roll over and expire after 65 days; daily login credits expire at the end of the day and do not accumulate.",
+      "evidence": "https://api2.v0.dev/docs/pricing",
+      "lastChecked": "2026-11-15"
+    }
+  ]
+}

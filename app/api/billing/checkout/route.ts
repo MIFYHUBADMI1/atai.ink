@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth/session"
 import { getDodoConfig } from "@/lib/env"
-import { SUBSCRIPTION_PLANS, PERMANENT_CREDIT_PACKS } from "@/lib/billing/config"
-import { getCommercialPlanById, COMMERCIAL_PRICING_ENABLED } from "@/lib/billing/entitlements/commercial-plans"
+import { PERMANENT_CREDIT_PACKS } from "@/lib/billing/config"
+import {
+  getCommercialPlanById,
+  commercialProductName,
+  commercialProductDescription,
+} from "@/lib/billing/entitlements/commercial-plans"
 import { logger } from "@/lib/logging/logger"
 import {
   getOrCreateSubscriptionProduct,
@@ -39,6 +43,8 @@ interface CheckoutRequest {
   type: "subscription" | "permanent"
   /** Plan ID (for subscriptions) or pack ID (for permanent credits) */
   productId: string
+  /** Billing cycle — commercial subscriptions only. Default monthly. */
+  billingCycle?: "monthly" | "annual"
   returnPath?: string
 }
 
@@ -65,7 +71,7 @@ export async function POST(req: Request) {
     // Window is 15s (long enough to cover a Dodo API round-trip) with a limit
     // of 2 so a genuine double-click is absorbed but a second deliberate attempt
     // after the first one fails is still allowed.
-    const rateLimitKey = `${body.type}:${body.productId}:${user.id}`
+    const rateLimitKey = `${body.type}:${body.productId}:${body.billingCycle ?? "monthly"}:${user.id}`
     if (!checkoutRateLimiter.allowed(rateLimitKey)) {
       return NextResponse.json(
         { ok: false, error: { code: "RATE_LIMITED", message: "A checkout is already in progress. Please wait a moment before trying again." } },
@@ -100,7 +106,7 @@ export async function POST(req: Request) {
     // Use a lock to deduplicate concurrent checkout requests for the same user+product.
     // acquire() returns null if the lock is already held — we return 429 and the
     // client shows a friendly message. The lock is always released in the finally block.
-    const sessionLockKey = `checkout:${body.type}:${body.productId}:${user.id}`
+    const sessionLockKey = `checkout:${body.type}:${body.productId}:${body.billingCycle ?? "monthly"}:${user.id}`
     const releaseSessionLock = checkoutSessionLocks.acquire(sessionLockKey)
     if (releaseSessionLock === null) {
       return NextResponse.json(
@@ -111,53 +117,66 @@ export async function POST(req: Request) {
 
     try {
       if (body.type === "subscription") {
-        // Prefer the commercial catalog (new five-plan model) when the page is
-        // live. A commercial plan carries its own pre-provisioned Dodo product id,
-        // so we never fall through to — or charge — a legacy product/price.
-        const commercial =
-          COMMERCIAL_PRICING_ENABLED ? getCommercialPlanById(body.productId) : undefined
-        const plan = commercial ?? SUBSCRIPTION_PLANS.find((p) => p.id === body.productId)
+        // The commercial five-plan catalog is the only sellable catalog. The
+        // legacy plan ids are not purchasable any more — existing
+        // subscriptions keep renewing on their original Dodo product, but no
+        // new checkout may be created against a legacy plan or price.
+        const plan = getCommercialPlanById(body.productId)
         if (!plan) {
           return NextResponse.json(
-            { ok: false, error: { code: "INVALID_REQUEST", message: "Unknown plan ID" } },
+            { ok: false, error: { code: "PLAN_UNAVAILABLE", message: "That plan is no longer available. Choose Explorer, Starter, Growth or Scale." } },
             { status: 400 },
           )
         }
 
-        // The Free plan has no Dodo product — it's automatically assigned to new accounts.
-        if (plan.priceUSD === 0 || plan.id === "free") {
+        const cycle: "monthly" | "annual" = body.billingCycle === "annual" ? "annual" : "monthly"
+
+        // A custom plan is priced by contract, so it has no checkout price at
+        // all — it must be refused before the free-plan check, because a custom
+        // plan carries a price of 0 (no public price) and would otherwise be
+        // mistaken for a free plan.
+        if (plan.custom) {
           return NextResponse.json(
-            { ok: false, error: { code: "INVALID_REQUEST", message: "The Free plan cannot be purchased. It is automatically applied to all new accounts." } },
+            { ok: false, error: { code: "PLAN_UNAVAILABLE", message: `${plan.name} is a custom contract. Please contact sales.` } },
             { status: 400 },
           )
         }
 
-        // A commercial plan whose Dodo product has not yet been provisioned must
-        // not fall through to a legacy product or price (hard rule #4). Refuse
-        // explicitly; the UI shows "Contact sales" for exactly this state.
-        if (commercial && !commercial.dodoProductId) {
+        if (plan.priceUSD === 0) {
           return NextResponse.json(
-            { ok: false, error: { code: "PLAN_UNAVAILABLE", message: "This plan is not yet available for purchase. Please contact sales." } },
+            { ok: false, error: { code: "INVALID_REQUEST", message: `${plan.name} is free and is applied to every account — there is nothing to purchase.` } },
             { status: 400 },
           )
         }
 
-        // Auto-provision the product if not configured. For commercial plans we
-        // pass the pre-provisioned product id so creation is skipped entirely.
+        if (cycle === "annual" && !plan.annualPriceUSD) {
+          return NextResponse.json(
+            { ok: false, error: { code: "CYCLE_UNAVAILABLE", message: "Annual billing is not available for this plan." } },
+            { status: 400 },
+          )
+        }
+
+        const chargeUSD = cycle === "annual" ? (plan.annualPriceUSD as number) : plan.priceUSD
+
+        // A pre-provisioned product id is used as-is. Without one, the product
+        // is created on demand at the catalog price — never at a legacy price.
+        const productId = cycle === "annual" ? plan.annualDodoProductId : plan.dodoProductId
         const product = await getOrCreateSubscriptionProduct(
           plan.id,
-          `Atai — ${plan.name}`,
-          `${plan.mirrorCredits.toLocaleString()} Atai Credits per month. ${plan.name} plan.`,
-          plan.priceUSD,
+          commercialProductName(plan, cycle),
+          commercialProductDescription(plan, cycle),
+          chargeUSD,
           plan.mirrorCredits,
-          commercial?.dodoProductId,
+          productId,
+          cycle,
         )
 
         logger.info("checkout", "Creating subscription checkout session", {
           userId: user.id,
           planId: plan.id,
+          billingCycle: cycle,
           productId: product.productId,
-          autoCreated: !plan.dodoProductId,
+          autoCreated: !productId,
         })
 
         const session = await client.checkoutSessions.create({
@@ -170,6 +189,7 @@ export async function POST(req: Request) {
             type: "subscription",
             planId: plan.id,
             credits: String(plan.mirrorCredits),
+            billingCycle: cycle,
           },
         })
 

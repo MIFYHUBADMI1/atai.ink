@@ -7,6 +7,7 @@ import { classifyComplexity, getTierCost } from "@/lib/credits/credits"
 import { launchProject, isTotalumConfigured } from "@/lib/integrations/totalum/service"
 import { TotalumError } from "@/lib/integrations/totalum/errors"
 import { prepareRequestedProjectId } from "@/lib/projects/project-actions"
+import { authorizeProductionWork } from "@/lib/billing/entitlements/require"
 import { initializeProjectInfrastructure } from "@/lib/infrastructure/service"
 import { getInfrastructurePlan } from "@/lib/infrastructure/plans"
 import { buildInitialBuildPrompt } from "@/lib/analysis/prompt-builder"
@@ -45,6 +46,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // duplicate concurrent build is the atomic `claimBuildSlot` call below.
     if (project.state === "building" || project.state === "deploying") {
       return fail("AGENT_RUNNING", "This project is already being built.", 409)
+    }
+
+    const planDenied = await authorizeProductionWork(userId, "buildProduction")
+    if (planDenied) {
+      return fail(
+        planDenied.code ?? "PLAN_LIMIT",
+        planDenied.reason ?? "Your plan does not include production builds.",
+        402,
+      )
     }
 
     // Allow the client to submit edited spec + additional instructions.

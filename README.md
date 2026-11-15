@@ -91,19 +91,22 @@ This ensures you always get maximum value from your subscription credits while m
 ### Getting Credits
 
 - **Welcome Bonus:** 500 free permanent credits on account verification
-- **Subscription Plans:** Monthly recurring subscription credits (Explorer: 10k, Starter: 100k, Business: 250k, Professional: 500k, Enterprise: 1M+)
+- **Subscription Plans:** Monthly recurring subscription credits (Explorer: planning only, Starter: 150k, Growth: 400k, Scale: 1.2M, Enterprise: negotiated)
 - **Credit Packs:** One-time purchase of permanent credits via Dodo Payments
 - **Referral Program:** Earn permanent credits by referring new users
 
 ### Subscription Plans
 
-| Plan | Monthly Price | Subscription Credits | Best For |
-|------|--------------|---------------------|----------|
-| Explorer | $12 | 10,000 credits/mo | Individual developers exploring the platform |
-| Starter | $79 | 100,000 credits/mo | Small teams and early-stage projects |
-| Business | $139 | 250,000 credits/mo | Growing businesses with regular deployments |
-| Professional | $219 | 500,000 credits/mo | Professional teams with high usage |
-| Enterprise | $499+ | 1M+ credits/mo | Large organizations with custom requirements |
+| Plan | Monthly Price | Annual Price | Subscription Credits | Best For |
+|------|--------------|--------------|---------------------|----------|
+| Explorer | Free | — | Planning credits only (500 on verification) | Mapping out your business before spending a cent |
+| Starter | $89.99 | $989.89 | 150,000 credits/mo | Launching your first real business |
+| Growth | $199.99 | $2,199.89 | 400,000 credits/mo | Running several businesses, ads and competition monitoring |
+| Scale | $499.99 | $5,499.89 | 1,200,000 credits/mo | Unlimited businesses, priority compute, premium support |
+| Enterprise | Custom | Custom | Negotiated | Dedicated infrastructure, SLA and account manager |
+
+Yearly plans are paid upfront for 12 months at the price of 11 and still receive credits every month.
+Credit amounts are provisional until the launch financial model ratifies them.
 
 ### Credit Costs
 

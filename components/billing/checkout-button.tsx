@@ -8,6 +8,8 @@ interface CheckoutButtonProps {
   type: "subscription" | "permanent"
   /** Plan ID (for subscriptions) or pack ID (for permanent credits) */
   productId: string
+  /** Billing cycle for commercial subscriptions. Default monthly. */
+  billingCycle?: "monthly" | "annual"
   children: React.ReactNode
   className?: string
   disabled?: boolean
@@ -27,6 +29,7 @@ interface CheckoutButtonProps {
 export function CheckoutButton({
   type,
   productId,
+  billingCycle,
   children,
   className,
   disabled = false,
@@ -45,7 +48,7 @@ export function CheckoutButton({
       const res = await fetch("/api/billing/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, productId, returnPath }),
+        body: JSON.stringify({ type, productId, billingCycle, returnPath }),
       })
 
       const json = await res.json()

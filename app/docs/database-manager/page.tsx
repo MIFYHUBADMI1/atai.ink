@@ -26,8 +26,7 @@ function loadGuide(): string {
     return [
       "# Database Manager guide unavailable",
       "",
-      "The guide content could not be loaded. Your project database is at",
-      `[${SITE_URL}/project/PROJECT_ID/database](${SITE_URL}/project/PROJECT_ID/database).`,
+      "The guide content could not be loaded. Open the Database view from your project workspace.",
     ].join("\n")
   }
 }
@@ -67,6 +66,8 @@ export const metadata: Metadata = {
 export default function DatabaseManagerPage() {
   const markdown = loadGuide()
   const sections = markdownHeadings(markdown)
+  const troubleshootingId =
+    sections.find((s) => /common problems/i.test(s.text))?.id ?? "common-problems"
   const faqs = extractFaqs(markdown)
   const canonical = `${SITE_URL}/docs/database-manager`
 
@@ -142,16 +143,10 @@ export default function DatabaseManagerPage() {
               Start reading <ArrowRight className="size-4" />
             </a>
             <a
-              href="#common-problems"
+              href={`#${troubleshootingId}`}
               className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium transition-colors hover:bg-accent"
             >
               <LifeBuoy className="size-4" /> Troubleshooting
-            </a>
-            <a
-              href="/project/PROJECT_ID/database"
-              className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium transition-colors hover:bg-accent"
-            >
-              <BookOpen className="size-4" /> Open the manager
             </a>
           </div>
         </div>
@@ -189,9 +184,9 @@ export default function DatabaseManagerPage() {
             <p className="mt-2 text-sm leading-7 text-muted-foreground">
               Email <a href="mailto:support@atai.ink" className="font-medium text-primary hover:underline">support@atai.ink</a>,
               call or WhatsApp <a href="tel:+256761819885" className="font-medium text-primary hover:underline">+256761819885</a>,
-              or ask in the{" "}
-              <a href="https://chat.whatsapp.com/CB3zVz7UnsQLfDjjk04gt1" target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">
-                Atai WhatsApp community
+              or follow the{" "}
+              <a href="https://whatsapp.com/channel/0029Vb9sizc2Jl8CaYWJhZ1N" target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">
+                Atai WhatsApp channel
               </a>.
             </p>
             <div className="mt-5 flex flex-wrap gap-3 border-t border-border pt-5">

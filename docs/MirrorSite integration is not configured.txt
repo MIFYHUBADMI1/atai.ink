@@ -1,1 +1,0 @@
-MirrorSite integration is not configured. Add MIRRORSITE_API_URL and ATAI_INTERNAL_KEY to your .env file and restart the server.

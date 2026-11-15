@@ -4,7 +4,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { X, Sparkles, TrendingDown, Gift, CheckCircle, Copy, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { SUBSCRIPTION_PLANS } from "@/lib/billing/config"
+import { getCommercialPlans } from "@/lib/billing/entitlements/commercial-plans"
 
 interface CancelSubscriptionButtonProps {
   planName: string
@@ -50,11 +50,11 @@ export function CancelSubscriptionButton({
     year: "numeric",
   })
 
-  // Get cheaper plans for downgrade option
-  const currentPlan = SUBSCRIPTION_PLANS.find((p) => p.id === currentPlanId)
-  const cheaperPlans = SUBSCRIPTION_PLANS.filter(
-    (p) => !p.custom && p.id !== "free" && p.priceUSD > 0 && p.priceUSD < (currentPlan?.priceUSD || 0)
-  ).sort((a, b) => b.priceUSD - a.priceUSD)
+  // Get cheaper plans for downgrade option (commercial catalog).
+  const currentPlan = getCommercialPlans().find((p) => p.id === currentPlanId)
+  const cheaperPlans = getCommercialPlans()
+    .filter((p) => !p.custom && p.priceUSD > 0 && p.priceUSD < (currentPlan?.priceUSD || 0))
+    .sort((a, b) => b.priceUSD - a.priceUSD)
 
   const handleCancel = async () => {
     setIsLoading(true)

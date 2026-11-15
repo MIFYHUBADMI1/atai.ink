@@ -67,13 +67,17 @@ async function findProductByName(
 
 /**
  * Create a subscription product in Dodo.
+ * `cycle` selects the recurring interval: monthly (default) or annual — the
+ * annual variant charges once per year for a 12-month subscription period.
  */
 async function createSubscriptionProduct(
   client: DodoPayments,
   name: string,
   description: string,
   priceInCents: number,
+  cycle: "monthly" | "annual" = "monthly",
 ): Promise<string> {
+  const interval = cycle === "annual" ? "Year" : "Month"
   const product = await client.products.create({
     name,
     description,
@@ -82,9 +86,9 @@ async function createSubscriptionProduct(
       currency: "USD",
       price: priceInCents,
       discount: 0,
-      payment_frequency_interval: "Month",
+      payment_frequency_interval: interval,
       payment_frequency_count: 1,
-      subscription_period_interval: "Month",
+      subscription_period_interval: interval,
       subscription_period_count: 1,
     },
     tax_category: "digital_products",
@@ -129,9 +133,11 @@ export async function getOrCreateSubscriptionProduct(
    * directly — skipping name lookup and auto-creation — so a commercial plan
    * never reuses or collides with a legacy product of the same display name. */
   existingProductId?: string,
+  /** Recurring cycle used only when auto-creating (provisioning script). */
+  cycle: "monthly" | "annual" = "monthly",
 ): Promise<DodoProductInfo> {
   // Check cache first
-  const cacheKey = `sub:${existingProductId ?? planId}`
+  const cacheKey = `sub:${existingProductId ?? `${planId}:${cycle}`}`
   const cached = createdProducts.get(cacheKey)
   if (
     cached &&
@@ -159,7 +165,7 @@ export async function getOrCreateSubscriptionProduct(
   }
 
   // Use a lock to prevent concurrent duplicate creation
-  const lockKey = `product_create:sub:${planId}`
+  const lockKey = `product_create:sub:${planId}:${cycle}`
   const releaseLock = productCreationLocks.acquire(lockKey)
   if (!releaseLock) {
     throw new Error("Product creation is already in progress for this plan")
@@ -177,11 +183,12 @@ export async function getOrCreateSubscriptionProduct(
       return rechecked
     }
 
-    // Rate limit: max 1 product creation per plan per hour
+    // Rate limit: max 1 product creation per plan AND cycle per hour, so the
+    // monthly and annual variants of one plan do not block each other.
     try {
       await checkRateLimit({
         action: "dodo_product_create",
-        identifier: `sub:${planId}`,
+        identifier: `sub:${planId}:${cycle}`,
         limit: 1,
         windowMs: 60 * 60 * 1000,
       })
@@ -204,12 +211,14 @@ export async function getOrCreateSubscriptionProduct(
         name,
         description,
         priceInCents,
+        cycle,
       )
       logger.info("dodo", "Created subscription product", {
         planId,
         productId,
         name,
         priceUSD,
+        cycle,
       })
     }
 

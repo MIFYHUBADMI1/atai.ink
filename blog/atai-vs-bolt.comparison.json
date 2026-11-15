@@ -1,0 +1,94 @@
+{
+  "competitorName": "Bolt.new",
+  "competitorUrl": "https://bolt.new",
+  "competitorDescription": "Bolt.new is an AI website and app builder that runs in the browser. Plans are Free, Pro ($25/mo), Teams ($30 per member per month) and Enterprise.",
+  "positioning": "Atai follows the business lifecycle — IDEA → BUILD → LAUNCH → MANAGE → GROW → SCALE. Bolt.new is built around generating and hosting an app in the browser.",
+  "lastReviewed": "2026-11-15",
+  "limitations": "Plans, prices and entitlements on both sides change regularly. Every row below was checked on 2026-11-15 against the source linked in that row — re-verify before you decide.",
+  "rows": [
+    {
+      "dimension": "Primary purpose",
+      "atai": "Plan, build, launch, manage, grow and scale a business from one platform.",
+      "competitor": "Build and host a website or app from a browser-based AI development environment.",
+      "evidence": "https://bolt.new/pricing",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Business lifecycle coverage",
+      "atai": "Covers the full lifecycle: business planning and offer development, building the app, launching it, then running finances, marketing and growth.",
+      "competitor": "Covers building and hosting a website or app.",
+      "evidence": "https://bolt.new/pricing",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Plans",
+      "atai": "Explorer (free), Starter ($89.99/mo or $989.89/yr), Growth ($199.99/mo or $2,199.89/yr), Scale ($499.99/mo or $5,499.89/yr) and Enterprise (custom).",
+      "competitor": "Free ($0), Pro ($25/mo), Teams ($30 per member per month) and Enterprise, priced individually.",
+      "evidence": "https://bolt.new/pricing",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "How usage is charged",
+      "atai": "Subscription plans with a monthly Atai Credit allowance; yearly plans are paid upfront for 12 months and still receive credits every month.",
+      "competitor": "Tokens. The Free plan includes 1M tokens a month with a 300K daily limit; Pro starts at 10M tokens a month with no daily limit.",
+      "evidence": "https://bolt.new/pricing",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Free tier",
+      "atai": "Explorer: plan your business with the AI co-founder on 500 planning credits, with community support. Production launches are a paid-plan capability.",
+      "competitor": "Public and private projects, 1M tokens a month, website hosting, unlimited databases and up to 333k web requests — with Bolt branding on websites.",
+      "evidence": "https://bolt.new/pricing",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Application generation",
+      "atai": "Full application builds from Starter upward, with up to four production apps on Growth and unlimited on Scale.",
+      "competitor": "The core product — describe the site or app and Bolt generates and runs it in the browser.",
+      "evidence": "https://bolt.new/pricing",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Code ownership and access",
+      "atai": "Starter and above: edit code in the editor or visually, download your source code and sync with GitHub. A custom domain of your own arrives with Growth.",
+      "competitor": "Custom domain support is included from Pro upward.",
+      "evidence": "https://bolt.new/pricing",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Deployment and hosting",
+      "atai": "Deployment is included from Starter upward, with database management and storage; your own custom domain from Growth.",
+      "competitor": "Bolt Cloud hosting is included: Free covers up to 10 GB bandwidth and 333,333 requests a month; Pro covers up to 30 GB and 1M requests a month.",
+      "evidence": "https://support.bolt.new/bolt-cloud/hosting/plans",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Database",
+      "atai": "Database management and storage from Starter upward; expanded capacity on higher plans.",
+      "competitor": "Unlimited databases on Free, with expanded database capacity and a choice of database provider on Pro.",
+      "evidence": "https://bolt.new/pricing",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Team controls",
+      "atai": "Specialist teams from Starter, expanded teams on Growth and premium teams with customization on Scale and Enterprise.",
+      "competitor": "Teams adds centralized billing, team-level access management, granular admin controls and user provisioning, plus private NPM registry support.",
+      "evidence": "https://bolt.new/pricing",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Support",
+      "atai": "Growth adds direct support; Enterprise adds a dedicated account manager and white-glove onboarding.",
+      "competitor": "Enterprise adds a dedicated account manager, 24/7 priority support, onboarding and SLAs.",
+      "evidence": "https://bolt.new/pricing",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Known constraints",
+      "atai": "Monthly plan credits expire at the end of the month they were issued; permanent top-up credits never expire, so heavy use moves you up a plan.",
+      "competitor": "Free plan tokens do not roll over; Pro and above roll unused tokens over for up to two months, and the file upload limit rises from 10MB on Free to 100MB on Pro.",
+      "evidence": "https://bolt.new/pricing",
+      "lastChecked": "2026-11-15"
+    }
+  ]
+}

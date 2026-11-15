@@ -37,3 +37,19 @@ export function clientIpBucket(req: Request): string {
   }
   return "unverified-development"
 }
+
+/**
+ * A bucket for public endpoints that must keep working when the client
+ * address cannot be verified.
+ *
+ * `clientIpBucket` fails closed on purpose — authentication cannot fall back
+ * to a shared bucket. A public page view or a newsletter signup has no such
+ * requirement, and refusing them outright would take the whole feature
+ * offline on a deployment without a trusted proxy header. The caller gets
+ * `verified: false` and can apply a coarser limit instead.
+ */
+export function clientIpBucketOrShared(req: Request): { bucket: string; verified: boolean } {
+  const ip = getVerifiedClientIp(req)
+  if (ip) return { bucket: `ip:${ip}`, verified: true }
+  return { bucket: "unverified", verified: false }
+}

@@ -84,7 +84,12 @@ interface PlanBase {
 
 const PLAN_BASE: Record<CommercialPlanId, PlanBase> = {
   explorer: {
-    businesses: 0,
+    // One planning business. The spec table says "0 production businesses" —
+    // that is the *production* cap (productionApps below), not the number of
+    // workspaces a founder may plan in. Without one workspace the free funnel
+    // dies at its first step (the co-founder plan lives on the project), so
+    // Explorer gets exactly one business and production stays at zero.
+    businesses: 1,
     productionApps: 0,
     subdomains: 0,
     customDomains: 0,
@@ -265,11 +270,17 @@ export function checkEntitlement(
   switch (op) {
     case "createProject":
     case "forkProject": {
-      if (set.planningOnly) {
-        return deny("EXPLORER_PLANNING_ONLY", "Explorer is a planning-only environment and cannot create production businesses.")
-      }
+      // Planning-only is NOT a create block: Explorer may hold one planning
+      // business (businesses.max = 1) so the free funnel can reach a plan.
+      // Production is blocked separately, on buildProduction/deploy.
       if (set.businesses.max === "unlimited") return allow()
       if (set.businesses.current >= set.businesses.max) {
+        if (set.commercialPlanId === "explorer") {
+          return deny(
+            "BUSINESS_LIMIT_REACHED",
+            "Explorer is a planning-only plan with one business. Upgrade to Starter to run more.",
+          )
+        }
         return deny("BUSINESS_LIMIT_REACHED", `Your plan allows ${set.businesses.max} business(es). Upgrade to create more.`)
       }
       return allow()
@@ -279,7 +290,10 @@ export function checkEntitlement(
     case "provisionDatabase":
     case "useStorage": {
       if (set.planningOnly) {
-        return deny("EXPLORER_PLANNING_ONLY", "Explorer cannot generate, deploy, or host production applications.")
+        return deny(
+          "EXPLORER_PLANNING_ONLY",
+          "Explorer is a planning-only plan. Upgrade to Starter to build, launch and host a business.",
+        )
       }
       return allow()
     }

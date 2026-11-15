@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/auth/session"
 import { getDodoConfig } from "@/lib/env"
-import { SUBSCRIPTION_PLANS, PERMANENT_CREDIT_PACKS } from "@/lib/billing/config"
+import { PERMANENT_CREDIT_PACKS } from "@/lib/billing/config"
+import {
+  getCommercialPlans,
+  commercialProductName,
+  commercialProductDescription,
+} from "@/lib/billing/entitlements/commercial-plans"
 import { logger } from "@/lib/logging/logger"
 import { DodoPayments } from "dodopayments"
 
@@ -47,17 +52,42 @@ export async function GET(req: Request) {
       // Non-fatal — show local config even if Dodo is unreachable
     }
 
-    // Combine with local config
+    // Combine with local config — the commercial catalog, monthly + annual variant
+    // per plan. Names match what checkout creates (price-in-name), so a product
+    // provisioned by either path matches.
+    const subscriptionProducts = getCommercialPlans()
+      .filter((p) => !p.custom)
+      .flatMap((plan) => {
+        const monthly = {
+          id: plan.id,
+          name: commercialProductName(plan, "monthly"),
+          description: commercialProductDescription(plan, "monthly"),
+          priceUSD: plan.priceUSD,
+          credits: plan.mirrorCredits,
+          type: "subscription" as const,
+          billingCycle: "monthly" as const,
+          dodoProductId: plan.dodoProductId ?? "",
+          configured: Boolean(plan.dodoProductId),
+        }
+        if (!plan.annualPriceUSD) return [monthly]
+        return [
+          monthly,
+          {
+            id: `${plan.id}-annual`,
+            name: commercialProductName(plan, "annual"),
+            description: commercialProductDescription(plan, "annual"),
+            priceUSD: plan.annualPriceUSD,
+            credits: plan.mirrorCredits,
+            type: "subscription" as const,
+            billingCycle: "annual" as const,
+            dodoProductId: plan.annualDodoProductId ?? "",
+            configured: Boolean(plan.annualDodoProductId),
+          },
+        ]
+      })
+
     const localProducts = [
-      ...SUBSCRIPTION_PLANS.filter((p) => !p.custom).map((p) => ({
-        id: p.id,
-        name: `Atai — ${p.name}`,
-        priceUSD: p.priceUSD,
-        credits: p.mirrorCredits,
-        type: "subscription" as const,
-        dodoProductId: p.dodoProductId ?? "",
-        configured: Boolean(p.dodoProductId),
-      })),
+      ...subscriptionProducts,
       ...PERMANENT_CREDIT_PACKS.map((p) => ({
         id: p.id,
         name: `Atai — ${p.label}`,

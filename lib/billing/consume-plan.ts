@@ -11,14 +11,14 @@ export interface ConsumePlanUser {
   credits?: number
   subscriptionCredits?: number
   permanentCredits?: number
-  creditBuckets?: Array<{ subscriptionId: string; amount: number; expiresAt: number }>
+  creditBuckets?: Array<{ subscriptionId: string; bucketId?: string; amount: number; expiresAt: number }>
 }
 
 export interface CreditConsumePlan {
   ok: true
   subConsumed: number
   permConsumed: number
-  bucketDeductions: Array<{ subscriptionId: string; deduct: number; newAmount: number }>
+  bucketDeductions: Array<{ subscriptionId: string; bucketId?: string; deduct: number; newAmount: number }>
   balance: { total: number; subscription: number; permanent: number }
 }
 
@@ -71,7 +71,7 @@ export function planCreditConsumption(
   let remaining = amount
   let subConsumed = 0
   let permConsumed = 0
-  const bucketDeductions: Array<{ subscriptionId: string; deduct: number; newAmount: number }> = []
+  const bucketDeductions: Array<{ subscriptionId: string; bucketId?: string; deduct: number; newAmount: number }> = []
 
   for (const bucket of sortedBuckets) {
     if (remaining <= 0) break
@@ -81,6 +81,7 @@ export function planCreditConsumption(
       remaining -= toConsume
       bucketDeductions.push({
         subscriptionId: bucket.subscriptionId,
+        ...(bucket.bucketId ? { bucketId: bucket.bucketId } : {}),
         deduct: toConsume,
         newAmount: bucket.amount - toConsume,
       })
@@ -116,10 +117,10 @@ export function applyConsumePlan(
   const permanentCredits = Math.max(0, (user.permanentCredits ?? 0) - plan.permConsumed)
   let buckets = [...(user.creditBuckets ?? [])]
   for (const d of plan.bucketDeductions) {
+    const matches = (b: { subscriptionId: string; bucketId?: string }) =>
+      d.bucketId ? b.bucketId === d.bucketId : b.subscriptionId === d.subscriptionId
     buckets = buckets
-      .map((b) =>
-        b.subscriptionId === d.subscriptionId ? { ...b, amount: d.newAmount } : b,
-      )
+      .map((b) => (matches(b) ? { ...b, amount: d.newAmount } : b))
       .filter((b) => b.amount > 0)
   }
   return { credits, subscriptionCredits, permanentCredits, creditBuckets: buckets }

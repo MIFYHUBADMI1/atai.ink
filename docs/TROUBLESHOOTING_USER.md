@@ -1,145 +1,263 @@
-# Troubleshooting & error reference
+# Troubleshooting & common problems
 
-A single, searchable reference for every common Atai problem: the exact symptom, the cause, and the fix — with the precise page or endpoint to use. If you're stuck, this is the first place to look. For the end‑to‑end walkthrough, see the [onboarding guide](https://atai.ink/docs/onboarding).
+If something isn't working, start here. Find your problem, read the likely cause, and try the fix. If you're still stuck, there's a short section at the end on how to contact support so you get an answer fast.
 
-> Tip: most fixes need a specific URL. Bookmark [https://atai.ink/settings/billing](https://atai.ink/settings/billing) (the real billing page — `/billing` has no page) and your project workspace.
+> Tip: most fixes just need you to check a setting or refresh the page.
 
-## Quick lookup
+> **Need an account first?** [Create one](/register) or [sign in](/login). Forgot your password? [Reset it here](/forgot-password). New to Atai? Read the [Getting Started guide](/docs/onboarding).
+
+## 1. Before you start: a 60-second check
+
+Most problems people report turn out to be one of five things. Run through this list first — it resolves more cases than anything else on this page.
+
+1. **Refresh the page.** Hard-refresh if you can: `Ctrl+Shift+R` (Windows) or `Cmd+Shift+R` (Mac). A stale page is the single most common cause of "it's not working."
+2. **Check you're in the right project.** Many screens look identical across projects. Look at the project name before assuming data is missing.
+3. **Check you're signed in as the right user.** If you have more than one account, you may be looking at the wrong one.
+4. **Wait a moment, then try again.** Building, publishing, and analyzing all take time. If you clicked something and nothing happened, it may still be working.
+5. **Try once more in a normal browser window.** Extensions and private/incognito windows cause a surprising number of odd failures.
+
+If the problem survives all five, find it below.
+
+## 2. How to describe a problem so it gets fixed
+
+When something goes wrong, note these four things *before* you refresh or navigate away:
+
+- **What you were trying to do** — "publish my project", "add a record to Orders".
+- **What happened instead** — the exact message, copied or screenshotted.
+- **When it happened** — roughly, plus your time zone if support is in another country.
+- **What you'd already tried** — refreshed, signed out and in, different browser.
+
+That's usually enough for support to reproduce it. Without it, the first three replies are spent guessing.
+
+> **Never send your password.** No one at Atai will ever ask for it. If someone claiming to be support asks, it's not us.
+
+## 3. Quick lookup — where to go
 
 | I want to… | Go to |
 |---|---|
-| Verify my email | [https://atai.ink/verify-email](https://atai.ink/verify-email) |
-| Reset my password | [https://atai.ink/forgot-password](https://atai.ink/forgot-password) → [https://atai.ink/reset-password](https://atai.ink/reset-password) |
-| See billing / credits | [https://atai.ink/settings/billing](https://atai.ink/settings/billing) |
-| Manage sessions / 2FA | [https://atai.ink/settings/security](https://atai.ink/settings/security) |
-| Turn features on/off | [https://atai.ink/settings/features](https://atai.ink/settings/features) |
-| Watch a build | [https://atai.ink/project/PROJECT_ID/progress](https://atai.ink/project/PROJECT_ID/progress) |
-| Manage runtime keys | [https://atai.ink/project/PROJECT_ID/runtime/keys](https://atai.ink/project/PROJECT_ID/runtime/keys) |
-| Contact support | [support@atai.ink](mailto:support@atai.ink) · +256761819885 · [WhatsApp community](https://chat.whatsapp.com/CB3zVz7UnsQLfDjjk04gt1) |
+| Verify my email | the link in your welcome email, or Settings |
+| Reset my password | "Forgot password" on the sign-in page |
+| See my credits or billing | Settings → Billing |
+| Manage sessions / security | Settings → Security |
+| Turn optional features on/off | Settings → Features |
+| Watch a build in progress | your project's build / progress view |
+| Change my plan | Settings → Billing → your subscription |
+| Contact support | support@atai.ink |
+
+## 4. Error message reference
+
+Short explanations for messages you're most likely to see. Find the wording that matches what's on your screen.
+
+| Message | What it usually means | What to do |
+|---|---|---|
+| **"Invalid credentials"** | Wrong password, unverified email, or the account was closed. | Reset your password, or verify your email. |
+| **"Email not verified"** | Your account needs verification before it unlocks. | Open the link in your welcome email; resend if needed. |
+| **"Not enough credits"** | Your balance is lower than the action needs. | Check Settings → Billing, or earn credits via referrals. |
+| **"Unauthorized"** | A key is missing, wrong, or revoked. | Re-check the key in your app's secret settings. |
+| **"Rate limited"** | Too many requests in a short time. | Slow down, wait a moment, retry. |
+| **"Failed to save"** | A value doesn't match its field type, or a required field is empty. | Check each field and try again. |
+| **"Not found"** | The item was renamed or deleted, or the link is old. | Open it from the list in your project instead. |
+| **"Something went wrong"** | A temporary error with no further detail. | Refresh and retry; report it if it repeats. |
+| **"Coming soon"** | The area is still being built or rolled out. | Use the version inside your project, or check back. |
+| **"Session expired"** | You were signed out for security. | Sign in again. |
+
+If your message isn't here, search this page for a few of its words — the sections below are grouped by area.
 
 ## Common problems
 
-**Authentication & sign-in**
+**Signing in**
 
-### "Invalid credentials" / cannot log in
-- *Cause:* wrong password; email not verified; or the account was soft‑deleted.
-- *Fix:* reset at [https://atai.ink/forgot-password](https://atai.ink/forgot-password) → open the emailed link → [https://atai.ink/reset-password](https://atai.ink/reset-password). If you never verified, see below. If removed, email [support@atai.ink](mailto:support@atai.ink). Or use **Sign in with Google** at [https://atai.ink/login](https://atai.ink/login).
+### "Invalid credentials" or I can't log in
+- *Cause:* wrong password, email not verified, or the account was closed.
+- *Fix:* use [Forgot password](/forgot-password) on the sign-in page, or [sign in](/login) with Google. If you never verified your email, do that first at the [verification page](/verify-email). If you think your account was closed, contact support.
 
-### "Verify your email to unlock Atai" — account feels locked, no welcome credits
-- *Cause:* the 500 welcome credits are granted **on email verification**, not on signup.
-- *Fix:* open the verification link → [https://atai.ink/verify-email](https://atai.ink/verify-email). A persistent **Verify email banner** appears in the header with **Resend email** (calls `/api/auth/resend-verification`) and **I've verified**. Check spam/promotions, then hard‑refresh.
+### It says "verify your email" and I feel locked out
+- *Cause:* your account unlocks after you verify your email.
+- *Fix:* open the verification link in your welcome email. If you didn't get it, use **Resend email** and check spam and promotions.
 
-### Verification email never arrives
-- *Fix:* click **Resend email** in the banner, wait a minute, check spam and promotions. Then [https://atai.ink/verify-email](https://atai.ink/verify-email). Still missing → [support@atai.ink](mailto:support@atai.ink). Admin causes: expired 24‑hour token or SMTP misconfiguration.
+### The verification email never arrives
+- *Fix:* on the [verification page](/verify-email), click **Resend**, wait a minute, and check spam and promotions. Still nothing? Contact support.
 
-### "Session expired" / logged out repeatedly
-- *Cause:* sessions last ~30 days; rotating the platform auth secret invalidates all sessions.
-- *Fix:* sign in again at [https://atai.ink/login](https://atai.ink/login). Manage sessions at [https://atai.ink/settings/security](https://atai.ink/settings/security).
+### I keep getting logged out
+- *Cause:* sessions expire after a while for security.
+- *Fix:* sign in again. You can review active sessions in Settings → Security.
 
-### Google OAuth shows `redirect_uri_mismatch` / `access_denied`
-- *Cause:* server‑side OAuth config (registered redirect URI, or Google app in "Testing" without your email in test users).
-- *Fix:* use email+password at [https://atai.ink/register](https://atai.ink/register) as a workaround; report to [support@atai.ink](mailto:support@atai.ink). Production callback is `https://atai.ink/api/auth/google/callback`.
+### Google sign-in shows an error
+- *Fix:* try signing in with email and password instead. If Google sign-in keeps failing, contact support.
 
 ### "Something went wrong" with no detail
-- *Fix:* open DevTools → **Network** → find the failed request and read its response body; note the timestamp; email it to [support@atai.ink](mailto:support@atai.ink).
+- *Fix:* refresh and try again. If it keeps happening, contact support with a screenshot and the time it happened.
 
-**Billing & credits**
+### I signed up but never got the welcome email
+- *Fix:* check spam, promotions, and any filtered folders. Add the sender to your contacts and resend. If you signed up with a work email, ask your IT team whether external mail is being blocked.
 
-### "Not enough credits" / "Insufficient credits" / Credit Gate dialog
-- *Cause:* balance below the operation cost (a build costs 50,000–100,000 credits while Free grants only 500).
-- *Fix:* check balance at [https://atai.ink/settings/billing](https://atai.ink/settings/billing) → **Buy Permanent Credits** or pick a subscription. Compare at [https://atai.ink/pricing](https://atai.ink/pricing). Earn free credits at [https://atai.ink/referrals](https://atai.ink/referrals). Use **Standard** (not **Pro**) for a first project, and refine the plan *before* building.
+**Credits & billing**
 
-### Credits deducted but the operation failed
-- *Cause:* the automatic refund path didn't execute (rare).
-- *Fix:* check **Credit History** at [https://atai.ink/settings/billing](https://atai.ink/settings/billing). If a `build_reservation` has no matching `build_refund`, contact [support@atai.ink](mailto:support@atai.ink) with project id + timestamp.
+### "Not enough credits"
+- *Cause:* your balance is lower than what the action needs.
+- *Fix:* check Settings → Billing to see your balance and options, or earn free credits through referrals. Tip: use the standard build option for your first project, and refine your plan before building to avoid re-builds.
 
-### Payment succeeded but no credits appeared
-- *Cause:* the Dodo webhook (`/api/billing/webhook`) wasn't received/processed, or UI shows a cached balance.
-- *Fix:* ① hard‑refresh (Ctrl+Shift+R); ② return from checkout so `/api/billing/sync` runs with the `subscription_id`; ③ check **Credit History**; ④ email [support@atai.ink](mailto:support@atai.ink) with the receipt.
+### Credits were taken but the action failed
+- *Fix:* check your credit history in Settings → Billing. If a charge doesn't have a matching refund, contact support with your project name and the time.
 
-### UI shows credits but build says insufficient
-- *Cause:* subscription credits expired, or cached `users.credits` is out of sync with the ledger.
-- *Fix:* hard‑refresh; check history at [https://atai.ink/settings/billing](https://atai.ink/settings/billing); contact support.
+### I paid but don't see the credits
+- *Fix:* refresh the page. If you returned from checkout and still don't see them, check your credit history, then contact support with your receipt.
 
-### Need to cancel or change plan
-- *Fix:* [https://atai.ink/settings/billing](https://atai.ink/settings/billing) → Subscription Plans → change or **Cancel subscription** (with feedback). Terms: [https://atai.ink/refund-policy](https://atai.ink/refund-policy).
+### The page shows credits but a build says I don't have enough
+- *Fix:* refresh the page and check your credit history. If it still looks wrong, contact support.
 
-**Analysis, plan & build**
+### I need to change or cancel my plan
+- *Fix:* go to Settings → Billing, open your subscription, and change or cancel it there.
 
-### Project stuck on "Analyzing website" forever
-- *Cause:* a Deep Crawl legitimately takes **up to 15 minutes**; or status polling stopped; or an unhandled exception after crawl.
-- *Fix:* ① wait (deep crawls are slow by design); ② hard‑refresh; ③ open [https://atai.ink/project/PROJECT_ID/progress](https://atai.ink/project/PROJECT_ID/progress); ④ if state is `analysis_failed`, use **Retry understanding** from the Workspace.
+### I was charged twice
+- *Fix:* check your credit history first — a pending and a completed charge can look like two charges. If both completed, contact support with both receipt references and we'll sort it out.
 
-### Plan won't generate / "Understand needs attention"
-- *Cause:* the source site blocked crawling, or the idea text was too vague.
-- *Fix:* retry with a clearer brief or a different source URL; use **Retry understanding** in the workspace.
+**Building your app**
 
-### Build failed / "Build error"
-- *Cause:* a transient generation error, or the plan was too large for the chosen tier.
-- *Fix:* use **Retry** / **Recover** from the workspace; if it persists, switch **Standard → Pro** only if needed (costs more), or simplify the plan. Check [https://atai.ink/project/PROJECT_ID/progress](https://atai.ink/project/PROJECT_ID/progress).
+### My project is stuck on "Analyzing"
+- *Cause:* analyzing a website can take several minutes.
+- *Fix:* wait a little, then refresh. If it's been very long, use the retry option in your project workspace.
 
-### Edits after build cost a full build tier
-- *Cause:* post‑build plan changes re‑run the build.
-- *Fix:* refine the plan *before* building. After build, use the instruction bar / agent for small changes instead of a full replan.
+### My plan won't generate
+- *Cause:* the website blocked access, or the description was too vague.
+- *Fix:* try a clearer description or a different website, then retry.
+
+### My build failed
+- *Cause:* a temporary error, or the plan was very large.
+- *Fix:* use **Retry** in the workspace. If it keeps failing, simplify the plan or try the more powerful build option.
+
+### Small changes after building cost a lot
+- *Cause:* changing the plan after building re-runs the build.
+- *Fix:* get the plan right before building. After building, make small changes with the edit / instruction box instead of rebuilding.
+
+### My app doesn't look like the plan
+- *Cause:* the plan changed after the build, or the build used an older version.
+- *Fix:* check the plan, make a small edit with the instruction box, or rebuild from the latest plan.
+
+### My build finished but pages are blank
+- *Fix:* refresh the preview. If it's still blank, open the browser console and note any red errors, then report them with a screenshot. Blank pages are usually a data problem — check that any table your app reads actually has records.
+
+### I can't edit my app after building
+- *Fix:* make sure the build has finished and you're in the project workspace, not the plan editor. If the edit box is disabled, wait for the build to complete, then try again.
 
 **Publishing & domains**
 
-### Published site shows a broken/old version
-- *Cause:* CDN/cache, or you published an older build.
-- *Fix:* hard‑refresh; re‑publish from the workspace; confirm the correct build is live.
+### My published site shows an old or broken version
+- *Fix:* refresh the page and re-publish from your project. Make sure the latest build is the one that's live.
 
-### Custom domain won't verify (DNS)
-- *Cause:* CNAME/records not propagated, or wrong target.
-- *Fix:* set the exact DNS records shown on the hosting/domain page for your project, wait for propagation (can take minutes–hours), then click **Verify** again. Free subdomain (`*.totalum-project.com`) needs no DNS.
+### My custom domain won't connect
+- *Cause:* the domain settings haven't finished updating, or the records are wrong.
+- *Fix:* copy the exact settings shown in your project, wait for them to take effect (this can take a while), then try again. If you use a free Atai address, no setup is needed.
 
-### "Coming soon" on a top‑level page
-- *Cause:* `/market`, `/competition`, `/hosting` are placeholder pages by design.
-- *Fix:* use the **project‑level** equivalent (e.g. [https://atai.ink/project/PROJECT_ID/market](https://atai.ink/project/PROJECT_ID/market)). Also check [https://atai.ink/settings/features](https://atai.ink/settings/features) — some tools are opt‑in/gated.
+### My site loads for me but not for others
+- *Cause:* you may be seeing a cached or preview version that isn't public yet.
+- *Fix:* confirm the project is published, then open the live link in a private window. If it works there, your browser was showing an old copy.
+
+### A page says "Coming soon"
+- *Cause:* some areas are still being built or rolled out.
+- *Fix:* use the version inside your project instead, or check back later.
+
+### The free address stopped working
+- *Fix:* check the project is still published and the build succeeded. Re-publish if unsure. If you changed your project's name, the address may have changed too.
 
 **Database**
 
-### "Table not found" / 404 on the table URL
-- *Cause:* wrong table slug, or table deleted.
-- *Fix:* open [https://atai.ink/project/PROJECT_ID/database](https://atai.ink/project/PROJECT_ID/database) and click the table to get the correct slug.
+### A table says "not found"
+- *Fix:* open **Database** in your project and choose the table from the list.
 
-### Cannot edit `_id` / `createdAt` / `updatedAt`
-- *Cause:* system fields maintained by Atai.
-- *Fix:* expected — add your own **Text** field for a business key.
+### I can't edit the ID or timestamps
+- *Fix:* those are managed by Atai — this is expected. Add your own text field if you need a reference number.
 
-### "Failed to save record"
-- *Cause:* value violates the field type, or a required field is empty.
-- *Fix:* check each field matches its type (Number/Date/JSON format). Re‑enter and save; if persistent, contact [support@atai.ink](mailto:support@atai.ink).
+### "Failed to save" a record
+- *Fix:* check each field matches its type (for example, numbers where numbers belong) and fill in required fields, then save again.
 
-**Runtime API & keys**
+### My app doesn't show the data I added
+- *Fix:* refresh the app, confirm you're in the right project, and give it a moment to update.
 
-### 401 "Unauthorized" calling the Runtime
-- *Cause:* missing/malformed `Authorization: Bearer` header, or revoked key.
-- *Fix:* confirm `ATAI_API_KEY` is set where the code runs; header is `Authorization: Bearer <key>`; key still exists at [https://atai.ink/developers/keys](https://atai.ink/developers/keys) or [https://atai.ink/project/PROJECT_ID/runtime/keys](https://atai.ink/project/PROJECT_ID/runtime/keys). Rotate if unsure.
+### I deleted a record and need it back
+- *Fix:* there's no undo inside the app. Restore from a backup or export if you have one. If the data matters, contact support quickly and describe exactly what was deleted.
 
-### Key works locally but not in deployment
-- *Cause:* the deployed environment lacks `ATAI_API_KEY`, or a dev key is used in production.
-- *Fix:* add the variable in the host's secret store; use a production key.
+### A link field shows nothing to choose
+- *Fix:* the other table is probably empty. Add one record there first, then return to the link field.
 
-### 429 rate limited
-- *Cause:* exceeded the key's request/token limit.
-- *Fix:* check [https://atai.ink/project/PROJECT_ID/runtime/limits](https://atai.ink/project/PROJECT_ID/runtime/limits); back off and retry; review plan at [https://atai.ink/pricing](https://atai.ink/pricing).
+**Developer & API keys**
+
+### My app says "Unauthorized"
+- *Fix:* make sure your key is set in your app's secret settings and still active in your project's developer / API settings. Rotate it if unsure.
+
+### My key works locally but not live
+- *Fix:* add the key to your hosting provider's secret settings and redeploy.
+
+### I'm rate limited
+- *Fix:* slow down and retry. Check your usage in your project settings.
+
+### I think my key leaked
+- *Fix:* revoke it immediately in your project's developer / API settings, create a new one, and update your app. Then review where the old key might have been exposed.
+
+### The SDK says my configuration is invalid
+- *Fix:* the key is missing or empty where your code runs. Load it from an environment variable and confirm it isn't undefined at startup.
 
 **GitHub**
 
-### GitHub connection fails / repo push rejected
-- *Cause:* missing repo permissions, or the connected account lacks write access.
-- *Fix:* reconnect with the correct GitHub account and grant repo access; use the GitHub integration page in the project workspace.
+### Connecting GitHub fails
+- *Cause:* the connected account doesn't have permission to the repository.
+- *Fix:* reconnect with the right GitHub account and grant access to the repository.
 
-**Growth features**
+### I connected GitHub but my changes don't appear
+- *Fix:* check you're looking at the right branch, and that the connection is still listed in your project settings. Reconnect if it was revoked.
 
-### A growth tool is greyed out / "Soon"
-- *Cause:* operator kill switch or your [https://atai.ink/settings/features](https://atai.ink/settings/features) switch is off.
-- *Fix:* enable in Settings → Features. If the toggle is locked, a kill switch is active and can't be overridden.
+**Growth tools**
 
-### SEO audit won't run
-- *Cause:* `SEO_AUDIT_ENABLED` off, or project not published (no live URL).
-- *Fix:* publish the project, enable SEO in Settings → Features, retry at [https://atai.ink/project/PROJECT_ID/seo](https://atai.ink/project/PROJECT_ID/seo).
+### A growth tool is greyed out
+- *Fix:* check Settings for a toggle; if you can't enable it, it isn't available for your account yet.
 
-**Still stuck?**
+### The SEO audit won't run
+- *Fix:* publish your project first, then run the audit.
 
-Email [support@atai.ink](mailto:support@atai.ink), WhatsApp **+256761819885**, or join the [Atai WhatsApp community](https://chat.whatsapp.com/CB3zVz7UnsQLfDjjk04gt1). Include your project id, the exact error text, and a timestamp — it lets support correlate with server logs fast.
+### Content or campaign output is generic
+- *Fix:* add detail to your business plan — a clear offer, audience, and tone. Thin input produces thin output.
+
+**Account & security**
+
+### I want to change my email
+- *Fix:* update it in your profile settings. You'll need to confirm the change by email.
+
+### I want to delete my account
+- *Fix:* contact support. Account deletion is handled carefully so your data and billing history are treated correctly.
+
+### I don't recognize a sign-in
+- *Fix:* change your password immediately in Settings → Security, sign out of all devices, and contact support.
+
+### I lost access to my email address
+- *Fix:* contact support from a message that proves you own the account, and explain the situation. Don't create a new account — that makes recovery harder.
+
+## 5. Still stuck?
+
+Contact support at **support@atai.ink**. Include:
+
+1. **Your project name** (not your password — never send passwords).
+2. **What you were trying to do.**
+3. **What happened instead** — paste the exact message if you can.
+4. **When it happened** (roughly).
+
+With those four things, support can usually help quickly.
+
+### What happens after you write
+
+- You'll normally get a reply that either solves it or asks one clarifying question.
+- If the issue is a bug, it gets logged with the details you sent — which is why the exact message and time matter.
+- If you don't hear back within a couple of working days, reply on the same thread rather than starting a new one; that keeps the history together.
+
+### Faster alternatives
+
+- The [Getting Started guide](/docs/onboarding) answers most "how do I…" questions.
+- The [Database Manager guide](/docs/database-manager) covers data problems.
+- The [Runtime, SDK & API guide](/docs/runtime-api) covers keys and errors in code.
+- The [Growth playbook](/docs/growth-marketing) covers anything marketing-related.
+
+## 6. Related guides
+
+- **[Getting Started guide](/docs/onboarding)** — the full walkthrough from sign-up to launch.
+- **[Database Manager guide](/docs/database-manager)** — tables, records, and links.
+- **[Runtime, SDK & API access](/docs/runtime-api)** — keys, errors, and integrations.
+- **[Growth & marketing playbook](/docs/growth-marketing)** — growing after launch.

@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest"
-import { PERMANENT_CREDIT_PACKS, SUBSCRIPTION_PLANS } from "./config"
+import { PERMANENT_CREDIT_PACKS } from "./config"
+import { getCommercialPlans } from "./entitlements/commercial-plans"
 import { adviseUpgrade, parseRequiredCredits } from "./upgrade-options"
 
-const catalog = { plans: SUBSCRIPTION_PLANS, packs: PERMANENT_CREDIT_PACKS }
+// The catalog the route actually serves: the commercial five-plan set.
+const catalog = { plans: getCommercialPlans(), packs: PERMANENT_CREDIT_PACKS }
 
 describe("parseRequiredCredits", () => {
   it("reads grouped and underscored amounts", () => {

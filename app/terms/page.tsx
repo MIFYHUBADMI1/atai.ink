@@ -204,7 +204,7 @@ const faqItems = [
   },
   {
     q: "What plans does Atai offer?",
-    a: "Atai offers six plans: Free, Explorer, Launch, Growth, Scale, and Enterprise. Full plan details are on the Atai pricing page.",
+    a: "Atai offers five plans: Explorer (free), Starter, Growth, Scale, and Enterprise. Full plan details and current prices are on the Atai pricing page.",
   },
   {
     q: "How do I get support?",
@@ -457,15 +457,14 @@ export default function TermsPage() {
           </Section>
 
           <Section id="pricing" number="12" icon={DollarSign} title="Plans & Pricing">
-            <p>Atai offers six subscription plans designed to meet you wherever you are in your business journey:</p>
+            <p>Atai offers five subscription plans designed to meet you wherever you are in your business journey:</p>
             <div className="grid gap-3 sm:grid-cols-2 my-4">
               {[
-                { plan: "Free", desc: "1 project, 1 build attempt, 30-day hosted trial. Perfect for exploring the platform." },
-                { plan: "Explorer — $20/mo", desc: "3 projects, 5 builds/month, full database management, custom domain, standard support." },
-                { plan: "Launch — $99/mo", desc: "10 projects, unlimited builds, database with backups, payment integration, priority builds, 2 team seats." },
-                { plan: "Growth — $399/mo", desc: "25 projects, unlimited builds, advanced database, analytics, payment integration, 5 team seats." },
-                { plan: "Scale — $599/mo", desc: "Unlimited projects, unlimited builds, dedicated infrastructure, 10 team seats, direct support." },
-                { plan: "Enterprise", desc: "Everything in Scale plus SLA uptime, dedicated account manager, white-glove onboarding, and custom pricing." },
+                { plan: "Explorer — Free", desc: "Plan your business with the AI co-founder and research markets and competitors. Planning only — no production launch or hosting. 500 planning credits on email verification; community support." },
+                { plan: "Starter — $89.99/mo", desc: "Launch 1 business (1 production app on your Atai subdomain). AI co-founder, specialist teams, SEO & content marketing, business-intelligence basics, standard support." },
+                { plan: "Growth — $199.99/mo", desc: "Up to 4 businesses and 1 custom domain. Advanced AI co-founder, expanded teams, ads & competition monitoring, full learning paths, direct support. Our most popular plan." },
+                { plan: "Scale — $499.99/mo", desc: "Unlimited businesses and up to 4 custom domains. Premium AI co-founder and specialist teams, the full business-intelligence suite, priority compute, premium support." },
+                { plan: "Enterprise — Custom", desc: "Everything in Scale, tailored: custom credit volume, dedicated infrastructure, SLA-backed uptime, white-glove onboarding, and a dedicated account manager." },
               ].map(({ plan, desc }) => (
                 <div key={plan} className="rounded-lg border border-border bg-card p-4">
                   <p className="font-medium text-sm text-foreground">{plan}</p>
@@ -473,7 +472,7 @@ export default function TermsPage() {
                 </div>
               ))}
             </div>
-            <p>All paid plans are currently available at promotional prices — the current discounted rate and original list price are both shown on the <Link href="/pricing" className="text-primary hover:underline">Atai pricing page</Link>. Annual plans include free months. Prices and plan features may change with notice.</p>
+            <p>Paid plans can be billed monthly or annually. Annual billing is 12 months for the price of 11 (about 8% saved), charged once for the year, with credits issued monthly. Each paid plan includes a monthly credit allowance; the current allowance for each plan, permanent credit packs, and any promotional rates are shown on the <Link href="/pricing" className="text-primary hover:underline">Atai pricing page</Link>. Prices, credit allowances, and plan features may change with notice. Cancelling or downgrading a plan never deletes your data.</p>
           </Section>
 
           <Section id="payments" number="13" icon={CreditCard} title="Payments">

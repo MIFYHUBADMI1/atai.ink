@@ -35,7 +35,7 @@ function loadGuide(): string {
 export const metadata: Metadata = {
   title: "Troubleshooting & error reference | Atai Documentation",
   description:
-    "A searchable reference for every common Atai problem: exact symptom, cause, and fix, with the precise page or endpoint to use — auth, billing, builds, publishing, database, runtime keys, GitHub, and growth features.",
+    "A plain-language reference for every common Atai problem: the symptom, the likely cause, and the exact steps to fix it — sign-in, billing, builds, publishing, database, API keys, GitHub, and growth tools.",
   keywords: [
     "Atai troubleshooting",
     "Atai error",
@@ -67,6 +67,8 @@ export const metadata: Metadata = {
 export default function TroubleshootingPage() {
   const markdown = loadGuide()
   const sections = markdownHeadings(markdown)
+  const troubleshootingId =
+    sections.find((s) => /common problems/i.test(s.text))?.id ?? "common-problems"
   const faqs = extractFaqs(markdown)
   const canonical = `${SITE_URL}/docs/troubleshooting`
 
@@ -131,12 +133,12 @@ export default function TroubleshootingPage() {
             Troubleshooting &amp; error reference
           </h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">
-            Every common Atai problem with the exact symptom, cause, and fix — and the precise page or
-            endpoint to use. Bookmark it; Ctrl/⌘+F is your friend.
+            Every common Atai problem with the symptom, the likely cause, and the exact steps to fix
+            it. Bookmark it; Ctrl/⌘+F is your friend.
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
             <a
-              href="#common-problems"
+              href={`#${troubleshootingId}`}
               className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
             >
               Jump to fixes <ArrowRight className="size-4" />
@@ -197,9 +199,9 @@ export default function TroubleshootingPage() {
             <p className="mt-2 text-sm leading-7 text-muted-foreground">
               Email <a href="mailto:support@atai.ink" className="font-medium text-primary hover:underline">support@atai.ink</a>,
               call or WhatsApp <a href="tel:+256761819885" className="font-medium text-primary hover:underline">+256761819885</a>,
-              or ask in the{" "}
-              <a href="https://chat.whatsapp.com/CB3zVz7UnsQLfDjjk04gt1" target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">
-                Atai WhatsApp community
+              or follow the{" "}
+              <a href="https://whatsapp.com/channel/0029Vb9sizc2Jl8CaYWJhZ1N" target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">
+                Atai WhatsApp channel
               </a>.
               Include your project id, the exact error text, and a timestamp.
             </p>

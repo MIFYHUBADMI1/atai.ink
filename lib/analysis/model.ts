@@ -23,5 +23,12 @@ export const MODEL = openrouter.chatModel(modelName)
 /** The resolved id, for callers that need the raw HTTP shape (see raw-chat). */
 export const MODEL_ID = modelName
 
+/** Build a chat model handle for an explicit OpenRouter model id — used by
+ * per-user model selection (e.g. the co-founder's tier picker) without
+ * disturbing the shared default MODEL. */
+export function openRouterChatModel(id: string) {
+  return openrouter.chatModel(id)
+}
+
 console.log(`[AI Model] Using: ${modelName}`)
 

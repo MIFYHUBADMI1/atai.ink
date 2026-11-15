@@ -9,6 +9,7 @@ import type {
 } from "@/lib/feature-requests/types"
 import type { MirrorProject, BuildRun } from "@/lib/types/project"
 import type { CofounderConversationMongoDoc, PendingActionRecord } from "@/lib/cofounder/types"
+import type { CofounderModelTierDoc } from "@/lib/cofounder/models"
 import type { ProjectChatMongoDoc } from "@/lib/types/collab-chat"
 import type { CreditLedgerEntry, BuildAuthorization, PaymentRecord, SubscriptionRecord } from "@/lib/billing/billing-types"
 import type { ResourceDoc } from "@/lib/resources/admin-types"
@@ -17,6 +18,24 @@ import type { GeneratedLessonDoc } from "@/lib/lessons/types"
 import type { LessonCategoryDoc } from "@/lib/lessons/taxonomy"
 import type { LearningPathDoc } from "@/lib/lessons/paths"
 import type { UserLessonActivityDoc } from "@/lib/lessons/activity"
+import type {
+  BlogArticleDoc,
+  BlogCampaignDoc,
+  BlogCategoryDoc,
+  BlogNewsletterDoc,
+  BlogRedirectDoc,
+  BlogRevisionDoc,
+  BlogSettingsDoc,
+  BlogStatDoc,
+} from "@/lib/blog/types"
+import type {
+  FeedbackAttachmentDoc,
+  FeedbackCommentDoc,
+  FeedbackIncidentDoc,
+  FeedbackReportDoc,
+  FeedbackRewardDoc,
+  FeedbackSettingsDoc,
+} from "@/lib/feedback/types"
 
 /** Cache the Db reference across hot reloads so we don't re-resolve per call. */
 const globalForDb = globalThis as unknown as {
@@ -251,6 +270,11 @@ export async function cofounderPendingActionsCol() {
   return (await getDbCached()).collection<PendingActionRecord>("cofounder_pending_actions")
 }
 
+/** Admin-managed AI co-founder engine catalog (name → model → price). */
+export async function cofounderModelTiersCol() {
+  return (await getDbCached()).collection<CofounderModelTierDoc>("cofounder_model_tiers")
+}
+
 /** Project-scoped co-founder conversation threads (Collaborate workspace). */
 export async function projectChatsCol() {
   return (await getDbCached()).collection<ProjectChatMongoDoc>("project_chats")
@@ -263,6 +287,69 @@ export async function projectChatsCol() {
  */
 export async function analyticsEventsCol() {
   return (await getDbCached()).collection<AnalyticsEventDoc>("analytics_events")
+}
+
+/**
+ * Atai Insights — the platform blog / Content Studio. Articles are the single
+ * source of truth for /blog; the legacy `blog/*.md` files are a one-time import
+ * seed, not a parallel publishing system.
+ */
+export async function blogArticlesCol() {
+  return (await getDbCached()).collection<BlogArticleDoc & { _id?: unknown }>("blog_articles")
+}
+export async function blogCategoriesCol() {
+  return (await getDbCached()).collection<BlogCategoryDoc & { _id?: unknown }>("blog_categories")
+}
+export async function blogRedirectsCol() {
+  return (await getDbCached()).collection<BlogRedirectDoc & { _id?: unknown }>("blog_redirects")
+}
+export async function blogRevisionsCol() {
+  return (await getDbCached()).collection<BlogRevisionDoc & { _id?: unknown }>("blog_revisions")
+}
+export async function blogStatsCol() {
+  return (await getDbCached()).collection<BlogStatDoc & { _id?: unknown }>("blog_stats")
+}
+export async function blogNewsletterCol() {
+  return (await getDbCached()).collection<BlogNewsletterDoc & { _id?: unknown }>("blog_newsletter")
+}
+export async function blogSettingsCol() {
+  return (await getDbCached()).collection<BlogSettingsDoc & { _id?: unknown }>("blog_settings")
+}
+export async function blogCampaignsCol() {
+  return (await getDbCached()).collection<BlogCampaignDoc & { _id?: unknown }>("blog_campaigns")
+}
+
+// ─── Atai Feedback Hub collections ───────────────────────────────────────────
+
+export async function feedbackReportsCol() {
+  return (await getDbCached()).collection<FeedbackReportDoc & { _id?: unknown }>("feedback_reports")
+}
+export async function feedbackCommentsCol() {
+  return (await getDbCached()).collection<FeedbackCommentDoc & { _id?: unknown }>("feedback_comments")
+}
+export async function feedbackIncidentsCol() {
+  return (await getDbCached()).collection<FeedbackIncidentDoc & { _id?: unknown }>("feedback_incidents")
+}
+export async function feedbackRewardsCol() {
+  return (await getDbCached()).collection<FeedbackRewardDoc & { _id?: unknown }>("feedback_rewards")
+}
+export async function feedbackAttachmentsCol() {
+  return (await getDbCached()).collection<FeedbackAttachmentDoc & { _id?: unknown }>("feedback_attachments")
+}
+export async function feedbackSettingsCol() {
+  return (await getDbCached()).collection<FeedbackSettingsDoc & { _id?: unknown }>("feedback_settings")
+}
+
+/** Append-only audit trail for every administrative feedback action. */
+export async function feedbackAuditCol() {
+  return (await getDbCached()).collection<{
+    id: string
+    reportId: string | null
+    actorId: string
+    action: string
+    detail?: string
+    createdAt: number
+  } & { _id?: unknown }>("feedback_audit")
 }
 
 // ─── Type Definitions for Firecrawl Cache ────────────────────────────────────
@@ -447,6 +534,54 @@ async function runEnsureIndexes(): Promise<void> {
     resources.createIndex({ category: 1, slug: 1 }, { unique: true, name: "resources_category_slug_unique" }),
     resources.createIndex({ status: 1, updatedAtMs: -1 }),
     resources.createIndex({ featured: 1, status: 1, publishedAt: -1 }),
+  ])
+
+  // Atai Insights (blog) indexes. Slugs are the public URL identity; the
+  // public read path filters by status and sorts by publication date.
+  const blogArticles = await blogArticlesCol()
+  await batchedIndexCreation([
+    blogArticles.createIndex({ id: 1 }, { unique: true, sparse: true, name: "blog_articles_id_unique" }),
+    blogArticles.createIndex({ slug: 1 }, { unique: true, name: "blog_articles_slug_unique" }),
+    blogArticles.createIndex({ status: 1, publishedAt: -1 }),
+    blogArticles.createIndex({ category: 1, status: 1 }),
+    blogArticles.createIndex({ scheduledFor: 1, status: 1 }),
+    // The admin list is sorted by recency.
+    blogArticles.createIndex({ updatedAtMs: -1 }),
+  ])
+  const blogCategories = await blogCategoriesCol()
+  await batchedIndexCreation([
+    blogCategories.createIndex({ id: 1 }, { unique: true, sparse: true, name: "blog_categories_id_unique" }),
+    blogCategories.createIndex({ slug: 1 }, { unique: true, name: "blog_categories_slug_unique" }),
+  ])
+  const blogRedirects = await blogRedirectsCol()
+  await batchedIndexCreation([
+    blogRedirects.createIndex({ id: 1 }, { unique: true, sparse: true, name: "blog_redirects_id_unique" }),
+    blogRedirects.createIndex({ from: 1 }, { unique: true, name: "blog_redirects_from_unique" }),
+  ])
+  const blogRevisions = await blogRevisionsCol()
+  await batchedIndexCreation([
+    blogRevisions.createIndex({ id: 1 }, { unique: true, sparse: true, name: "blog_revisions_id_unique" }),
+    blogRevisions.createIndex({ articleId: 1, createdAtMs: -1 }),
+  ])
+  const blogStats = await blogStatsCol()
+  await batchedIndexCreation([
+    blogStats.createIndex({ date: 1, slug: 1 }, { unique: true, name: "blog_stats_date_slug_unique" }),
+    blogStats.createIndex({ slug: 1, date: -1 }),
+  ])
+  const blogNewsletter = await blogNewsletterCol()
+  await batchedIndexCreation([
+    blogNewsletter.createIndex({ id: 1 }, { unique: true, sparse: true, name: "blog_newsletter_id_unique" }),
+    blogNewsletter.createIndex({ email: 1 }, { unique: true, name: "blog_newsletter_email_unique" }),
+  ])
+  const blogCampaigns = await blogCampaignsCol()
+  await batchedIndexCreation([
+    blogCampaigns.createIndex({ id: 1 }, { unique: true, sparse: true, name: "blog_campaigns_id_unique" }),
+    blogCampaigns.createIndex({ createdAtMs: -1 }),
+    blogCampaigns.createIndex({ articleId: 1, createdAtMs: -1 }),
+  ])
+  const blogSettings = await blogSettingsCol()
+  await batchedIndexCreation([
+    blogSettings.createIndex({ id: 1 }, { unique: true, sparse: true, name: "blog_settings_id_unique" }),
   ])
 
   // Business lessons indexes. Published-library reads filter by status (the
@@ -699,5 +834,39 @@ async function runEnsureIndexes(): Promise<void> {
     featureHistory.createIndex({ featureRequestId: 1, createdAt: -1 }),
     featureUpdates.createIndex({ featureRequestId: 1, createdAt: -1 }),
     featureNotes.createIndex({ featureRequestId: 1, createdAt: -1 }),
+  ])
+
+  // ─── Atai Feedback Hub indexes ──────────────────────────────────────────
+  const feedbackReports = await feedbackReportsCol()
+  const feedbackComments = await feedbackCommentsCol()
+  const feedbackIncidents = await feedbackIncidentsCol()
+  const feedbackRewards = await feedbackRewardsCol()
+  const feedbackAttachments = await feedbackAttachmentsCol()
+  const feedbackSettings = await feedbackSettingsCol()
+  const feedbackAudit = await feedbackAuditCol()
+  await batchedIndexCreation([
+    feedbackReports.createIndex({ id: 1 }, { unique: true, sparse: true, name: "feedback_reports_id_unique" }),
+    feedbackReports.createIndex({ reference: 1 }, { unique: true, sparse: true, name: "feedback_reports_reference_unique" }),
+    feedbackReports.createIndex({ userId: 1, createdAt: -1 }),
+    feedbackReports.createIndex({ status: 1, createdAt: -1 }),
+    feedbackReports.createIndex({ severity: 1, createdAt: -1 }),
+    feedbackReports.createIndex({ fingerprint: 1 }, { sparse: true }),
+    feedbackReports.createIndex({ incidentId: 1 }, { sparse: true }),
+    feedbackReports.createIndex({ createdAt: -1 }),
+    feedbackComments.createIndex({ id: 1 }, { unique: true, sparse: true, name: "feedback_comments_id_unique" }),
+    feedbackComments.createIndex({ reportId: 1, createdAt: 1 }),
+    feedbackIncidents.createIndex({ id: 1 }, { unique: true, sparse: true, name: "feedback_incidents_id_unique" }),
+    feedbackIncidents.createIndex({ status: 1, updatedAt: -1 }),
+    // One reward record per report — the hard guarantee against double payout.
+    feedbackRewards.createIndex({ reportId: 1 }, { unique: true, name: "feedback_rewards_report_unique" }),
+    feedbackRewards.createIndex({ userId: 1, createdAt: -1 }),
+    feedbackRewards.createIndex({ id: 1 }, { unique: true, sparse: true, name: "feedback_rewards_id_unique" }),
+    feedbackAttachments.createIndex({ id: 1 }, { unique: true, sparse: true, name: "feedback_attachments_id_unique" }),
+    feedbackAttachments.createIndex({ userId: 1, createdAt: -1 }),
+    // Recordings/screenshots auto-expire — diagnostic aids, not archives.
+    feedbackAttachments.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+    feedbackSettings.createIndex({ id: 1 }, { unique: true, name: "feedback_settings_id_unique" }),
+    feedbackAudit.createIndex({ reportId: 1, createdAt: -1 }, { sparse: true }),
+    feedbackAudit.createIndex({ createdAt: -1 }),
   ])
 }

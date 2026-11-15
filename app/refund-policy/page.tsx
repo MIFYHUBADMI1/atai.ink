@@ -231,7 +231,7 @@ export default function RefundPolicyPage() {
               <ul className="list-disc list-inside space-y-1 ml-4">
                 <li>Credits consumed during successful website analysis (5 credits)</li>
                 <li>Credits consumed during plan generation (5 credits)</li>
-                <li>Credits consumed during application generation (25,000 / 50,000 / 75,000 credits)</li>
+                <li>Credits consumed during application generation (50,000 / 75,000 / 100,000 credits, depending on complexity)</li>
                 <li>Credits consumed during deployment (500 credits)</li>
                 <li>Credits consumed during follow-up AI development prompts</li>
               </ul>

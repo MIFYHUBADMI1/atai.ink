@@ -26,6 +26,7 @@ const {
   mockUpdateProject,
   mockTotalumProject,
   mockAppend,
+  mockAuthorizeProductionWork,
 } = vi.hoisted(() => {
   const mockUser = { id: "u_dep", email: "dep@example.com" }
   return {
@@ -39,6 +40,7 @@ const {
     mockUpdateProject: vi.fn(async () => undefined),
     mockTotalumProject: vi.fn(async () => ({ id: "tp_1" })),
     mockAppend: vi.fn(async () => undefined),
+    mockAuthorizeProductionWork: vi.fn(async () => null),
   }
 })
 
@@ -95,6 +97,12 @@ vi.mock("@/lib/runtime/provisioning", () => ({
   RuntimeProvisioningError: class extends Error {},
 }))
 
+// The plan gate is exercised on its own; here it must not short-circuit the
+// deploy credit lifecycle these tests are about.
+vi.mock("@/lib/billing/entitlements/require", () => ({
+  authorizeProductionWork: mockAuthorizeProductionWork,
+}))
+
 import { GET, POST } from "./deploy/route"
 
 const project = {
@@ -116,6 +124,21 @@ describe("POST /api/projects/:id/deploy — atomic claim", () => {
     vi.clearAllMocks()
     mockClaimBuildSlot.mockReset()
     mockGetProject.mockResolvedValue(project as never)
+    mockAuthorizeProductionWork.mockResolvedValue(null)
+  })
+
+  it("refuses a deploy the plan does not cover before claiming anything", async () => {
+    mockAuthorizeProductionWork.mockResolvedValue({
+      allowed: false,
+      code: "PLAN_LIMIT",
+      reason: "Your plan does not include hosting a production business.",
+    })
+
+    const res = await post()
+
+    expect(res.status).toBe(402)
+    expect(mockClaimBuildSlot).not.toHaveBeenCalled()
+    expect(mockReserveCredits).not.toHaveBeenCalled()
   })
 
   it("rejects with 409 when the atomic claim loses to a concurrent op, without touching credits", async () => {

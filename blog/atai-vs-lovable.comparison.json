@@ -1,0 +1,87 @@
+{
+  "competitorName": "Lovable",
+  "competitorUrl": "https://lovable.dev",
+  "competitorDescription": "Lovable builds full-stack web applications from a prompt. Its plans are Free, Pro, Business and Enterprise, priced by credits rather than by seats.",
+  "positioning": "Atai follows the business lifecycle — IDEA → BUILD → LAUNCH → MANAGE → GROW → SCALE. Lovable is built around generating and hosting an app.",
+  "lastReviewed": "2026-11-15",
+  "limitations": "Plans, prices and entitlements on both sides change regularly. Every row below was checked on 2026-11-15 against the source linked in that row — re-verify before you decide.",
+  "rows": [
+    {
+      "dimension": "Primary purpose",
+      "atai": "Plan, build, launch, manage, grow and scale a business from one platform.",
+      "competitor": "Generate a full-stack web application from a prompt.",
+      "evidence": "https://lovable.dev/en/pricing",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Business lifecycle coverage",
+      "atai": "Covers the full lifecycle: business planning and offer development, building the app, launching it, then running finances, marketing and growth.",
+      "competitor": "Covers building and hosting a web app.",
+      "evidence": "https://lovable.dev/en/pricing",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Plans",
+      "atai": "Explorer (free), Starter ($89.99/mo or $989.89/yr), Growth ($199.99/mo or $2,199.89/yr), Scale ($499.99/mo or $5,499.89/yr) and Enterprise (custom).",
+      "competitor": "Free, Pro (from $25/mo for 100 credits), Business (from $50/mo) and Enterprise, which is arranged with the sales team.",
+      "evidence": "https://docs.lovable.dev/introduction/subscription-plans",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "How usage is charged",
+      "atai": "Subscription plans with a monthly Atai Credit allowance; yearly plans are paid upfront for 12 months and still receive credits every month.",
+      "competitor": "Credits rather than seats — one balance pays for building, chatting, hosting and running the app's AI features, and every plan allows unlimited workspace members.",
+      "evidence": "https://docs.lovable.dev/introduction/faq",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Free tier",
+      "atai": "Explorer: plan your business with the AI co-founder on 500 planning credits, with community support. Production launches are a paid-plan capability.",
+      "competitor": "Build and publish for free: 5 build credits a day (up to 30 a month), 20 Cloud credits a month and 4 credits for AI features built into user apps.",
+      "evidence": "https://docs.lovable.dev/introduction/credits-and-usage",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Application generation",
+      "atai": "Full application builds from Starter upward, with up to four production apps on Growth and unlimited on Scale.",
+      "competitor": "The core product — describe the app and Lovable generates the frontend, backend and database wiring.",
+      "evidence": "https://docs.lovable.dev/introduction/faq",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Code ownership and access",
+      "atai": "Starter and above: edit code in the editor or visually, download your source code and sync with GitHub. A custom domain of your own arrives with Growth.",
+      "competitor": "Code editing is included from Pro upward; the generated output is real code you can extend.",
+      "evidence": "https://docs.lovable.dev/introduction/subscription-plans",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Deployment and hosting",
+      "atai": "Deployment is included from Starter upward, with database management and storage; your own custom domain from Growth.",
+      "competitor": "Cloud hosting is included, funded by a monthly Cloud credit grant; custom domains arrive with Pro.",
+      "evidence": "https://docs.lovable.dev/introduction/credits-and-usage",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Team controls",
+      "atai": "Specialist teams from Starter, expanded teams on Growth and premium teams with customization on Scale and Enterprise.",
+      "competitor": "Per-member monthly credit limits, bulk CSV import of those limits, and Enterprise adds sharing controls.",
+      "evidence": "https://docs.lovable.dev/introduction/subscription-plans",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Support",
+      "atai": "Growth adds direct support; Enterprise adds a dedicated account manager and white-glove onboarding.",
+      "competitor": "Email support from Pro upward; Business and Enterprise add advanced controls and governance.",
+      "evidence": "https://docs.lovable.dev/introduction/subscription-plans",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Known constraints",
+      "atai": "Monthly plan credits expire at the end of the month they were issued; permanent top-up credits never expire, so heavy use moves you up a plan.",
+      "competitor": "Monthly plan credits expire two months after they are issued; top-up credits last twelve months; unused grants do not roll over.",
+      "evidence": "https://docs.lovable.dev/introduction/credits-and-usage",
+      "lastChecked": "2026-11-15"
+    }
+  ]
+}

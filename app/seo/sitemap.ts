@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next"
 import { SITE_URL } from "@/lib/env"
+import { publicArticles, publicCategories } from "@/lib/blog/store"
 
 type Freq = MetadataRoute.Sitemap[number]["changeFrequency"]
 
@@ -9,6 +10,9 @@ type Freq = MetadataRoute.Sitemap[number]["changeFrequency"]
  * published resource has exactly one canonical sitemap entry.
  * Served at /seo/sitemap.xml and listed in /robots.txt next to /sitemap.xml.
  * Authenticated product surfaces (admin, api, settings, billing, projects) stay out.
+ *
+ * Blog articles and category pages are enumerated from the published set, so
+ * drafts, archived and noindex articles never appear here.
  */
 
 const knowledgePages: Array<{ path: string; changeFrequency: Freq; priority: number }> = [
@@ -55,10 +59,38 @@ function asEntry(path: string, changeFrequency: Freq, priority: number, lastModi
   } satisfies MetadataRoute.Sitemap[number]
 }
 
-export default function sitemap(): MetadataRoute.Sitemap {
+/** The article's last edit date, when it has a usable one. */
+function articleDate(article: { updatedAt?: string; publishedAt?: string }): Date | undefined {
+  const raw = article.updatedAt || article.publishedAt
+  if (!raw) return undefined
+  const parsed = new Date(raw.length === 10 ? `${raw}T00:00:00` : raw)
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed
+}
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const [articles, categories] = await Promise.all([publicArticles(), publicCategories()])
+
+  // Only published, indexable articles are listed — one canonical entry each.
+  const blogPosts = articles
+    .filter((article) => !article.seo?.noindex)
+    .map((article) =>
+      asEntry(
+        `/blog/${article.slug}`,
+        "monthly",
+        0.75,
+        articleDate(article),
+      ),
+    )
+
+  const categoryPages = categories.map((category) =>
+    asEntry(`/blog/category/${category.slug}`, "weekly", 0.6),
+  )
+
   return [
     ...knowledgePages.map((page) => asEntry(page.path, page.changeFrequency, page.priority)),
     ...marketingPages.map((page) => asEntry(page.path, page.changeFrequency, page.priority)),
     ...trustPages.map((page) => asEntry(page.path, page.changeFrequency, page.priority)),
+    ...categoryPages,
+    ...blogPosts,
   ]
 }

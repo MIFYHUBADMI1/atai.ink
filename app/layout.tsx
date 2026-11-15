@@ -1,4 +1,5 @@
 import { PrivacyAnalytics } from "@/components/privacy-analytics"
+import { AtaiFeedbackLauncher } from "@/components/feedback/atai-feedback-launcher"
 import type { Metadata, Viewport } from "next"
 import localFont from "next/font/local"
 import Script from "next/script"
@@ -33,7 +34,11 @@ export const metadata: Metadata = {
   keywords: ["Atai", "Atai.ink", "AI business builder", "AI business teams", "start an online business", "business management", "ATAI Enterprises"],
   verification: {
     google: "fVuc4AOfzEAxCg2a5vgQ967z_AGcs2MbUn6QUjl70b4",
-    other: { "pressplaced-verification": "fc52a89ec5ab0207" },
+    other: {
+      "pressplaced-verification": "fc52a89ec5ab0207",
+      // Bing Webmaster verification is opt-in via env; absent = not connected.
+      ...(process.env.BING_VERIFICATION ? { "msvalidate.01": process.env.BING_VERIFICATION } : {}),
+    },
   },
   alternates: { canonical: "/" },
   openGraph: {
@@ -204,6 +209,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           <AuthProvider>
             <CreditGateProvider>
               {children}
+              <AtaiFeedbackLauncher />
               <Toaster />
             </CreditGateProvider>
           </AuthProvider>

@@ -143,16 +143,20 @@ export async function refundAdRequest(input: {
   const perm = request.payment.permanentConsumed ?? 0
 
   if (sub > 0) {
+    // Refund to PERMANENT credits: the consumed subscription credits' period
+    // is over (or unknowable) and a plain subscription grant would create
+    // bucket-less credits that never expire. A refund the user already paid
+    // for must not silently expire.
     const granted = await grantCredits({
       userId: request.userId,
-      creditType: "subscription",
+      creditType: "permanent",
       amount: sub,
       transactionType: "ad_campaign_refund",
       idempotencyKey: `${refundKey}_sub`,
       referenceType: "ad_campaign",
       referenceId: request.id,
       projectId: request.projectId,
-      metadata: { kind: "ad_campaign_refund", requestId: request.id, bucket: "subscription" },
+      metadata: { kind: "ad_campaign_refund", requestId: request.id, bucket: "subscription_restored_permanent" },
     })
     if (!granted.success) throw new AppError("UNKNOWN", "The refund could not be recorded.")
   }

@@ -17,7 +17,11 @@
  * real, purchasable products. Only run --apply in live_mode once the Phase 4
  * credit numbers are ratified (hard rule #1).
  */
-import { getCommercialPlans } from "@/lib/billing/entitlements/commercial-plans"
+import {
+  getCommercialPlans,
+  commercialProductName,
+  commercialProductDescription,
+} from "@/lib/billing/entitlements/commercial-plans"
 import { getOrCreateSubscriptionProduct } from "@/lib/billing/dodo-service"
 
 async function main() {
@@ -37,6 +41,11 @@ async function main() {
       console.log(
         `would create: ${p.name} — $${p.priceUSD}/mo, ${p.mirrorCredits.toLocaleString()} credits  -> DODO_COMMERCIAL_PRODUCT_${p.id.toUpperCase()}`,
       )
+      if (p.annualPriceUSD) {
+        console.log(
+          `would create: ${p.name} — $${p.annualPriceUSD}/yr, ${p.mirrorCredits.toLocaleString()} credits/mo -> DODO_COMMERCIAL_PRODUCT_${p.id.toUpperCase()}_ANNUAL`,
+        )
+      }
     }
     console.log("\nPlan only (no writes). Re-run with --apply to create the products.")
     return
@@ -44,15 +53,33 @@ async function main() {
 
   const lines: string[] = []
   for (const p of paid) {
+    // Same name/description helpers the checkout route uses, so a product
+    // created here and one created on demand are always the same product.
     const info = await getOrCreateSubscriptionProduct(
       p.id,
-      `Atai — ${p.name} — $${p.priceUSD}/mo`,
-      `${p.mirrorCredits.toLocaleString()} Atai Credits per month. ${p.name} plan.`,
+      commercialProductName(p, "monthly"),
+      commercialProductDescription(p, "monthly"),
       p.priceUSD,
       p.mirrorCredits,
+      p.dodoProductId,
+      "monthly",
     )
     lines.push(`DODO_COMMERCIAL_PRODUCT_${p.id.toUpperCase()}=${info.productId}`)
-    console.log(`created/found ${p.name}: ${info.productId}`)
+    console.log(`created/found ${p.name} (monthly): ${info.productId}`)
+
+    if (p.annualPriceUSD) {
+      const annual = await getOrCreateSubscriptionProduct(
+        p.id,
+        commercialProductName(p, "annual"),
+        commercialProductDescription(p, "annual"),
+        p.annualPriceUSD,
+        p.mirrorCredits,
+        p.annualDodoProductId,
+        "annual",
+      )
+      lines.push(`DODO_COMMERCIAL_PRODUCT_${p.id.toUpperCase()}_ANNUAL=${annual.productId}`)
+      console.log(`created/found ${p.name} (annual): ${annual.productId}`)
+    }
   }
 
   console.log("\nAdd these to your environment (and Vercel project settings):")

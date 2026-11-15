@@ -14,6 +14,7 @@ import { generateSpecificationFromUnderstanding, generateSpecificationFromIdea }
 import type { ProjectEvent, BuildRun } from "@/lib/types/project"
 import { recordAIArtifacts } from "@/lib/projects/ai-artifacts"
 import { recordCreditBlock } from "@/lib/credits/credit-block"
+import { authorizeProductionWork } from "@/lib/billing/entitlements/require"
 import { makeAIArtifact, rawTextFromError, stageFromError, type NewAIArtifact } from "@/lib/types/ai-artifacts"
 
 function event(stage: string, message: string, level: ProjectEvent["level"] = "info"): ProjectEvent {
@@ -127,6 +128,14 @@ export async function autoLaunchBuild(projectId: string) {
   if (!project.requestedProjectId) {
     await store.updateProject(projectId, { state: "plan_ready" })
     await store.appendEvent(projectId, event("build", "Choose your app address before starting the build.", "warn"))
+    return
+  }
+
+  // Plan gate — Explorer may plan a business but not run production work.
+  const planDenied = await authorizeProductionWork(project.userId, "buildProduction")
+  if (planDenied) {
+    await store.updateProject(projectId, { state: "plan_ready" })
+    await store.appendEvent(projectId, event("build", planDenied.reason ?? "Your plan does not include production builds.", "warn"))
     return
   }
 

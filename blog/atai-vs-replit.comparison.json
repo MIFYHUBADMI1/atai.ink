@@ -1,0 +1,87 @@
+{
+  "competitorName": "Replit Agent",
+  "competitorUrl": "https://replit.com",
+  "competitorDescription": "Replit Agent builds and deploys apps with an AI agent that works in a hosted workspace. Plans are Starter (free), Core ($20/mo), Pro ($100/mo) and Enterprise.",
+  "positioning": "Atai follows the business lifecycle — IDEA → BUILD → LAUNCH → MANAGE → GROW → SCALE. Replit Agent is built around generating, running and hosting an app.",
+  "lastReviewed": "2026-11-15",
+  "limitations": "Plans, prices and entitlements on both sides change regularly. Every row below was checked on 2026-11-15 against the source linked in that row — re-verify before you decide.",
+  "rows": [
+    {
+      "dimension": "Primary purpose",
+      "atai": "Plan, build, launch, manage, grow and scale a business from one platform.",
+      "competitor": "An AI agent that builds, runs and hosts apps in a hosted workspace.",
+      "evidence": "https://replit.com/pricing",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Business lifecycle coverage",
+      "atai": "Covers the full lifecycle: business planning and offer development, building the app, launching it, then running finances, marketing and growth.",
+      "competitor": "Covers building, running and hosting an app.",
+      "evidence": "https://replit.com/pricing",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Plans",
+      "atai": "Explorer (free), Starter ($89.99/mo or $989.89/yr), Growth ($199.99/mo or $2,199.89/yr), Scale ($499.99/mo or $5,499.89/yr) and Enterprise (custom).",
+      "competitor": "Starter (free), Core ($20/mo, $204/year), Pro ($100/mo) and Enterprise.",
+      "evidence": "https://docs.replit.com/help/pricing-and-plans",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "How usage is charged",
+      "atai": "Subscription plans with a monthly Atai Credit allowance; yearly plans are paid upfront for 12 months and still receive credits every month.",
+      "competitor": "Free Mode work inside each plan's allowance, then effort-based pricing on paid modes; Core and Pro allowances reset every five hours with weekly limits.",
+      "evidence": "https://docs.replit.com/help/pricing-and-plans",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Free tier",
+      "atai": "Explorer: plan your business with the AI co-founder on 500 planning credits, with community support. Production launches are a paid-plan capability.",
+      "competitor": "Starter is free: a daily Agent allowance, limited monthly cloud credits, basic Agent access and one published app.",
+      "evidence": "https://docs.replit.com/help/pricing-and-plans",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Application generation",
+      "atai": "Full application builds from Starter upward, with up to four production apps on Growth and unlimited on Scale.",
+      "competitor": "Agent in Plan and Build modes, with manual model selection and Auto/Power/Max modes for paid work.",
+      "evidence": "https://docs.replit.com/help/pricing-and-plans",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Deployment and hosting",
+      "atai": "Deployment is included from Starter upward, with database management and storage; your own custom domain from Growth.",
+      "competitor": "Publishing is built in — Core and above include unlimited published apps, and cloud usage is billed separately.",
+      "evidence": "https://docs.replit.com/help/pricing-and-plans",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Parallel work",
+      "atai": "Parallel agents are not available yet.",
+      "competitor": "Core runs 1 parallel Agent task; Pro raises that to 10.",
+      "evidence": "https://docs.replit.com/help/pricing-and-plans",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Collaborators",
+      "atai": "Specialist teams from Starter, expanded teams on Growth and premium teams with customization on Scale and Enterprise.",
+      "competitor": "Core supports up to 5 collaborators; Pro supports up to 15 builders.",
+      "evidence": "https://docs.replit.com/help/pricing-and-plans",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Support",
+      "atai": "Growth adds direct support; Enterprise adds a dedicated account manager and white-glove onboarding.",
+      "competitor": "Pro adds premium support; Enterprise adds dedicated premium support.",
+      "evidence": "https://replit.com/pricing",
+      "lastChecked": "2026-11-15"
+    },
+    {
+      "dimension": "Known constraints",
+      "atai": "Monthly plan credits expire at the end of the month they were issued; permanent top-up credits never expire, so heavy use moves you up a plan.",
+      "competitor": "Core credits reset each billing cycle and do not roll over; Pro credits roll over for two months. Database restore is 7 days on Core and 28 days on Pro.",
+      "evidence": "https://docs.replit.com/help/pricing-and-plans",
+      "lastChecked": "2026-11-15"
+    }
+  ]
+}

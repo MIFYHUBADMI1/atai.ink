@@ -113,7 +113,7 @@ export function DocsContent() {
             <BookOpen className="size-5 shrink-0 text-primary" />
             <p className="min-w-0 flex-1 text-sm leading-6 text-muted-foreground">
               <strong className="text-foreground">New to Atai?</strong> Read the complete onboarding
-              guide — every page URL, every step from start to scale, billing &amp; credits, and
+              guide — every step from start to scale, billing &amp; credits, and
               fixes for common problems.
             </p>
             <Link
@@ -145,11 +145,11 @@ export function DocsContent() {
             <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Quick links — all pages</p>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {[
-                { href: "/docs/onboarding", icon: BookOpen, label: "New User Onboarding Guide", desc: "Extended manual — every URL, every step, every fix", color: "text-primary", bg: "bg-primary/10" },
+                { href: "/docs/onboarding", icon: BookOpen, label: "New User Onboarding Guide", desc: "Extended manual — every step, every fix", color: "text-primary", bg: "bg-primary/10" },
                 { href: "/docs/runtime-api", icon: KeyRound, label: "Runtime API, SDK & API Keys", desc: "Unified capability API, @atai-group/sdk, key create/rotate & endpoints", color: "text-cyan-600 dark:text-cyan-400", bg: "bg-cyan-500/10" },
                 { href: "/docs/database-manager", icon: Database, label: "Database Manager Handbook", desc: "Modeling tables & records, field types, relations, and the REST API", color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-500/10" },
                 { href: "/docs/growth-marketing", icon: Megaphone, label: "Growth & Marketing Playbook", desc: "Growth overview, Studio, SEO audit, ads, market research & referrals", color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10" },
-                { href: "/docs/troubleshooting", icon: LifeBuoy, label: "Troubleshooting & Error Reference", desc: "Symptom → cause → fix for every common Atai problem, with URLs", color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-500/10" },
+                { href: "/docs/troubleshooting", icon: LifeBuoy, label: "Troubleshooting & Error Reference", desc: "Symptom → cause → fix for every common Atai problem", color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-500/10" },
                 { href: "/sdk", icon: Code2, label: "Atai SDK & API", desc: "@atai-group/sdk + Runtime API reference — keys, endpoints, limits", color: "text-cyan-600 dark:text-cyan-400", bg: "bg-cyan-500/10" },
                 { href: "/developers", icon: Zap, label: "Developer Portal", desc: "Infrastructure services, quickstart, and API access", color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-500/10" },
                 { href: "/pricing", icon: DollarSign, label: "Pricing", desc: "Plans, credit packs & build costs", color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10" },
@@ -701,7 +701,7 @@ export function DocsContent() {
 
               <h3 className="text-lg font-semibold text-foreground">Free Subdomain</h3>
               <p>
-                Every published application gets a free web address at <strong className="text-foreground">yourapp.totalum-project.com</strong>. This is free forever, includes automatic security (HTTPS), and works instantly — no setup required.
+                Every published application gets a free web address. This is free forever, includes automatic security (HTTPS), and works instantly — no setup required.
               </p>
 
               <h3 className="text-lg font-semibold text-foreground mt-8">Custom Domain</h3>
@@ -726,13 +726,15 @@ export function DocsContent() {
             <div className="space-y-6 text-muted-foreground leading-7">
               <p>
                 Atai uses a credit system. Credits are spent when Atai analyzes websites, generates plans, and builds applications.
+                Paid plans (Explorer, Starter, Growth, Scale, Enterprise) include a monthly credit allowance and can be billed monthly or annually; you can also buy permanent credit packs that never expire.
+                The amounts below are standard defaults — the <Link href="/pricing" className="font-medium text-primary underline-offset-2 hover:underline">Pricing page</Link> and your build confirmation dialog always show the current numbers.
               </p>
 
               <h3 className="text-lg font-semibold text-foreground">How credits work</h3>
               <ul className="space-y-2">
                 <li className="flex items-start gap-2"><CheckCircle2 className="size-4 text-primary mt-1 shrink-0" /> <span><strong className="text-foreground">Subscription & permanent credits</strong> — monthly plans plus one-time credit packs</span></li>
                 <li className="flex items-start gap-2"><CheckCircle2 className="size-4 text-primary mt-1 shrink-0" /> <span><strong className="text-foreground">500 free credits</strong> — every new account starts with credits to try Atai</span></li>
-                <li className="flex items-start gap-2"><CheckCircle2 className="size-4 text-primary mt-1 shrink-0" /> <span><strong className="text-foreground">Buy more anytime</strong> — purchase permanent credit packs or subscribe via Dodo Payments</span></li>
+                <li className="flex items-start gap-2"><CheckCircle2 className="size-4 text-primary mt-1 shrink-0" /> <span><strong className="text-foreground">Buy more anytime</strong> — purchase permanent credit packs or subscribe through secure checkout</span></li>
               </ul>
 
               <h3 className="text-lg font-semibold text-foreground mt-8">What costs credits — Legacy mode</h3>
@@ -741,9 +743,9 @@ export function DocsContent() {
                   { action: "Website analysis (scrape)", cost: "5 credits" },
                   { action: "Plan generation", cost: "5 credits" },
                   { action: "Deep crawl", cost: "500 credits" },
-                  { action: "Simple application build", cost: "25,000 credits" },
-                  { action: "Medium application build", cost: "50,000 credits" },
-                  { action: "Complex application build", cost: "75,000 credits" },
+                  { action: "Simple application build", cost: "50,000 credits" },
+                  { action: "Medium application build", cost: "75,000 credits" },
+                  { action: "Complex application build", cost: "100,000 credits" },
                   { action: "Publish / deploy", cost: "500 credits" },
                 ].map(({ action, cost }) => (
                   <div key={action} className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3">
@@ -758,10 +760,10 @@ export function DocsContent() {
                 {[
                   { action: "Website analysis (scrape)", cost: "100 credits" },
                   { action: "Plan generation", cost: "100 credits" },
-                  { action: "Deep crawl", cost: "500 credits" },
-                  { action: "Simple application build", cost: "50,000 credits" },
-                  { action: "Medium application build", cost: "75,000 credits" },
-                  { action: "Complex application build", cost: "100,000 credits" },
+                  { action: "Deep crawl", cost: "1,000 credits" },
+                  { action: "Simple application build", cost: "100,000 credits" },
+                  { action: "Medium application build", cost: "112,500 credits" },
+                  { action: "Complex application build", cost: "133,333 credits" },
                   { action: "Publish / deploy", cost: "500 credits" },
                 ].map(({ action, cost }) => (
                   <div key={action} className="flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">
@@ -1011,7 +1013,7 @@ export function DocsContent() {
                 },
                 {
                   q: "What happens if I run out of credits?",
-                  a: "You can purchase additional credits at any time via Dodo Payments in Settings → Billing. Your existing projects and applications remain accessible — you just need credits to build new ones or make changes.",
+                  a: "You can purchase additional credits at any time in Settings → Billing. Your existing projects and applications remain accessible — you just need credits to build new ones or make changes.",
                 },
                 {
                   q: "Can I export my application?",

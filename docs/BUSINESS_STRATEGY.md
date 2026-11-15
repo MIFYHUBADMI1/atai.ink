@@ -72,51 +72,55 @@ Democratize web development by making it 100x faster and 10x cheaper to build be
 
 ### Pricing Strategy
 
-#### Free Tier
-- **100 free credits** on signup
-- **1 Smart Crawl** OR
-- **1 Deep Crawl (Legacy)** + partial build
-- **Goal**: Let users try before buying
+> The live catalog is the commercial five-plan set enforced by
+> `lib/billing/entitlements/catalog.ts` and sold through
+> `lib/billing/entitlements/commercial-plans.ts`. `/pricing` is the source of
+> truth for what a customer sees; monthly credit allowances are provisional
+> until the Phase 4 contribution-margin model ratifies them.
 
-#### Credit Packs (Pay-as-you-go)
-- **500 credits**: $10 (best for hobbyists)
-- **2,000 credits**: $35 (save 12.5%)
-- **5,000 credits**: $80 (save 20%)
-- **10,000 credits**: $150 (save 25%)
-- **Never expire**
+#### Free Tier — Explorer
+- **500 planning credits** on email verification
+- **1 planning business** — plan with the AI co-founder, research competitors
+- **No production builds, no hosting** (planning only)
+- **Goal**: Let owners try before buying
+
+#### Credit Packs (Pay-as-you-go, permanent — never expire)
+- **200,000 credits**: $59
+- **500,000 credits**: $119 (best value per credit)
+- **1,000,000 credits**: $219
+- **5,000,000 credits**: $859
+- **15,000,000 credits**: $2,499
 - **Goal**: Flexible pricing for occasional users
 
 #### Subscription Plans
 
-**Starter** - $29/month
-- **1,000 credits/month** (expires monthly)
-- ~1 deep crawl + 2 builds per month
-- Email support
-- **Target**: Freelancers, hobbyists
+**Starter** - $89.99/month · $989.89/year
+- **~150,000 credits/month** (expire at period end)
+- **1 business**, 1 production app on an Atai subdomain
+- AI co-founder, specialist teams, SEO & content marketing, standard support
+- **Target**: Owners launching their first real business
 
-**Pro** - $79/month
-- **3,000 credits/month**
-- ~3 deep crawls + 6 builds per month
-- Priority support
-- Custom domains (3)
-- **Target**: Agencies, power users
+**Growth** - $199.99/month · $2,199.89/year *(most popular)*
+- **~400,000 credits/month**
+- **Up to 4 businesses**, 4 production apps
+- **1 custom domain**, advanced AI co-founder, ads & competition monitoring, direct support
+- **Target**: Owners running and growing several businesses
 
-**Business** - $199/month
-- **10,000 credits/month**
-- ~10 deep crawls + 20 builds per month
-- Priority support
-- Custom domains (unlimited)
-- Team collaboration (5 seats)
-- White label option
-- **Target**: Agencies, small businesses
+**Scale** - $499.99/month · $5,499.89/year
+- **~1,200,000 credits/month**
+- **Unlimited businesses** and production apps, **up to 4 custom domains**
+- Premium AI co-founder, full business-intelligence suite, priority compute, premium support
+- **Target**: Operators at scale
 
 **Enterprise** - Custom pricing
-- **Custom credits**
-- Dedicated support
-- Custom AI models
-- SSO integration
-- SLA guarantees
-- **Target**: Fortune 500, large agencies
+- **Custom credit volume**
+- Dedicated infrastructure and support
+- SLA-backed uptime
+- White-glove onboarding, dedicated account manager
+- **Target**: Large or regulated operations
+
+> **Annual billing**: 12 months for the price of 11, paid upfront; credits are
+> still issued **monthly**.
 
 ### Revenue Projections
 

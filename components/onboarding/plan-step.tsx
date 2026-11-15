@@ -5,13 +5,16 @@ import useSWR from "swr"
 import { toast } from "sonner"
 import { CheckoutButton } from "@/components/billing/checkout-button"
 import { PlanChangeDialog } from "@/components/billing/plan-change-dialog"
-import { SUBSCRIPTION_PLANS, formatUSD } from "@/lib/billing/config"
+import { formatUSD } from "@/lib/billing/config"
+import { getCommercialPlans } from "@/lib/billing/entitlements/commercial-plans"
 import { jsonFetcher } from "@/lib/client/api"
 import { cn } from "@/lib/utils"
 
 type Overview = {
   subscription: { planId: string; currentPeriodEnd: number | null; cancelAtPeriodEnd: boolean } | null
 }
+
+const PLANS = getCommercialPlans()
 
 export function OnboardingPlanStep({
   selectedPlanId,
@@ -23,11 +26,12 @@ export function OnboardingPlanStep({
   onBeforeCheckout?: () => void | Promise<void>
 }) {
   const { data } = useSWR<Overview>("/api/billing/overview", jsonFetcher)
-  const activePlanId = data?.subscription?.planId ?? "free"
+  const activePlanId = data?.subscription?.planId ?? "explorer"
   const [changeTo, setChangeTo] = useState<string | null>(null)
   const [checkoutPending, setCheckoutPending] = useState(false)
-  const current = SUBSCRIPTION_PLANS.find((p) => p.id === activePlanId)
-  const target = SUBSCRIPTION_PLANS.find((p) => p.id === changeTo)
+  const current = PLANS.find((p) => p.id === activePlanId)
+  const target = PLANS.find((p) => p.id === changeTo)
+  const onPaidPlan = Boolean(current && current.priceUSD > 0)
 
   function startCheckout(planId: string) {
     setCheckoutPending(true)
@@ -56,13 +60,13 @@ export function OnboardingPlanStep({
       <div className="shrink-0">
         <h1 className="text-xl font-black tracking-tight sm:text-2xl">Choose how you want to start.</h1>
         <p className="mt-1 text-sm leading-5 text-muted-foreground">
-          Stay on Free or pick a plan. You can change this later in billing.
+          Stay on Explorer or pick a plan. You can change this later in billing.
         </p>
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        {SUBSCRIPTION_PLANS.filter((plan) => plan.active).map((plan) => {
+        {PLANS.filter((plan) => plan.active).map((plan) => {
           const isCurrent = plan.id === activePlanId
-          const selected = (selectedPlanId ?? "free") === plan.id
+          const selected = (selectedPlanId ?? "explorer") === plan.id
           return (
             <div
               key={plan.id}
@@ -81,9 +85,9 @@ export function OnboardingPlanStep({
                 <p className="mt-0.5 truncate text-xs text-muted-foreground">{plan.tagline}</p>
                 {isCurrent ? <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">Current plan</p> : null}
               </button>
-              {plan.id !== "free" && selected ? (
+              {plan.priceUSD > 0 && selected ? (
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {activePlanId !== "free" && activePlanId !== plan.id ? (
+                  {onPaidPlan && activePlanId !== plan.id ? (
                     <button
                       type="button"
                       className="inline-flex h-8 items-center rounded-lg border border-border px-3 text-sm hover:bg-accent"

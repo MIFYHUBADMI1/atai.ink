@@ -21,7 +21,7 @@
 
 import { subscriptionRecordsCol, projectsCol } from "@/lib/db/collections"
 import { buildEntitlementSet, ENTITLEMENT_VERSION } from "./catalog"
-import { resolveCommercialPlan } from "./migration-map"
+import { resolveCommercialPlan, isCommercialPlanId } from "./migration-map"
 import { checkEntitlement } from "./catalog"
 import { entitlementCache } from "./cache"
 import type { EntitlementSet, EntitlementOp, EntitlementCheck, CommercialPlanId } from "./types"
@@ -116,12 +116,24 @@ async function computeSet(scope: EntitlementScope): Promise<EntitlementSet> {
   const businesses = await countBusinessesForScope(scope)
 
   if (!sub) {
-    return buildEntitlementSet("explorer", {
-      businesses,
-      productionApps: businesses,
-      subdomains: 0,
-      customDomainsConsumed: 0,
-    })
+    // No subscription record means a free account. One that already owns
+    // projects is grandfathered (legacy free behaviour) so turning enforcement
+    // on never caps a founder's existing assets.
+    const preserve = businesses > 0
+    return buildEntitlementSet(
+      "explorer",
+      {
+        businesses,
+        productionApps: businesses,
+        subdomains: 0,
+        customDomainsConsumed: 0,
+      },
+      {
+        legacyPlanId: "free",
+        grandfathered: preserve,
+        preserveLegacyBehavior: preserve,
+      },
+    )
   }
 
   // Post-migration path: a stored snapshot + commercialPlanId wins.
@@ -132,6 +144,24 @@ async function computeSet(scope: EntitlementScope): Promise<EntitlementSet> {
     set.businesses.current = businesses
     set.productionApps.current = businesses
     return set
+  }
+
+  // A stored commercialPlanId without a snapshot: the subscription was created
+  // by the new commercial checkout, which writes the plan id but freezes no
+  // snapshot. The stored id is authoritative on its own — falling through to
+  // the legacy resolver would hand a paying Growth/Scale customer the free
+  // Explorer set.
+  if (isCommercialPlanId(storedCommercial)) {
+    return buildEntitlementSet(storedCommercial, {
+      businesses,
+      productionApps: businesses,
+      subdomains: 0,
+      customDomainsConsumed: 0,
+    }, {
+      legacyPlanId: (sub.planId as string) ?? undefined,
+      grandfathered: false,
+      preserveLegacyBehavior: false,
+    })
   }
 
   const legacyPlanId = (sub.planId as string) ?? "free"

@@ -11,9 +11,16 @@
 import { authorize } from "./service"
 import type { EntitlementCheck } from "./types"
 
-/** Master kill-switch. Off by default — existing flows are untouched. */
+/**
+ * Master kill-switch for plan enforcement.
+ *
+ * Enforcement is ON by default: the commercial catalog is the live catalog and
+ * every plan's caps are enforced server-side. Set
+ * `ENTITLEMENT_ENFORCEMENT_ENABLED=false` to fall back to unrestricted
+ * creation (emergency rollback only).
+ */
 export const ENTITLEMENT_ENFORCEMENT_ENABLED =
-  process.env.ENTITLEMENT_ENFORCEMENT_ENABLED === "true"
+  process.env.ENTITLEMENT_ENFORCEMENT_ENABLED !== "false"
 
 // ADR-8: security-sensitive operations resolve fresh (cache bypass) rather than
 // trust a (possibly stale) 60s cached entitlement.
@@ -27,6 +34,34 @@ export async function authorizeProjectFork(userId: string): Promise<EntitlementC
 
 export async function authorizeProductionBuild(userId: string): Promise<EntitlementCheck> {
   return authorize(userId, "buildProduction", undefined, { fresh: true })
+}
+
+export async function authorizeProductionDeploy(userId: string): Promise<EntitlementCheck> {
+  return authorize(userId, "deploy", undefined, { fresh: true })
+}
+
+/**
+ * Gate a production build or deployment.
+ *
+ * Returns the denial the caller must turn into a 402, or null when the work is
+ * permitted. Fail-open on a resolution error: the resolver already degrades to
+ * last-known/planning-only inside its own failure ladder, so an exception here
+ * means "we could not decide", and a database blip must not freeze a founder's
+ * build.
+ */
+export async function authorizeProductionWork(
+  userId: string,
+  op: "buildProduction" | "deploy",
+): Promise<EntitlementCheck | null> {
+  if (!ENTITLEMENT_ENFORCEMENT_ENABLED) return null
+  try {
+    const check = op === "deploy"
+      ? await authorizeProductionDeploy(userId)
+      : await authorizeProductionBuild(userId)
+    return check.allowed ? null : check
+  } catch {
+    return null
+  }
 }
 
 export async function authorizeAgent(userId: string, agent: "start" | "scout" | "optimize"): Promise<EntitlementCheck> {

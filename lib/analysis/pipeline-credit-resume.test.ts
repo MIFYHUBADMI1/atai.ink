@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   isProjectIdAvailable: vi.fn(),
   buildInitialBuildPrompt: vi.fn(),
   initializeProjectInfrastructure: vi.fn(),
+  authorizeProductionWork: vi.fn(),
 }))
 
 vi.mock("@/lib/store/store", () => ({
@@ -72,6 +73,11 @@ vi.mock("@/lib/analysis/specification", () => ({
 vi.mock("@/lib/projects/ai-artifacts", () => ({ recordAIArtifacts: vi.fn() }))
 vi.mock("@/lib/types/ai-artifacts", () => ({
   makeAIArtifact: vi.fn(), rawTextFromError: vi.fn(), stageFromError: vi.fn(),
+}))
+// The plan gate is exercised on its own; here it must not short-circuit the
+// credit-resume behaviour these tests are about.
+vi.mock("@/lib/billing/entitlements/require", () => ({
+  authorizeProductionWork: mocks.authorizeProductionWork,
 }))
 
 import { autoLaunchBuild } from "./pipeline"
@@ -143,6 +149,7 @@ describe("autoLaunchBuild — credit resume and atomic slot ownership", () => {
     mocks.createBuildRun.mockResolvedValue(undefined)
     mocks.updateBuildRun.mockResolvedValue(undefined)
     mocks.appendEvent.mockResolvedValue(undefined)
+    mocks.authorizeProductionWork.mockResolvedValue(null)
   })
 
   afterEach(() => {
@@ -184,6 +191,23 @@ describe("autoLaunchBuild — credit resume and atomic slot ownership", () => {
     expect(mocks.launchProject).not.toHaveBeenCalled()
     expect(mocks.updateProject).not.toHaveBeenCalled()
     expect(mocks.appendEvent).not.toHaveBeenCalled()
+  })
+
+  it("does not start a build the plan does not cover", async () => {
+    mocks.authorizeProductionWork.mockResolvedValue({
+      allowed: false,
+      code: "PLAN_LIMIT",
+      reason: "Your plan does not include production builds.",
+    })
+
+    await autoLaunchBuild("project-build")
+
+    expect(mocks.authorizeProductionWork).toHaveBeenCalledExactlyOnceWith("owner-build", "buildProduction")
+    expect(mocks.claimBuildSlot).not.toHaveBeenCalled()
+    expect(mocks.hasSufficientCredits).not.toHaveBeenCalled()
+    expect(mocks.reserveCredits).not.toHaveBeenCalled()
+    expect(mocks.createBuildRun).not.toHaveBeenCalled()
+    expect(mocks.updateProject).toHaveBeenCalledWith("project-build", { state: "plan_ready" })
   })
 
   it.each([

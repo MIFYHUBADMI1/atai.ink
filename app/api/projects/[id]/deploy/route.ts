@@ -8,6 +8,7 @@ import { deployProject, isTotalumConfigured, getDeploymentStatus, getProject } f
 import { publishEventsCol } from "@/lib/db/collections"
 import { logger } from "@/lib/logging/logger"
 import { ensureRuntimeProvisioned, environmentForLifecycle, RuntimeProvisioningError } from "@/lib/runtime/provisioning"
+import { authorizeProductionWork } from "@/lib/billing/entitlements/require"
 import type { ProjectEvent } from "@/lib/types/project"
 import type { PublishEventDoc } from "@/lib/types/db"
 
@@ -48,6 +49,15 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
     if (!project.totalumProjectId) return fail("NO_TOTALUM_PROJECT", "This project hasn't been built yet.", 400)
     if (project.state === "building" || project.state === "deploying") return fail("BUSY", "Please wait for the current operation to finish.", 409)
+
+    const planDenied = await authorizeProductionWork(user.id, "deploy")
+    if (planDenied) {
+      return fail(
+        planDenied.code ?? "PLAN_LIMIT",
+        planDenied.reason ?? "Your plan does not include hosting a production business.",
+        402,
+      )
+    }
 
     if (!isTotalumConfigured()) return fail("PROVIDER_NOT_CONFIGURED", "Deployment service is not connected.", 503)
 

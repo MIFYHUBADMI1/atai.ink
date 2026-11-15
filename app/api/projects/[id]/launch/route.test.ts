@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   autoLaunchBuild: vi.fn(),
   prepareRequestedProjectId: vi.fn(),
   getAvailableCredits: vi.fn(),
+  authorizeProductionWork: vi.fn(),
 }))
 
 vi.mock("@/lib/billing/credit-service", () => ({ getAvailableCredits: mocks.getAvailableCredits }))
@@ -23,6 +24,11 @@ vi.mock("@/lib/projects/project-actions", () => ({
 }))
 vi.mock("@/lib/logging/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}))
+// The plan gate is exercised on its own; here it must not short-circuit the
+// billing-resume behaviour these tests are about.
+vi.mock("@/lib/billing/entitlements/require", () => ({
+  authorizeProductionWork: mocks.authorizeProductionWork,
 }))
 
 // Keep the response helpers and NextResponse real to exercise the HTTP envelope.
@@ -75,6 +81,7 @@ describe("POST /api/projects/:id/launch — billing resume", () => {
     mocks.prepareRequestedProjectId.mockResolvedValue({ ok: true, requestedProjectId: "launch-app" })
     mocks.autoLaunchBuild.mockResolvedValue(undefined)
     mocks.getAvailableCredits.mockResolvedValue(0)
+    mocks.authorizeProductionWork.mockResolvedValue(null)
   })
 
   afterEach(() => {
@@ -230,6 +237,24 @@ describe("POST /api/projects/:id/launch — billing resume", () => {
     expect(response.status).toBe(409)
     expect(await response.json()).toMatchObject({ ok: false, error: { code: "BUILD_NOT_STARTED" } })
     expect(mocks.autoLaunchBuild).toHaveBeenCalledTimes(1)
+  })
+
+  it("refuses a launch the plan does not cover before preparing anything", async () => {
+    mocks.authorizeProductionWork.mockResolvedValue({
+      allowed: false,
+      code: "PLAN_LIMIT",
+      reason: "Your plan does not include production builds.",
+    })
+
+    const response = await post()
+
+    expect(response.status).toBe(402)
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      error: { code: "PLAN_LIMIT", message: "Your plan does not include production builds." },
+    })
+    expect(mocks.prepareRequestedProjectId).not.toHaveBeenCalled()
+    expect(mocks.autoLaunchBuild).not.toHaveBeenCalled()
   })
 
   it("returns the project-ID preparation failure without starting a build", async () => {

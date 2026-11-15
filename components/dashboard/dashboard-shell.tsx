@@ -7,6 +7,7 @@ import {
   Bell,
   Building2,
   Compass,
+  Gift,
   Home,
   Lightbulb,
   Menu,
@@ -38,6 +39,7 @@ const NAV = [
   { href: "/projects", label: "Businesses", icon: Building2 },
   { href: "/finances", label: "Finances", icon: Wallet },
   { href: "/notifications", label: "Notifications", icon: Bell },
+  { href: "/contributions", label: "Contributions", icon: Gift },
   { href: "/new", label: "New business", icon: Sparkles },
 ] as const
 

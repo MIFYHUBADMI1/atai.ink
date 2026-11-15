@@ -33,6 +33,12 @@ export interface UserOnboarding {
  * Multiple buckets can coexist; they are consumed oldest-expiry-first.
  */
 export interface CreditBucket {
+  /** Unique per-grant identity. Set on all new grants; lets expiry, renewal
+   *  and consumption address one bucket exactly even when a subscription owns
+   *  several (annual grants 12 monthly buckets under one subscription id).
+   *  Optional so pre-existing buckets stay valid — callers must fall back to
+   *  subscriptionId matching when absent. */
+  bucketId?: string
   /** The Dodo subscription ID that created this bucket. */
   subscriptionId: string
   /** The plan ID (e.g. "explorer", "business"). */
@@ -99,6 +105,8 @@ export interface UserDoc {
   onboarding?: UserOnboarding
   /** Founder-owned feature switches — see FeaturePreferences. */
   featurePreferences?: FeaturePreferences
+  /** Picked AI co-founder engine tier id (see lib/cofounder/models.ts). */
+  cofounderModelTier?: string
   suspended?: boolean
   suspendedAt?: number
   suspendedReason?: string

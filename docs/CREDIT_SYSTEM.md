@@ -46,11 +46,15 @@ Atai bills users in **credits** — an internal currency. Users buy credits (or 
 
 After analysis, building the actual code costs more and depends on complexity:
 
-| Complexity | Legacy Build | Heavy Build |
+| Complexity | Legacy (Standard) Build | Heavy (Pro) Build |
 |-----------|-------------|-------------|
-| Simple    | 25,000 cr   | 50,000 cr   |
-| Medium    | 50,000 cr   | 75,000 cr   |
-| Complex   | 75,000 cr   | 100,000 cr  |
+| Simple    | 50,000 cr   | 100,000 cr  |
+| Medium    | 75,000 cr   | 112,500 cr  |
+| Complex   | 100,000 cr  | 133,333 cr  |
+
+**These are the charged amounts.** They come from `getTierCost()` (`lib/credits/credits.ts`), which reads the admin-configurable build-tier costs (`BUILD_TIERS` in `lib/billing/config.ts`, overridable via `app_settings`). Heavy mode scales the base by the tier ratio (simple ×2, medium ×1.5, complex ×4/3, rounded).
+
+> ⚠️ The `TIER_COSTS` (25k/50k/75k) and `HEAVY_TIER_COSTS` (50k/75k/100k) constants in `credits.ts` are **only the ratio denominators** for the heavy scale — they are **not** what users are charged. Displayed == charged: the pricing page and both build paths (manual route + pipeline) read the same `getTierCost` authority. Source of truth at runtime: `GET /api/credit-costs`.
 
 **Complexity is auto-classified** by the system based on:
 - Number of enabled features (×2 weight each)
@@ -94,6 +98,18 @@ User spends 400 more credits:
 ```
 
 This is "oldest-first" or "use-it-or-lose-it" — subscription credits drain first so users don't waste their monthly allocation.
+
+### Expiry mechanics
+
+Subscription credits are held as buckets in `users.creditBuckets[]`, each with `expiresAt` set to the billing period end (`grantSubscriptionCredits`). Permanent credits live in the flat `permanentCredits` field and have no expiry.
+
+Expiry happens in three places, so a stale grant can never survive a period:
+
+1. **On every balance read and every consumption** — `expireOverdueBuckets` (`lib/billing/credit-service.ts`) removes buckets whose `expiresAt` has passed, ledgering each removal. It is the single authority for balance mutation.
+2. **On the monthly grant** — `grantSubscriptionCredits` reads the balance before writing the new bucket, and that read sweeps overdue buckets first; the new bucket is written with a fresh `expiresAt`, so the grant and the expiry of the previous period cannot drift apart.
+3. **Daily sweep** — `POST /api/admin/billing/credits/expire-sweep` (scheduled in `vercel.json`) expires overdue buckets for accounts that never log in after their period ends.
+
+The grant itself is idempotent per subscription per period: the ledger key is `sub_grant_<subscriptionId>_period_<periodEndDay>`, so a duplicated `subscription.active` / `subscription.renewed` event cannot double-credit a period.
 
 ---
 
@@ -152,7 +168,7 @@ await reconcileCredits(userId, reserved, actual, buildRunId)
 
 ## Credit Transaction Types
 
-Every credit movement is recorded in `credit_ledger` with one of these types:
+At the store flow level, every credit movement is one of:
 
 | Type | Meaning |
 |------|---------|
@@ -160,6 +176,8 @@ Every credit movement is recorded in `credit_ledger` with one of these types:
 | `reserve` | Credits held before an operation (temporary hold) |
 | `consume` | Credits charged for a completed operation |
 | `refund` | Credits returned (operation failed, or partial refund) |
+
+The persisted `credit_ledger` entries carry a richer, typed vocabulary (`LedgerTransactionType` in `lib/billing/config.ts`) for auditability — e.g. `signup_bonus`, `referral_bonus`, `credit_purchase`, `subscription_grant`, `subscription_renewal`, `build_reservation`, `build_finalization`, `build_release`, `build_refund`, `fork_purchase`, `fork_royalty`, `ai_collaboration`, `infrastructure_purchase`, `admin_adjustment`, and the runtime types (`runtime_usage`, `runtime_reservation`, `runtime_refund`). Treat transaction types as an open vocabulary.
 
 ---
 
@@ -177,15 +195,25 @@ Admins can:
 
 ## Subscription Plans (Current Pricing)
 
-Configured in Stripe, reflected here for reference:
+Billing provider is **Dodo Payments** (not Stripe). The customer-facing commercial catalog lives in `lib/billing/entitlements/catalog.ts` (`PLAN_PRICING`, `PROVISIONAL_MONTHLY_CREDITS`, `PLAN_BASE`) and is rendered by `lib/billing/entitlements/commercial-plans.ts`. It is the **only** catalog that is displayed or sold — there is no feature flag and no legacy fallback offering. The legacy six-plan rows in `lib/billing/config.ts` (`LEGACY_SUBSCRIPTION_PLANS`) remain solely as renewal-attribution plumbing for pre-existing Dodo subscriptions; they are never shown to a customer and cannot be bought.
 
-| Plan | Price | Monthly Credits | Features |
-|------|-------|-----------------|---------|
-| Free | $0 | 100 (one-time signup) | Basic access |
-| Starter | $29/mo | 1,000 | Email support |
-| Pro | $79/mo | 3,000 | Priority support, custom domains |
-| Business | $199/mo | 10,000 | Teams, white label |
-| Enterprise | Custom | Custom | SLA, SSO, dedicated support |
+**Commercial catalog (live):**
+
+| Plan | Monthly | Annual | Monthly Credits\* | Businesses | Production apps | Custom domains |
+|------|---------|--------|------------------|-----------|----------------|----------------|
+| Explorer | Free | — | 500 one-time (planning, on verification) | 1 (planning only) | 0 | 0 |
+| Starter | $89.99 | $989.89 | ~150,000 | 1 | 1 | 0 |
+| Growth | $199.99 | $2,199.89 | ~400,000 | up to 4 | up to 4 | 1 |
+| Scale | $499.99 | $5,499.89 | ~1,200,000 | unlimited | unlimited | up to 4 |
+| Enterprise | Custom | Custom | negotiated | unlimited | unlimited | custom |
+
+\* **Provisional** — `PROVISIONAL_MONTHLY_CREDITS` are placeholders pending the Phase 4 contribution-margin ratification; admin-overridable per plan. Do not treat as final.
+
+**Explorer is planning-only:** one business may be planned with the co-founder, but production builds and deploys are refused server-side (`EXPLORER_PLANNING_ONLY`).
+
+**Annual billing:** 12 months for the price of 11 (~8% saved), charged once upfront; credits are issued **monthly** via the annual-sweep cron (month-0 at activation, months 1–11 by sweep), deduplicated by the shared grant-window key.
+
+**Dodo products:** each plan/cycle pair has its own Dodo product, named `Atai — <Plan> — $<price>/mo|yr`. Set `DODO_COMMERCIAL_PRODUCT_<PLAN>` (and `..._ANNUAL`) to a provisioned product id to lock the price; when the variable is absent, checkout creates the product on demand at the catalog price. A legacy product is never reused.
 
 **Credits renew monthly.** Unused subscription credits expire at period end. Permanent credits never expire.
 
@@ -193,12 +221,15 @@ Configured in Stripe, reflected here for reference:
 
 ## Credit Packs (One-Time Purchase)
 
-| Pack | Price | Credits | Per Credit |
-|------|-------|---------|-----------|
-| Starter Pack | $10 | 500 | $0.02 |
-| Value Pack | $35 | 2,000 | $0.0175 |
-| Pro Pack | $80 | 5,000 | $0.016 |
-| Power Pack | $150 | 10,000 | $0.015 |
+Defined in `PERMANENT_CREDIT_PACKS` (`lib/billing/config.ts`):
+
+| Pack | Credits | Price | Per Credit |
+|------|---------|-------|-----------|
+| perm_200k | 200,000 | $59 | $0.000295 |
+| perm_500k *(popular)* | 500,000 | $119 | $0.000238 |
+| perm_1m | 1,000,000 | $219 | $0.000219 |
+| perm_5m | 5,000,000 | $859 | $0.0001718 |
+| perm_15m | 15,000,000 | $2,499 | $0.0001666 |
 
 Larger packs = better rate. All credits are permanent (never expire).
 
@@ -206,9 +237,10 @@ Larger packs = better rate. All credits are permanent (never expire).
 
 ## Free Credits
 
-- **Signup bonus**: 100 credits (every new user)
-- **Referral**: Referrer gets bonus credits when referred user signs up and pays
-- **Admin gift**: Admin can manually grant credits
+- **Welcome bonus**: 500 credits, granted on **email verification** (not at signup) — `WELCOME_BONUS_CREDITS` / `DEFAULT_REWARDS.welcomeBonus`.
+- **Referral verification reward**: 500 credits to the referrer when a referred user verifies their email.
+- **Referral milestone reward**: 1,500 credits when the referred user reaches the qualifying build-usage threshold (75,000 credits).
+- **Admin gift**: Admin can manually grant credits.
 
 ---
 

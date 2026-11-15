@@ -6,9 +6,11 @@
  * PROVISIONAL_MONTHLY_CREDITS, PLAN_BASE, availability) so the page shows
  * exactly what the entitlement engine enforces.
  *
- * It deliberately does NOT replace `lib/billing/config.ts`'s `SUBSCRIPTION_PLANS`
- * (legacy billing plumbing, Dodo products, ledger types). The legacy catalog is
- * left 100% intact to honour hard rule #4 (don't break existing billing).
+ * It deliberately does NOT replace `lib/billing/config.ts`'s
+ * `LEGACY_SUBSCRIPTION_PLANS` (legacy billing plumbing, Dodo products, ledger
+ * types). The legacy catalog is left 100% intact to honour hard rule #4
+ * (don't break existing billing) and is used only to attribute renewals for
+ * pre-existing subscriptions.
  *
  * ── Hard rules honoured here ────────────────────────────────────────────────
  * #1 No invented credit quantities: monthly credits are pulled from
@@ -19,12 +21,13 @@
  *     filtered out of `features` and the `filterUnlaunchedFeatures` helper is
  *     applied defensively in the card.
  * #4 Don't break existing billing: commercial plans reference NEW Dodo products
- *     via per-plan env vars (DODO_COMMERCIAL_PRODUCT_*). Until the product owner
- *     provisions those products, `purchaseState` is "contact" and the UI shows a
- *     "Contact sales" CTA instead of calling checkout at a wrong/legacy price.
+ *     via per-plan env vars (DODO_COMMERCIAL_PRODUCT_*). When the owner has not
+ *     provisioned one, checkout creates it on demand at the catalog price, so a
+ *     paid plan is never unbuyable and never reuses a legacy product.
  *
- * Everything is gated behind ATAI_COMMERCIAL_PRICING_ENABLED (default OFF) so
- * the live pricing page is unchanged until the owner is ready to flip.
+ * This catalog is the ONLY offering. The legacy six-plan rows in
+ * `lib/billing/config.ts` survive solely to attribute renewals of pre-existing
+ * Dodo subscriptions (ADR-2); they are never displayed or sold.
  *
  * @module lib/billing/entitlements/commercial-plans
  */
@@ -33,27 +36,67 @@ import type { CommercialPlanId } from "./types"
 import { PLAN_PRICING, POPULAR_PLAN, PROVISIONAL_MONTHLY_CREDITS } from "./catalog"
 import type { PlanAvailability, PurchaseState, SubscriptionPlan } from "@/lib/billing/config"
 
-/** Master kill-switch for the commercial pricing page. Default OFF. */
-export const COMMERCIAL_PRICING_ENABLED =
-  process.env.ATAI_COMMERCIAL_PRICING_ENABLED === "true"
-
 export interface CommercialPlan extends SubscriptionPlan {
   commercialPlanId: CommercialPlanId
   provisionalCredits: boolean
   annualPriceUSD: number | null
   purchaseState: PurchaseState
   availability: PlanAvailability
+  /** Dodo product id for the annual billing variant, once provisioned. */
+  annualDodoProductId?: string
+  /** Annual checkout is purchasable only when the annual product exists. */
+  annualPurchaseState: PurchaseState
   /** Approx. annual savings vs. 12× monthly, when annual is offered. */
   annualSavingsPct?: number | null
 }
 
 /** Per-plan Dodo product env var. Set by the product owner after provisioning. */
-function commercialProductEnvVar(id: CommercialPlanId): string {
-  return `DODO_COMMERCIAL_PRODUCT_${id.toUpperCase()}`
+function commercialProductEnvVar(id: CommercialPlanId, cycle: "monthly" | "annual"): string {
+  const base = `DODO_COMMERCIAL_PRODUCT_${id.toUpperCase()}`
+  return cycle === "annual" ? `${base}_ANNUAL` : base
 }
 
-export function getCommercialDodoProductId(id: CommercialPlanId): string | undefined {
-  return process.env[commercialProductEnvVar(id)] || undefined
+export function getCommercialDodoProductId(
+  id: CommercialPlanId,
+  cycle: "monthly" | "annual" = "monthly",
+): string | undefined {
+  return process.env[commercialProductEnvVar(id, cycle)] || undefined
+}
+
+/** A commercial Dodo product id (monthly OR annual variant) → plan + cycle. */
+export function resolveCommercialProduct(
+  productId: string | undefined,
+): { plan: CommercialPlan; billingCycle: "monthly" | "annual" } | undefined {
+  if (!productId) return undefined
+  for (const plan of getCommercialPlans()) {
+    if (plan.dodoProductId === productId) return { plan, billingCycle: "monthly" }
+    if (plan.annualDodoProductId && plan.annualDodoProductId === productId) {
+      return { plan, billingCycle: "annual" }
+    }
+  }
+  return undefined
+}
+
+/**
+ * Canonical Dodo product name for a commercial plan + cycle.
+ *
+ * The price is part of the name on purpose: it stops the commercial product
+ * from ever being name-matched against a legacy product of the same plan
+ * name (the legacy set owns "Atai — Starter"), and it makes a price change
+ * create a new product instead of silently reusing a stale-priced one.
+ */
+export function commercialProductName(plan: CommercialPlan, cycle: "monthly" | "annual"): string {
+  const price = cycle === "annual" ? plan.annualPriceUSD ?? plan.priceUSD : plan.priceUSD
+  return cycle === "annual"
+    ? `Atai — ${plan.name} — $${price}/yr`
+    : `Atai — ${plan.name} — $${price}/mo`
+}
+
+export function commercialProductDescription(plan: CommercialPlan, cycle: "monthly" | "annual"): string {
+  const credits = plan.mirrorCredits.toLocaleString()
+  return cycle === "annual"
+    ? `${credits} Atai Credits per month, billed yearly. ${plan.name} plan.`
+    : `${credits} Atai Credits per month. ${plan.name} plan.`
 }
 
 /** Feature copy written in the buyer's words, keyed by commercial plan id. */
@@ -181,13 +224,25 @@ function buildCommercialPlan(id: CommercialPlanId): CommercialPlan {
   const annual = pricing.annual
   const credits = PROVISIONAL_MONTHLY_CREDITS[id]
   const dodoProductId = getCommercialDodoProductId(id)
+  const annualDodoProductId = getCommercialDodoProductId(id, "annual")
   const isCustom = id === "enterprise"
   const isFree = id === "explorer"
 
   let purchaseState: PurchaseState
-  if (isCustom) purchaseState = "contact"
-  else if (isFree) purchaseState = "available" // signup, not a purchase
-  else purchaseState = dodoProductId ? "available" : "contact"
+  let annualPurchaseState: PurchaseState
+  if (isCustom) {
+    purchaseState = "contact"
+    annualPurchaseState = "contact"
+  } else if (isFree) {
+    purchaseState = "available" // signup, not a purchase
+    annualPurchaseState = "available"
+  } else {
+    // Self-serve: checkout creates the Dodo product on demand at the catalog
+    // price when the owner has not pre-provisioned one, so a paid plan is
+    // never unbuyable.
+    purchaseState = "available"
+    annualPurchaseState = annual ? "available" : "soon"
+  }
 
   const copy = COMMERCIAL_FEATURES[id]
 
@@ -209,17 +264,21 @@ function buildCommercialPlan(id: CommercialPlanId): CommercialPlan {
     availability: COMMERCIAL_AVAILABILITY[id],
     provisionalCredits: credits !== null,
     annualPriceUSD: annual,
+    annualDodoProductId,
+    annualPurchaseState,
     annualSavingsPct: annualSavingsPct(monthly ?? 0, annual),
   }
 }
 
-let cached: CommercialPlan[] | null = null
-
-/** The full commercial plan list, in display order. */
+/**
+ * The full commercial plan list, in display order.
+ *
+ * Rebuilt on every call: the plan objects embed the Dodo product ids read from
+ * the environment, and a cached copy would keep serving a stale product id for
+ * the life of the process. Building five small objects is not worth that.
+ */
 export function getCommercialPlans(): CommercialPlan[] {
-  if (cached) return cached
-  cached = PLAN_ORDER.map(buildCommercialPlan)
-  return cached
+  return PLAN_ORDER.map(buildCommercialPlan)
 }
 
 export function getCommercialPlanById(id: string): CommercialPlan | undefined {
@@ -228,12 +287,12 @@ export function getCommercialPlanById(id: string): CommercialPlan | undefined {
 
 /**
  * Resolve a Dodo product id back to a commercial plan (for webhook attribution).
- * Returns undefined when no commercial plan maps to the product — so the legacy
- * catalog remains the authority for every pre-existing subscription.
+ * Matches both the monthly and the annual variant. Returns undefined when no
+ * commercial plan maps to the product — so the legacy catalog remains the
+ * authority for every pre-existing subscription.
  */
 export function resolveCommercialPlanByDodoProductId(productId: string): CommercialPlan | undefined {
-  if (!productId) return undefined
-  return getCommercialPlans().find((p) => p.dodoProductId === productId)
+  return resolveCommercialProduct(productId)?.plan
 }
 
 /**

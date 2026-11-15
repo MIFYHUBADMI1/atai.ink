@@ -262,6 +262,18 @@ const claimSchema = z.object({
 })
 
 /**
+ * Opportunities may carry an optional AI prioritization estimate. These fields
+ * are never treated as proven financial outcomes; the UI labels them as
+ * estimates and only plots an opportunity when both axes are present.
+ */
+const opportunitySchema = claimSchema.extend({
+  impact: z.enum(["low", "high"]).optional(),
+  effort: z.enum(["low", "high"]).optional(),
+  confidence: z.enum(CONFIDENCE_LEVELS).optional(),
+  nextStep: z.string().max(300).optional(),
+})
+
+/**
  * A money fact (price, valuation, funding) the sources explicitly state.
  * Evidence is optional at the schema boundary so one unsupported fact does not
  * reject the whole report — the honesty pass drops any fact whose citations
@@ -322,7 +334,7 @@ const comparisonRowSchema = z.object({
 export const competitionReportSchema = z.object({
   keyFindings: z.array(claimSchema).max(8),
   limitations: z.array(z.string().min(1).max(400)).max(8),
-  opportunities: z.array(claimSchema).max(8),
+  opportunities: z.array(opportunitySchema).max(8),
   competitors: z.array(competitorSchema).max(12),
   marketFigures: z.array(marketFigureSchema).max(12),
   customerBehaviour: z.array(claimSchema).max(6),
@@ -336,6 +348,7 @@ export const competitionReportSchema = z.object({
 
 export type CompetitionReport = z.infer<typeof competitionReportSchema>
 export type ReportClaim = z.infer<typeof claimSchema>
+export type ReportOpportunity = z.infer<typeof opportunitySchema>
 export type ReportCompetitor = z.infer<typeof competitorSchema>
 export type ReportFact = z.infer<typeof reportedFactSchema>
 export type ReportMarketFigure = z.infer<typeof marketFigureSchema>
@@ -459,7 +472,7 @@ export function parseCompetitionReport(
     return kept
   }
 
-  const cleanClaim = (claim: ReportClaim, label: string): ReportClaim => {
+  const cleanClaim = <T extends ReportClaim>(claim: T, label: string): T => {
     const evidence = cleanEvidence(claim.evidence, label)
     let status = claim.status
     if (status === "verified_fact" && evidence.length === 0) {
@@ -568,6 +581,19 @@ function renderClaim(claim: ReportClaim, byId: Map<string, ClassifiedSource>): s
   return `- [${label}] ${claim.text}${citations ? ` ${citations}` : ""}`
 }
 
+function renderOpportunity(opportunity: ReportOpportunity, byId: Map<string, ClassifiedSource>): string {
+  const estimate = [
+    opportunity.impact ? `impact ${opportunity.impact}` : "",
+    opportunity.effort ? `effort ${opportunity.effort}` : "",
+    opportunity.confidence ? `confidence ${opportunity.confidence}` : "",
+  ].filter(Boolean)
+  const suffix = [
+    estimate.length ? `[AI estimate: ${estimate.join(" · ")}]` : "",
+    opportunity.nextStep ? `Next step: ${opportunity.nextStep}` : "",
+  ].filter(Boolean)
+  return `${renderClaim(opportunity, byId)}${suffix.length ? ` ${suffix.join(" ")}` : ""}`
+}
+
 /**
  * The persisted body is ALWAYS this rendering of the validated report — never
  * raw model output. Headings mirror the legacy snapshot sections so older
@@ -610,7 +636,7 @@ export function renderCompetitionReportMarkdown(
     .filter((s) => s.category === "data_tool")
     .map((s) => `- ${s.title}${s.url ? ` — ${s.url}` : ""} [${s.relevance === "irrelevant" ? "lead only — not evidence" : "research lead"}]`)
     .join("\n") || "No data-tool sources were retrieved."}`)
-  sections.push(`## Differentiation opportunities\n\n${report.opportunities.map((c) => renderClaim(c, byId)).join("\n") || "No opportunities established yet."}`)
+  sections.push(`## Differentiation opportunities\n\n${report.opportunities.map((c) => renderOpportunity(c, byId)).join("\n") || "No opportunities established yet."}`)
   sections.push(`## What the sources do not establish\n\n${[...report.gaps, ...report.limitations].map((g) => `- ${g}`).join("\n") || "Nothing flagged."}`)
   sections.push(`## Questions to investigate next\n\n${report.questions.map((q) => `- ${q}`).join("\n") || "None yet."}`)
   if (notes.length > 0) {
@@ -631,7 +657,7 @@ export const COMPETITION_REPORT_SYSTEM =
 const REPORT_ASK = `Return ONLY a JSON object with exactly these keys:
 - "keyFindings": up to 8 claims {text, status, evidence:[{sourceId, note?}]}
 - "limitations": up to 8 strings — what this research could NOT establish
-- "opportunities": up to 8 claims — differentiation hypotheses tied to plan + sources
+- "opportunities": up to 8 objects {text, status, evidence:[{sourceId, note?}], nextStep?, impact?, effort?, confidence?} — impact/effort/confidence are optional AI estimates (low|high, low|high, high|medium|low), never proven financial outcomes
 - "competitors": up to 12 objects {name, website?, category, whyItMayCompete, targetAudience?, productsServices?, location?, founded?, pricing?, valuation?, funding?, strengths?, weaknesses?, evidence:[{sourceId, note?}], verification, confidence}. pricing/valuation/funding are facts {summary, amount?, currency?, asOfDate?, evidence:[{sourceId}]} — fill them ONLY when a source explicitly states the price, valuation or funding; strengths/weaknesses are up to 4 short interpretation strings each.
 - "marketFigures": up to 12 objects {label, value?, unit?, currency?, geographyScope, geographyLabel, publicationDate?, forecastPeriod?, sourceId, status}
 - "customerBehaviour": up to 6 claims

@@ -18,12 +18,25 @@ import {
   TriangleAlert,
   Trophy,
 } from "lucide-react"
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts"
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts"
 import type {
   ClaimStatus,
   CompetitionReport,
   ReportClaim,
   ReportFact,
+  ReportMarketFigure,
+  ReportOpportunity,
   VerificationStatus,
 } from "@/lib/marketing/competition-report"
 import {
@@ -245,7 +258,7 @@ export function ExecutiveSummary({
         </div>
         <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
           Research run: {formatStamp(research?.collectedAt ?? createdAt)}
-          {research ? ` · ${research.sources.length} sources` : ""} · {totalCost} credits
+          {research ? ` · ${research.sources.length} sources` : ""} · run cost {totalCost} credits
         </p>
       </div>
       <div className="mt-4 grid gap-6 lg:grid-cols-2">
@@ -394,6 +407,34 @@ export function CompetitorCards({
   researchedAt?: number
 }) {
   const byId = useMemo(() => new Map(sources.map((s, i) => [`s${i + 1}`, s])), [sources])
+  const [query, setQuery] = useState("")
+  const [category, setCategory] = useState("all")
+  const [verification, setVerification] = useState("all")
+  const [sort, setSort] = useState("name")
+
+  const filteredCompetitors = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    const confidenceRank = { high: 3, medium: 2, low: 1 } as const
+    return report.competitors
+      .filter((competitor) => {
+        if (category !== "all" && competitor.category !== category) return false
+        if (verification !== "all" && competitor.verification !== verification) return false
+        if (!needle) return true
+        return [
+          competitor.name,
+          competitor.whyItMayCompete,
+          competitor.targetAudience,
+          competitor.productsServices,
+          competitor.location,
+        ].some((value) => value?.toLowerCase().includes(needle))
+      })
+      .sort((a, b) => {
+        if (sort === "confidence") return confidenceRank[b.confidence] - confidenceRank[a.confidence]
+        if (sort === "category") return COMPETITOR_CATEGORY_LABELS[a.category].localeCompare(COMPETITOR_CATEGORY_LABELS[b.category])
+        return a.name.localeCompare(b.name)
+      })
+  }, [report.competitors, query, category, verification, sort])
+
   if (report.competitors.length === 0) {
     return (
       <p className="mt-3 rounded-xl border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">
@@ -402,8 +443,56 @@ export function CompetitorCards({
     )
   }
   return (
-    <div className="mt-4 grid gap-4 lg:grid-cols-2">
-      {report.competitors.map((competitor, i) => {
+    <div className="mt-4 flex flex-col gap-4">
+      <div className="flex flex-col gap-2 rounded-xl border border-border bg-background/50 p-3 lg:flex-row lg:items-center">
+        <label className="relative min-w-0 flex-1">
+          <span className="sr-only">Search competitors</span>
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search competitors, audiences, products…"
+            className="w-full rounded-lg border border-border bg-card py-2 pl-9 pr-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+        </label>
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="shrink-0 font-medium">Type</span>
+          <select value={category} onChange={(event) => setCategory(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-border bg-card px-2 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring lg:w-44">
+            <option value="all">All types</option>
+            {Object.entries(COMPETITOR_CATEGORY_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="shrink-0 font-medium">Evidence</span>
+          <select value={verification} onChange={(event) => setVerification(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-border bg-card px-2 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring lg:w-40">
+            <option value="all">All evidence</option>
+            <option value="verified">Verified</option>
+            <option value="ai_suggestion">AI suggestion</option>
+            <option value="research_needed">Needs verification</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="shrink-0 font-medium">Sort</span>
+          <select value={sort} onChange={(event) => setSort(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-border bg-card px-2 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring lg:w-36">
+            <option value="name">Name</option>
+            <option value="category">Type</option>
+            <option value="confidence">Confidence</option>
+          </select>
+        </label>
+      </div>
+      <p className="text-xs text-muted-foreground" aria-live="polite">
+        Showing {filteredCompetitors.length} of {report.competitors.length} classified competitor{report.competitors.length === 1 ? "" : "s"}.
+      </p>
+      {filteredCompetitors.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">
+          No competitors match these filters. Clear the search or choose a broader category.
+        </p>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-2">
+      {filteredCompetitors.map((competitor, i) => {
         const moneyFacts = [
           ["Pricing", competitor.pricing],
           ["Valuation", competitor.valuation],
@@ -520,6 +609,65 @@ export function CompetitorCards({
           </div>
         )
       })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface ComparableFigureGroup {
+  figures: ReportMarketFigure[]
+  unit?: string
+  currency?: string
+  status: ReportMarketFigure["status"]
+}
+
+/** Only comparable reported figures (same geography group, unit and currency) may share a chart. */
+function comparableFigureGroups(figures: ReportMarketFigure[]): ComparableFigureGroup[] {
+  const groups = new Map<string, ComparableFigureGroup>()
+  for (const figure of figures) {
+    if (typeof figure.value !== "number") continue
+    const key = `${figure.status}|${figure.unit ?? ""}|${figure.currency ?? ""}`
+    const group = groups.get(key) ?? { figures: [], unit: figure.unit, currency: figure.currency, status: figure.status }
+    group.figures.push(figure)
+    groups.set(key, group)
+  }
+  return [...groups.values()].filter((group) => group.figures.length >= 2)
+}
+
+function MarketFigureBars({ group, geographyLabel }: { group: ComparableFigureGroup; geographyLabel: string }) {
+  const mounted = useMounted()
+  const data = useMemo(
+    () =>
+      group.figures.map((figure, index) => ({
+        key: `${index}-${figure.label}`,
+        label: figure.label.length > 42 ? `${figure.label.slice(0, 39)}…` : figure.label,
+        value: figure.value ?? 0,
+      })),
+    [group.figures],
+  )
+  if (!mounted || data.length < 2) return null
+  return (
+    <div className="mt-4">
+      <div className="h-44 w-full" dir="ltr">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} layout="vertical" margin={{ top: 4, right: 12, bottom: 0, left: 4 }}>
+            <CartesianGrid horizontal={false} stroke="currentColor" strokeOpacity={0.08} />
+            <XAxis type="number" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} tickLine={false} axisLine={{ stroke: "var(--border)" }} />
+            <YAxis type="category" dataKey="label" width={120} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} tickLine={false} axisLine={false} />
+            <Tooltip
+              contentStyle={{ backgroundColor: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 11 }}
+              labelStyle={{ color: "var(--foreground)" }}
+            />
+            <Bar dataKey="value" fill="#7c5cfa" radius={[0, 4, 4, 0]} maxBarSize={18} isAnimationActive={false} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <p className="mt-2 text-[11px] leading-5 text-muted-foreground">
+        {CLAIM_STATUS_LABELS[group.status]} figures for {geographyLabel}
+        {group.unit ? ` in ${group.unit}` : ""}{group.currency ? ` (${group.currency})` : ""}.
+        These are point-in-time source values, not a constructed trend.
+      </p>
     </div>
   )
 }
@@ -579,6 +727,9 @@ export function MarketIntelligence({ report, sources }: { report: CompetitionRep
                   )
                 })}
               </ul>
+              {comparableFigureGroups(group.figures).map((chartGroup, chartIndex) => (
+                <MarketFigureBars key={`${chartGroup.unit ?? "unit"}-${chartGroup.currency ?? "currency"}-${chartIndex}`} group={chartGroup} geographyLabel={group.label} />
+              ))}
             </div>
           ))}
         </div>
@@ -597,8 +748,9 @@ export function MarketIntelligence({ report, sources }: { report: CompetitionRep
   )
 }
 
-/** Stacked comparison cards — one card per attribute, plan first, sources cited. */
-export function ReportComparisons({ report }: { report: CompetitionReport }) {
+/** Evidence-linked comparison matrices — missing cells stay unknown, never inferred. */
+export function ReportComparisons({ report, sources = [] }: { report: CompetitionReport; sources?: CompetitionSourceView[] }) {
+  const sourceById = useMemo(() => new Map(sources.map((s, i) => [`s${i + 1}`, s])), [sources])
   const sections = [
     { title: "Feature comparison", rows: report.featureComparison, empty: "No feature details were established by the sources — nothing is invented here." },
     { title: "Pricing comparison", rows: report.pricingComparison, empty: "No actual prices were found in the sources. The pricing search keeps looking on every run — nothing is guessed here." },
@@ -612,46 +764,118 @@ export function ReportComparisons({ report }: { report: CompetitionReport }) {
         </span>
       </div>
       <p className="mt-1 text-sm leading-6 text-muted-foreground">
-        Only attributes the sources actually describe. Missing cells stay unknown.
+        Only attributes the sources actually describe. Missing cells stay unknown; swipe or scroll sideways on small screens.
       </p>
       <div className="mt-4 flex flex-col gap-6">
-        {sections.map((section) => (
-          <div key={section.title}>
-            <h3 className="text-sm font-bold">{section.title}</h3>
-            {section.rows.length === 0 ? (
-              <p className="mt-2 rounded-xl border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">{section.empty}</p>
-            ) : (
-              <div className="mt-2 flex flex-col gap-3">
-                {section.rows.map((row) => (
-                  <div key={row.attribute} className="rounded-xl border border-border bg-background/50 p-4">
-                    <p className="text-sm font-bold">{row.attribute}</p>
-                    <div className="mt-2 flex flex-col gap-2">
-                      <div className="rounded-lg bg-primary/5 px-3 py-2">
-                        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-primary">Your plan</p>
-                        <p className="mt-0.5 break-words text-sm leading-6 text-foreground/90">{row.yours ?? "Unknown"}</p>
-                      </div>
-                      {row.competitors.map((cell) => (
-                        <div key={cell.name} className="border-l-2 border-border px-3 py-1">
-                          <p className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-foreground">
-                            {cell.name}
-                            {cell.sourceId && <span className="font-mono text-[10px] font-normal text-muted-foreground">({cell.sourceId})</span>}
-                          </p>
-                          <p className="mt-0.5 break-words text-sm leading-6 text-muted-foreground">{cell.value}</p>
-                        </div>
+        {sections.map((section) => {
+          const competitors = [...new Set(section.rows.flatMap((row) => row.competitors.map((cell) => cell.name)))]
+          return (
+            <div key={section.title}>
+              <h3 className="text-sm font-bold">{section.title}</h3>
+              {section.rows.length === 0 ? (
+                <p className="mt-2 rounded-xl border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">{section.empty}</p>
+              ) : (
+                <div className="mt-2 overflow-x-auto rounded-xl border border-border">
+                  <table className="w-full min-w-[680px] border-collapse text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-border bg-background/60">
+                        <th className="px-3 py-2 font-semibold">Attribute</th>
+                        <th className="px-3 py-2 font-semibold text-primary">Your plan</th>
+                        {competitors.map((name) => (
+                          <th key={name} className="max-w-44 px-3 py-2 font-semibold">{name}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="align-top">
+                      {section.rows.map((row) => (
+                        <tr key={row.attribute} className="border-b border-border/60 last:border-0">
+                          <td className="px-3 py-3 font-medium">{row.attribute}</td>
+                          <td className="max-w-56 px-3 py-3 break-words text-foreground/90">{row.yours ?? "Unknown"}</td>
+                          {competitors.map((name) => {
+                            const cell = row.competitors.find((candidate) => candidate.name === name)
+                            const source = cell?.sourceId ? sourceById.get(cell.sourceId) : undefined
+                            return (
+                              <td key={`${row.attribute}-${name}`} className="max-w-56 px-3 py-3 break-words text-muted-foreground">
+                                {cell ? cell.value : "Unknown"}
+                                {source?.url && (
+                                  <a
+                                    href={source.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="mt-1 inline-flex items-center gap-1 text-[10px] font-medium text-primary hover:underline"
+                                  >
+                                    <Link2 className="size-3" aria-hidden /> evidence
+                                  </a>
+                                )}
+                              </td>
+                            )
+                          })}
+                        </tr>
                       ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
     </Card>
   )
 }
 
-export function OpportunitiesPanel({ report }: { report: CompetitionReport }) {
+function OpportunityEstimateBadges({ opportunity }: { opportunity: ReportOpportunity }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      <ClaimBadge status={opportunity.status} />
+      {opportunity.impact && (
+        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+          {opportunity.impact === "high" ? "High impact" : "Lower impact"} · AI estimate
+        </span>
+      )}
+      {opportunity.effort && (
+        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+          {opportunity.effort === "high" ? "High effort" : "Low effort"} · AI estimate
+        </span>
+      )}
+      {opportunity.confidence && (
+        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+          confidence: {opportunity.confidence}
+        </span>
+      )}
+    </div>
+  )
+}
+
+function OpportunityCard({ opportunity, byId }: { opportunity: ReportOpportunity; byId: Map<string, CompetitionSourceView> }) {
+  return (
+    <article className="flex min-w-0 flex-col gap-2 rounded-xl border border-border bg-card p-3">
+      <p className="break-words text-sm font-semibold leading-6 text-foreground">{opportunity.text}</p>
+      <OpportunityEstimateBadges opportunity={opportunity} />
+      {opportunity.nextStep && (
+        <p className="break-words text-xs leading-5 text-muted-foreground">
+          <span className="font-semibold text-foreground/80">Next step:</span> {opportunity.nextStep}
+        </p>
+      )}
+      {opportunity.evidence.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          <EvidenceChips evidence={opportunity.evidence} byId={byId} />
+        </div>
+      )}
+    </article>
+  )
+}
+
+const OPPORTUNITY_QUADRANTS = [
+  { impact: "high", effort: "low", title: "Quick wins", description: "High estimated impact with lower estimated effort." },
+  { impact: "high", effort: "high", title: "Strategic bets", description: "High estimated impact that likely needs more work." },
+  { impact: "low", effort: "low", title: "Incremental gains", description: "Lower impact and effort; useful when capacity is spare." },
+  { impact: "low", effort: "high", title: "Deprioritize", description: "Lower estimated impact with higher estimated effort." },
+] as const
+
+export function OpportunitiesPanel({ report, sources = [] }: { report: CompetitionReport; sources?: CompetitionSourceView[] }) {
+  const byId = useMemo(() => new Map(sources.map((s, i) => [`s${i + 1}`, s])), [sources])
+  const unprioritized = report.opportunities.filter((opportunity) => !opportunity.impact || !opportunity.effort)
   return (
     <>
       <Card>
@@ -662,7 +886,50 @@ export function OpportunitiesPanel({ report }: { report: CompetitionReport }) {
             {report.opportunities.length}
           </span>
         </div>
-        <ClaimList claims={report.opportunities} empty="Run live research to surface opportunities grounded in your sources." />
+        <p className="mt-1 text-sm leading-6 text-muted-foreground">
+          Impact and effort are AI estimates from the cited evidence, not proven financial outcomes. Opportunities without both estimates stay in the unprioritized list.
+        </p>
+        {report.opportunities.length === 0 ? (
+          <p className="mt-3 rounded-xl border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">
+            Run live research to surface opportunities grounded in your sources.
+          </p>
+        ) : (
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            {OPPORTUNITY_QUADRANTS.map((quadrant) => {
+              const items = report.opportunities.filter((opportunity) => opportunity.impact === quadrant.impact && opportunity.effort === quadrant.effort)
+              return (
+                <section key={`${quadrant.impact}-${quadrant.effort}`} className="rounded-xl border border-border bg-background/50 p-3">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <h3 className="text-sm font-bold">{quadrant.title}</h3>
+                    <span className="font-mono text-[10px] text-muted-foreground">{items.length}</span>
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">{quadrant.description}</p>
+                  <div className="mt-3 flex flex-col gap-2">
+                    {items.length === 0 ? (
+                      <p className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">No opportunities estimated here.</p>
+                    ) : items.map((opportunity, index) => (
+                      <OpportunityCard key={`${index}-${opportunity.text}`} opportunity={opportunity} byId={byId} />
+                    ))}
+                  </div>
+                </section>
+              )
+            })}
+            <section className="rounded-xl border border-dashed border-border bg-background/50 p-3 lg:col-span-2">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h3 className="text-sm font-bold">Needs prioritization</h3>
+                <span className="font-mono text-[10px] text-muted-foreground">{unprioritized.length}</span>
+              </div>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">These opportunities are supported by the report but do not yet have both impact and effort estimates.</p>
+              <div className="mt-3 grid gap-2 lg:grid-cols-2">
+                {unprioritized.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">Every opportunity has an impact/effort estimate.</p>
+                ) : unprioritized.map((opportunity, index) => (
+                  <OpportunityCard key={`unprioritized-${index}-${opportunity.text}`} opportunity={opportunity} byId={byId} />
+                ))}
+              </div>
+            </section>
+          </div>
+        )}
       </Card>
       <Card>
         <div className="flex items-center gap-2">
@@ -721,6 +988,22 @@ export function OpportunitiesPanel({ report }: { report: CompetitionReport }) {
 }
 
 export function SourcesEvidence({ research, report }: { research: CompetitionResearchView; report?: CompetitionReport }) {
+  const [query, setQuery] = useState("")
+  const [category, setCategory] = useState("all")
+  const [relevance, setRelevance] = useState("all")
+  const rows = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    return research.sources
+      .map((source, index) => ({ source, id: `s${index + 1}` }))
+      .filter(({ source }) => {
+        if (category !== "all" && (source.category ?? "uncategorized") !== category) return false
+        if (relevance !== "all" && (source.relevance ?? "unclassified") !== relevance) return false
+        if (!needle) return true
+        return [source.title, source.domain, source.snippet, source.excerpt, source.provider, source.relevanceReason]
+          .filter(Boolean)
+          .some((value) => value!.toLowerCase().includes(needle))
+      })
+  }, [research.sources, query, category, relevance])
   return (
     <div className="rounded-xl border border-border px-3 py-2">
       <p className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
@@ -732,9 +1015,44 @@ export function SourcesEvidence({ research, report }: { research: CompetitionRes
           Searched: {research.queries.map((q, i) => `q${i + 1} “${q}”`).join(" · ")}
         </p>
       )}
+      <div className="mt-3 grid gap-2 rounded-xl border border-border bg-background/50 p-3 sm:grid-cols-[1fr_auto_auto]">
+        <label className="relative min-w-0">
+          <span className="sr-only">Search sources</span>
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search titles, domains, excerpts…"
+            className="w-full rounded-lg border border-border bg-card py-2 pl-9 pr-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+        </label>
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="shrink-0 font-medium">Type</span>
+          <select value={category} onChange={(event) => setCategory(event.target.value)} className="min-w-0 rounded-lg border border-border bg-card px-2 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <option value="all">All types</option>
+            {Object.entries(SOURCE_CATEGORY_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="shrink-0 font-medium">Relevance</span>
+          <select value={relevance} onChange={(event) => setRelevance(event.target.value)} className="min-w-0 rounded-lg border border-border bg-card px-2 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <option value="all">All relevance</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+            <option value="irrelevant">Irrelevant</option>
+            <option value="unclassified">Unclassified</option>
+          </select>
+        </label>
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground" aria-live="polite">
+        Showing {rows.length} of {research.sources.length} sources.
+      </p>
       <div className="mt-2 flex flex-col gap-3">
-        {research.sources.map((source, index) => {
-          const id = `s${index + 1}`
+        {rows.map(({ source, id }) => {
           const supported = report ? claimsCitingSource(report, id) : []
           return (
             <div key={`${id}-${source.url ?? source.title}`} className="rounded-xl border border-border bg-background/50 px-3 py-2">
@@ -782,6 +1100,11 @@ export function SourcesEvidence({ research, report }: { research: CompetitionRes
             </div>
           )
         })}
+        {rows.length === 0 && (
+          <p className="rounded-xl border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">
+            No sources match these filters. Clear the search or choose a broader source type.
+          </p>
+        )}
       </div>
       <p className="mt-3 flex items-start gap-1.5 text-[10px] leading-5 text-muted-foreground">
         <TriangleAlert className="mt-0.5 size-3 shrink-0" aria-hidden />
@@ -903,7 +1226,7 @@ export function StructuredReportBody({
     <div className="flex flex-col gap-4">
       <CompetitorCards report={report} sources={sources} researchedAt={research?.collectedAt} />
       <MarketIntelligence report={report} sources={sources} />
-      <OpportunitiesPanel report={report} />
+      <OpportunitiesPanel report={report} sources={sources} />
     </div>
   )
 }

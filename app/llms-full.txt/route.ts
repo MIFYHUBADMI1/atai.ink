@@ -5,6 +5,7 @@ import { CATEGORY_META, FORMAT_LABEL, TYPE_LABEL } from "@/lib/resources"
 import { publicResources } from "@/lib/resources/store"
 import { resourceBlocksToMarkdown, resourceFormat, formatFileSize } from "@/lib/resources/media"
 import type { Resource } from "@/lib/resources/types"
+import { publicArticles } from "@/lib/blog/store"
 
 /**
  * Full machine-readable corpus served at /llms-full.txt. Every published
@@ -56,6 +57,7 @@ function resourceBody(resource: Resource): string {
 export async function GET() {
   const resources = await publicResources()
   const latest = resources.map((resource) => resource.updatedAt).sort().at(-1)
+  const posts = await publicArticles()
 
   // The extended onboarding guide is the canonical end-to-end manual. Include
   // it in full so AI assistants and search engines get the complete picture
@@ -100,7 +102,7 @@ export async function GET() {
     "## Extended onboarding guide (canonical end-to-end manual)",
     "",
     `The most complete, authoritative guide to using Atai is the extended onboarding guide. Canonical URL: ${SITE_URL}/docs/onboarding`,
-    "It covers what Atai is, how to start, plan, build, publish, operate, grow and scale a business, an exact URL directory for every page, the billing and credit reference, and solutions to common problems.",
+    "It covers what Atai is, how to start, plan, build, publish, operate, grow and scale a business, plus checklists, a glossary, and solutions to common problems.",
     "",
     "### Full text of the onboarding guide",
     "",
@@ -130,6 +132,24 @@ export async function GET() {
     "",
     ...troubleshootingLines,
     "",
+    "## Blog & comparisons",
+    "",
+    `The Atai blog publishes independent comparisons of Atai with other AI app builders, plus founder guides. Canonical index: ${SITE_URL}/blog`,
+    "",
+    ...posts.flatMap((post) => [
+      "---",
+      "",
+      `### ${post.title}`,
+      "",
+      `URL: ${SITE_URL}/blog/${post.slug}`,
+      `Published: ${post.publishedAt}${post.updatedAt && post.updatedAt !== post.publishedAt ? ` · Updated: ${post.updatedAt}` : ""} · Reading time: ${post.readingMinutes} min`,
+      post.tags.length ? `Topics: ${post.tags.join(", ")}` : "",
+      "",
+      post.description,
+      "",
+      post.body,
+      "",
+    ]),
     "## Resources",
     "",
   ]

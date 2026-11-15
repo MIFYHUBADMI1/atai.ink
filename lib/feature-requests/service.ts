@@ -353,6 +353,7 @@ export async function adminPatch(
   if (!doc) throw new AppError("UNKNOWN", "We couldn't find that request.", 404)
   const now = Date.now()
   const $set: Record<string, unknown> = { updatedAt: now }
+  const $unset: Record<string, string> = {}
 
   if (patch.status) {
     if (!isFeatureRequestStatus(patch.status)) throw new AppError("VALIDATION", "Invalid status.", 400)
@@ -382,10 +383,20 @@ export async function adminPatch(
     $set.category = patch.category
   }
   if (typeof patch.hidden === "boolean") $set.hidden = patch.hidden
-  if (typeof patch.releaseNote === "string") $set.releaseNote = patch.releaseNote.trim() || undefined
-  if (typeof patch.releaseLink === "string") $set.releaseLink = patch.releaseLink.trim() || undefined
+  // An empty release note/link CLEARS the field — it must be removed, not
+  // written as null.
+  if (typeof patch.releaseNote === "string") {
+    const releaseNote = patch.releaseNote.trim()
+    if (releaseNote) $set.releaseNote = releaseNote
+    else $unset.releaseNote = ""
+  }
+  if (typeof patch.releaseLink === "string") {
+    const releaseLink = patch.releaseLink.trim()
+    if (releaseLink) $set.releaseLink = releaseLink
+    else $unset.releaseLink = ""
+  }
 
-  await col.updateOne({ id }, { $set })
+  await col.updateOne({ id }, { $set, ...(Object.keys($unset).length > 0 ? { $unset } : {}) })
 
   if (patch.internalNote?.trim()) {
     await (await featureRequestInternalNotesCol()).insertOne({

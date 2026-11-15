@@ -59,6 +59,11 @@ function connect(): Promise<MongoClient> {
     // reconnects a dead socket on its own; timing out a healthy-but-slow op
     // only tears down the pool in the middle of legitimate work.
     socketTimeoutMS: DEFAULT_SOCKET_TIMEOUT_MS,
+    // Without this the driver serialises `undefined` as `null`, so an omitted
+    // optional field comes back from the database as an explicit null and any
+    // schema that only accepts `undefined` rejects the document on the next
+    // write. Omitting the key keeps "not set" and "null" the same thing.
+    ignoreUndefined: true,
   })
   // Without an error listener, socket resets become process-level uncaughtException.
   client.on("error", (error) => {

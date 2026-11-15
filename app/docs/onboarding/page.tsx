@@ -2,11 +2,12 @@ import type { Metadata } from "next"
 import fs from "node:fs"
 import path from "node:path"
 import Link from "next/link"
-import { ArrowLeft, ArrowRight, BookOpen, LifeBuoy } from "lucide-react"
+import { ArrowLeft, ArrowRight, LifeBuoy } from "lucide-react"
 import { SiteHeader } from "@/components/site-header"
 import { SiteFooter } from "@/components/site-footer"
 import { MarkdownArticle } from "@/components/resources/markdown-article"
 import { markdownHeadings } from "@/lib/resources/media"
+import { extractFaqs } from "@/lib/docs/faq"
 import { SITE_URL } from "@/lib/env"
 
 /**
@@ -38,73 +39,20 @@ function loadGuide(): string {
   }
 }
 
-/**
- * Extracts a clean Q/A list from "Part 10 — Common problems" of the guide so
- * the page can emit schema.org FAQPage structured data. Tolerant of the
- * markdown's two problem formats: top-level `## 10.x Title` headings and
- * inline `**(a) ...**` sub-items. Runs at build time (force-static).
- */
-function cleanInline(s: string): string {
-  return s
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/\*([^*]+)\*/g, "$1")
-    .replace(/^[-\*]\s+/, "")
-    .replace(/\s+/g, " ")
-    .trim()
-}
-
-function extractFaqs(md: string): Array<{ q: string; a: string }> {
-  const lines = md.split(/\r?\n/)
-  const start = lines.findIndex((l) => /^##\s+10\./.test(l))
-  const end = lines.findIndex((l, i) => i > start && /^##\s+1[1-9]\./.test(l))
-  if (start === -1) return []
-  const region = lines.slice(start, end === -1 ? undefined : end)
-  const faqs: Array<{ q: string; a: string[] }> = []
-  let cur: { q: string; a: string[] } | null = null
-  const flush = () => {
-    if (cur && cur.a.join(" ").replace(/\s+/g, " ").trim().length > 20) faqs.push(cur)
-  }
-  for (const line of region) {
-    let m = /^##\s+10\.\d+\s+(.*)$/.exec(line)
-    if (m) {
-      flush()
-      cur = { q: cleanInline(m[1]), a: [] }
-      continue
-    }
-    m = /^\*\*\s*\(([a-z0-9]+)\)\s*([^*]+?)\s*\*\*(.*)$/.exec(line)
-    if (m) {
-      flush()
-      const rest = m[3] ? cleanInline(m[3]) : ""
-      const q = cleanInline(m[2]).replace(/^["“”]/, "").replace(/["“”]$/, "")
-      cur = { q, a: rest ? [rest] : [] }
-      continue
-    }
-    if (cur) {
-      const t = cleanInline(line)
-      if (t) cur.a.push(t)
-    }
-  }
-  flush()
-  return faqs
-    .map((f) => ({ q: f.q, a: f.a.join(" ").replace(/\s+/g, " ").trim().slice(0, 500) }))
-    .filter((f) => f.a.length > 20)
-    .slice(0, 30)
-}
-
 export const metadata: Metadata = {
-  title: "New User Onboarding Guide | Atai Documentation",
+  title: "Atai Getting Started Guide | Create an Account & Build Your Business",
   description:
-    "The complete Atai manual: what Atai is, how to start, plan, build, launch, run, grow, scale and manage your business end to end — with exact page URLs, step-by-step guides, billing and credit reference, and solutions to common problems.",
+    "A plain-language, step-by-step guide to starting, building, launching, running and growing a business on Atai — with fixes for common problems.",
   keywords: [
     "Atai onboarding",
     "Atai getting started",
-    "Atai billing page",
+    "create Atai account",
+    "Atai sign up",
+    "Atai login",
     "Atai tutorial",
     "Atai troubleshooting",
     "build a business with AI",
-    "Atai credits and pricing",
+    "start an online business",
   ],
   alternates: { canonical: "/docs/onboarding" },
   robots: { index: true, follow: true },
@@ -113,15 +61,15 @@ export const metadata: Metadata = {
     locale: "en_US",
     url: `${SITE_URL}/docs/onboarding`,
     siteName: "Atai",
-    title: "New User Onboarding Guide | Atai",
+    title: "Atai Getting Started Guide | Create an Account",
     description:
-      "Everything a new Atai owner needs: start, build, run, grow, scale and manage a business — with exact URLs and fixes for common problems.",
+      "Everything a new Atai owner needs: start, build, run and grow a business — with clear steps and fixes for common problems.",
     images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Atai onboarding guide" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "New User Onboarding Guide | Atai",
-    description: "The extended Atai manual — every page, every step, every fix.",
+    title: "Atai Getting Started Guide | Create an Account",
+    description: "The Atai getting-started guide — every step and every fix.",
     images: ["/og-image.png"],
   },
 }
@@ -129,8 +77,26 @@ export const metadata: Metadata = {
 export default function OnboardingGuidePage() {
   const markdown = loadGuide()
   const sections = markdownHeadings(markdown)
+  const troubleshootingId =
+    sections.find((s) => /common problems/i.test(s.text))?.id ?? "common-problems"
 
-  const faqs = extractFaqs(markdown)
+  // Two sections hold Q/A content: "Common problems" and "Frequently asked
+  // questions". Merge both (deduped) so the FAQPage structured data reflects
+  // everything the guide actually answers.
+  const faqs = (() => {
+    const seen = new Set<string>()
+    return [
+      ...extractFaqs(markdown),
+      ...extractFaqs(markdown, { section: /^##\s+frequently asked questions/i }),
+    ]
+      .filter((f) => {
+        const key = f.q.toLowerCase()
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+      .slice(0, 30)
+  })()
   const canonical = `${SITE_URL}/docs/onboarding`
 
   // Structured data: helps search engines and AI assistants parse the guide
@@ -139,9 +105,9 @@ export default function OnboardingGuidePage() {
     "@context": "https://schema.org",
     "@type": "TechArticle",
     "mainEntityOfPage": { "@type": "WebPage", "@id": canonical },
-    "headline": "The complete Atai onboarding guide",
+    "headline": "Atai Getting Started Guide",
     "description":
-      "Everything a new Atai owner needs, end to end: what Atai is, how to start, plan, build, publish, operate, grow and scale — plus an exact URL for every page and a fix for every common problem.",
+      "Everything a new Atai owner needs, end to end: what Atai is, how to start, plan, build, publish, operate, grow and scale — plus a fix for every common problem.",
     "image": [`${SITE_URL}/og-image.png`],
     "datePublished": "2026-11-14",
     "dateModified": "2026-11-14",
@@ -197,33 +163,39 @@ export default function OnboardingGuidePage() {
             Documentation · Extended edition
           </p>
           <h1 className="text-balance text-4xl font-semibold tracking-tight sm:text-5xl">
-            The complete Atai onboarding guide
+            Atai Getting Started Guide
           </h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">
             Everything a new owner needs, end to end: what Atai is, how to start, plan, build,
-            publish, operate, grow and scale — plus an exact URL for every page and a fix for
-            every common problem.
+            publish, operate, grow and scale — plus a fix for every common problem.
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
-            <a
-              href="#part-1-start-detailed-step-by-step"
+            <Link
+              href="/register"
               className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
             >
-              Start at Part 1 <ArrowRight className="size-4" />
+              Create your account <ArrowRight className="size-4" />
+            </Link>
+            <a
+              href={`#${sections[0]?.id ?? ""}`}
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium transition-colors hover:bg-accent"
+            >
+              Start reading <ArrowRight className="size-4" />
             </a>
             <a
-              href="#part-10-common-problems-and-how-to-solve-them"
+              href={`#${troubleshootingId}`}
               className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium transition-colors hover:bg-accent"
             >
               <LifeBuoy className="size-4" /> Troubleshooting
             </a>
-            <a
-              href="#part-9-complete-url-directory"
-              className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium transition-colors hover:bg-accent"
-            >
-              <BookOpen className="size-4" /> All URLs
-            </a>
           </div>
+          <p className="mt-4 text-sm text-muted-foreground">
+            Already have an account?{" "}
+            <Link href="/login" className="font-medium text-primary underline underline-offset-4 hover:decoration-primary">
+              Sign in
+            </Link>
+            .
+          </p>
         </div>
       </section>
 
@@ -239,7 +211,7 @@ export default function OnboardingGuidePage() {
                 key={id}
                 href={`#${id}`}
                 className={`block rounded-md px-2.5 py-1.5 text-xs leading-5 transition-colors ${
-                  /^Part \d+/.test(text)
+                  /^\d+\./.test(text)
                     ? "font-semibold text-foreground hover:bg-accent"
                     : "pl-4 text-muted-foreground hover:bg-accent hover:text-foreground"
                 }`}
@@ -253,15 +225,12 @@ export default function OnboardingGuidePage() {
         {/* Guide body */}
         <article className="max-w-3xl min-w-0">
           <div className="mb-8 rounded-xl border border-primary/25 bg-primary/5 px-5 py-4 text-sm leading-6 text-muted-foreground">
-            <strong className="text-foreground">New here?</strong> The billing page is at{" "}
+            <strong className="text-foreground">New here?</strong> Manage your credits, plan and
+            invoices in{" "}
             <Link href="/settings/billing" className="font-medium text-primary underline underline-offset-4 hover:decoration-primary">
-              {SITE_URL}/settings/billing
+              Settings → Billing
             </Link>
-            . Jump to the{" "}
-            <a href="#05-the-i-want-to-lookup-table-exact-urls" className="font-medium text-primary underline underline-offset-4">
-              “I want to…” lookup table
-            </a>{" "}
-            to find any page instantly.
+            . Then start with Section 1 below and follow the steps in order.
           </div>
 
           <MarkdownArticle markdown={markdown} className="onboarding-doc" />
@@ -273,9 +242,9 @@ export default function OnboardingGuidePage() {
             <p className="mt-2 text-sm leading-7 text-muted-foreground">
               Email <a href="mailto:support@atai.ink" className="font-medium text-primary hover:underline">support@atai.ink</a>,
               call or WhatsApp <a href="tel:+256761819885" className="font-medium text-primary hover:underline">+256761819885</a>,
-              or ask in the{" "}
-              <a href="https://chat.whatsapp.com/CB3zVz7UnsQLfDjjk04gt1" target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">
-                Atai WhatsApp community
+              or follow the{" "}
+              <a href="https://whatsapp.com/channel/0029Vb9sizc2Jl8CaYWJhZ1N" target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">
+                Atai WhatsApp channel
               </a>.
             </p>
             <div className="mt-5 flex flex-wrap gap-3 border-t border-border pt-5">

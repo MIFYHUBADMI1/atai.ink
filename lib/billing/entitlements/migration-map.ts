@@ -24,6 +24,24 @@ export const LEGACY_TO_COMMERCIAL: Record<string, CommercialPlanId> = {
   business: "growth",
   professional: "scale",
   enterprise: "enterprise",
+  // Identity entries: "growth"/"scale" were never legacy ids, but a record
+  // written by the new commercial flow stores the commercial id in planId.
+  // Without these, such a record would fall through to "explorer" (free).
+  growth: "growth",
+  scale: "scale",
+}
+
+/** The canonical commercial plan ids. */
+export const COMMERCIAL_PLAN_IDS: readonly CommercialPlanId[] = [
+  "explorer",
+  "starter",
+  "growth",
+  "scale",
+  "enterprise",
+]
+
+export function isCommercialPlanId(value: unknown): value is CommercialPlanId {
+  return typeof value === "string" && (COMMERCIAL_PLAN_IDS as readonly string[]).includes(value)
 }
 
 export interface ResolvedPlan {

@@ -62,4 +62,14 @@ describe("annual scheduler month math (Gate 5, §Issue 3)", () => {
     expect(getCommercialPlanId(annualSub({}))).toBe("growth")
     expect(getCommercialPlanId(annualSub({ commercialPlanId: "scale", planId: "professional" }))).toBe("scale")
   })
+
+  it("activation's month-0 window equals the sweep's month-0 window (grant dedupe)", () => {
+    // activatePaidSubscription grants month 0 with periodEnd = addMonths(now, 1)
+    // and stores currentPeriodStart = now. The sweep must compute the identical
+    // window so the shared idempotency key prevents a double grant.
+    const now = Date.UTC(2026, 0, 1)
+    const sub = annualSub({ currentPeriodStart: now, currentPeriodEnd: addMonths(now, 12) })
+    const due = computeDueGrantMonths(sub, true, now)
+    expect(due[0]).toEqual({ monthIndex: 0, periodStart: now, periodEnd: addMonths(now, 1) })
+  })
 })

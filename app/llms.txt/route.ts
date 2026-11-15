@@ -2,6 +2,7 @@ import { SITE_URL } from "@/lib/env"
 import { CATEGORY_META, RESOURCE_CATEGORIES, summarize } from "@/lib/resources"
 import { publicResources } from "@/lib/resources/store"
 import { resourceFormat } from "@/lib/resources/media"
+import { publicArticles } from "@/lib/blog/store"
 
 /**
  * Machine-readable index for chat bots and AI search engines, served at /llms.txt.
@@ -18,6 +19,7 @@ const HEADERS = {
 export async function GET() {
   const resources = (await publicResources()).map(summarize)
   const latest = resources.map((resource) => resource.updatedAt).sort().at(-1)
+  const posts = await publicArticles()
 
   const lines: string[] = [
     "# Atai",
@@ -44,12 +46,20 @@ export async function GET() {
     "## Documentation",
     "",
     `- [Atai documentation](${SITE_URL}/docs): product walkthroughs for getting started, choosing a mode, planning, building, publishing, credits, GitHub, and account settings.`,
-    `- [New user onboarding guide (extended)](${SITE_URL}/docs/onboarding): the complete end-to-end manual — what Atai is, how to start, plan, build, launch, run, grow, scale and manage a business, with an exact URL directory, billing and credit reference, and solutions to common problems.`,
-    `- [Runtime API, SDK & API Keys](${SITE_URL}/docs/runtime-api): the unified capability API, @atai-group/sdk, creating/rotating keys, the /api/runtime/v1 endpoints, security, usage and limits.`,
+    `- [New user onboarding guide (extended)](${SITE_URL}/docs/onboarding): a plain-language, end-to-end guide — what Atai is, how to start, plan, build, launch, run and grow a business, plus billing guidance and fixes for common problems.`,
+    `- [Runtime API, SDK & API Keys](${SITE_URL}/docs/runtime-api): the unified capability API, @atai-group/sdk, keeping API keys safe, security, and usage.`,
     `- [Database Manager handbook](${SITE_URL}/docs/database-manager): modeling tables and records, field types, relations, and the REST API behind the Database Manager.`,
     `- [Growth & marketing playbook](${SITE_URL}/docs/growth-marketing): growth overview, Studio, SEO audit, ads & campaigns, market research, referrals, learning, and feature gating.`,
-    `- [Troubleshooting & error reference](${SITE_URL}/docs/troubleshooting): symptom → cause → fix for every common Atai problem, with exact URLs and endpoints.`,
+    `- [Troubleshooting & error reference](${SITE_URL}/docs/troubleshooting): symptom → cause → fix for every common Atai problem, with clear steps to resolve it.`,
     `- [Resource library](${SITE_URL}/resources): guides, playbooks, tutorials, roadmaps, templates, documents, images, and videos for founders.`,
+    "",
+    "## Blog & comparisons",
+    "",
+    `- [Atai blog](${SITE_URL}/blog): independent comparisons of Atai with Lovable, Bolt.new, v0, and Replit Agent, plus guides for founders building without code.`,
+    ...posts.map(
+      (post) =>
+        `- [${post.title}](${SITE_URL}/blog/${post.slug}): ${post.description}`,
+    ),
     "",
     "## Resource areas",
     "",
@@ -78,7 +88,7 @@ export async function GET() {
   lines.push(
     "## Developers (optional)",
     "",
-    "Same infrastructure the business builder uses, via `@atai-group/sdk` and an Atai API key (`atai_proj_...`). See /developers and /sdk. Start at the homepage if you are launching a business, not an integration.",
+    "Same infrastructure the business builder uses, via `@atai-group/sdk` and an Atai API key. See /developers and /sdk. Start at the homepage if you are launching a business, not an integration. Never publish an API key.",
     "",
     "## Machine-readable",
     "",

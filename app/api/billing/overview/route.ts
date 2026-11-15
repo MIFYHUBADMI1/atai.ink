@@ -9,11 +9,7 @@ import {
   resolveCommercialPlan,
 } from "@/lib/billing/entitlements"
 import type { UsageAlerts } from "@/lib/billing/entitlements"
-import { SUBSCRIPTION_PLANS } from "@/lib/billing/config"
-import {
-  getCommercialPlans,
-  COMMERCIAL_PRICING_ENABLED,
-} from "@/lib/billing/entitlements/commercial-plans"
+import { getCommercialPlans } from "@/lib/billing/entitlements/commercial-plans"
 
 /**
  * GET /api/billing/overview
@@ -80,19 +76,17 @@ export async function GET() {
         // When the commercial catalog is live, expose which commercial plan the
         // user's (possibly legacy) subscription maps to, so the in-app billing
         // page highlights the right card in the new five-plan list.
-        if (COMMERCIAL_PRICING_ENABLED) {
-          activeCommercialPlanId =
-            (sub?.commercialPlanId as string | undefined) ??
-            resolveCommercialPlan(sub?.planId as string, { hasProjects: count > 0 }).commercialPlanId
-        }
+        activeCommercialPlanId =
+          (sub?.commercialPlanId as string | undefined) ??
+          resolveCommercialPlan(sub?.planId as string, { hasProjects: count > 0 }).commercialPlanId
       } catch {
         usageAlerts = null
       }
     }
 
-    // The active plan catalog — commercial when the flag is on, else legacy. This
-    // keeps the in-app upgrade list in lockstep with the public pricing page.
-    const plans = COMMERCIAL_PRICING_ENABLED ? getCommercialPlans() : SUBSCRIPTION_PLANS
+    // The active plan catalog — commercial five-plan set. The legacy catalog
+    // is no longer offered for purchase.
+    const plans = getCommercialPlans()
 
     return ok({
       balance,

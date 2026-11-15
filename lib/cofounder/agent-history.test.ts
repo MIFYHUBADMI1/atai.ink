@@ -26,7 +26,16 @@ vi.mock("ai", () => ({
   tool: vi.fn((def: unknown) => def),
   stepCountIs: vi.fn(() => ({})),
 }))
-vi.mock("@/lib/analysis/model", () => ({ MODEL: {} }))
+vi.mock("@/lib/analysis/model", () => ({ MODEL: {}, openRouterChatModel: () => ({}) }))
+vi.mock("./model", () => ({
+  resolveCofounderModel: vi.fn(() =>
+    Promise.resolve({ tier: { id: "spark", name: "Spark", creditsPerMessage: 0 }, modelId: "test/model", model: {} }),
+  ),
+}))
+vi.mock("./credits", () => ({
+  chargeCofounderMessage: vi.fn(() => Promise.resolve(null)),
+  refundCofounderMessage: vi.fn(() => Promise.resolve()),
+}))
 vi.mock("@/lib/store/store", () => ({ store: { listProjects: mocks.listProjects } }))
 vi.mock("@/lib/store/id", () => ({ cryptoId: () => "id" }))
 vi.mock("@/lib/db/collections", () => ({

@@ -36,13 +36,13 @@ function loadGuide(): string {
 export const metadata: Metadata = {
   title: "Runtime API, SDK & API Keys | Atai Documentation",
   description:
-    "The complete guide to the Atai Runtime: what it is, installing @atai-group/sdk, creating and rotating API keys, the /api/runtime/v1 endpoints, security rules, usage and limits, and fixes for common problems.",
+    "A plain-language guide to Atai's Runtime and SDK: what it is, how to install and use it, how to keep your API keys safe, and fixes for common problems.",
   keywords: [
     "Atai Runtime API",
     "Atai SDK",
     "ATAI_API_KEY",
     "Atai API keys",
-    "api/runtime/v1",
+    "Atai API access",
     "Atai developer",
   ],
   alternates: { canonical: "/docs/runtime-api" },
@@ -68,6 +68,8 @@ export const metadata: Metadata = {
 export default function RuntimeApiPage() {
   const markdown = loadGuide()
   const sections = markdownHeadings(markdown)
+  const troubleshootingId =
+    sections.find((s) => /common problems/i.test(s.text))?.id ?? "common-problems"
   const faqs = extractFaqs(markdown)
   const canonical = `${SITE_URL}/docs/runtime-api`
 
@@ -77,7 +79,7 @@ export default function RuntimeApiPage() {
     mainEntityOfPage: { "@type": "WebPage", "@id": canonical },
     headline: "Runtime API, SDK & API Keys",
     description:
-      "Everything about the Atai Runtime: the unified capability API behind every Atai business, the @atai-group/sdk client, API key creation/rotation, the /api/runtime/v1 endpoints, security, and usage.",
+      "Everything about the Atai Runtime in plain language: the unified capability API behind every Atai business, the @atai-group/sdk client, keeping API keys safe, security, and usage.",
     image: [`${SITE_URL}/og-image.png`],
     datePublished: "2026-11-14",
     dateModified: "2026-11-14",
@@ -132,9 +134,8 @@ export default function RuntimeApiPage() {
             Runtime API, SDK &amp; API Keys
           </h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">
-            The unified capability API behind every Atai business. Install the SDK, manage keys,
-            call <code className="rounded bg-muted px-1 font-mono text-xs">/api/runtime/v1</code>, and
-            fix what goes wrong — with exact endpoints and URLs.
+            The unified capability API behind every Atai business. Learn what it is, install the SDK,
+            keep your keys safe, and fix what goes wrong — in plain language.
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
             <a
@@ -144,7 +145,7 @@ export default function RuntimeApiPage() {
               Start reading <ArrowRight className="size-4" />
             </a>
             <a
-              href="#common-problems"
+              href={`#${troubleshootingId}`}
               className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium transition-colors hover:bg-accent"
             >
               <LifeBuoy className="size-4" /> Troubleshooting
@@ -191,16 +192,15 @@ export default function RuntimeApiPage() {
             <p className="mt-2 text-sm leading-7 text-muted-foreground">
               Email <a href="mailto:support@atai.ink" className="font-medium text-primary hover:underline">support@atai.ink</a>,
               call or WhatsApp <a href="tel:+256761819885" className="font-medium text-primary hover:underline">+256761819885</a>,
-              or ask in the{" "}
-              <a href="https://chat.whatsapp.com/CB3zVz7UnsQLfDjjk04gt1" target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">
-                Atai WhatsApp community
+              or follow the{" "}
+              <a href="https://whatsapp.com/channel/0029Vb9sizc2Jl8CaYWJhZ1N" target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">
+                Atai WhatsApp channel
               </a>.
             </p>
             <div className="mt-5 flex flex-wrap gap-3 border-t border-border pt-5">
               <Link href="/sdk" className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline">
                 SDK reference <ArrowRight className="size-3.5" />
               </Link>
-              <Link href="/developers/keys" className="text-sm text-muted-foreground hover:text-foreground">Manage keys</Link>
               <Link href="/docs" className="text-sm text-muted-foreground hover:text-foreground">Short docs</Link>
             </div>
           </div>

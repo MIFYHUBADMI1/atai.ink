@@ -1,5 +1,6 @@
 import { ObjectId, type ClientSession } from "mongodb"
 import { usersCol, ensureIndexes } from "@/lib/db/collections"
+import { buildUpdate } from "@/lib/db/update"
 import type { UserDoc } from "@/lib/types/db"
 import { cryptoId, store } from "@/lib/store/store"
 import { grantCredits } from "@/lib/billing/credit-service"
@@ -171,9 +172,7 @@ export async function linkGoogleToUser(userId: string, googleId: string, imageUr
     // Google verified the email — mark it verified
     await col.updateOne(
       { id: userId },
-      {
-        $set: { googleId, imageUrl: imageUrl ?? undefined, emailVerified: true, updatedAt: Date.now() },
-      },
+      buildUpdate({ googleId, imageUrl, emailVerified: true, updatedAt: Date.now() }),
     )
     // Grant welcome credits via credit-service
     await grantCredits({
@@ -190,7 +189,7 @@ export async function linkGoogleToUser(userId: string, googleId: string, imageUr
   } else {
     await col.updateOne(
       { id: userId },
-      { $set: { googleId, imageUrl: imageUrl ?? undefined, updatedAt: Date.now() } },
+      buildUpdate({ googleId, imageUrl, updatedAt: Date.now() }),
     )
   }
 }
@@ -250,16 +249,20 @@ export async function softDeleteUser(userId: string): Promise<void> {
   const col = await usersCol()
   await col.updateOne(
     { id: userId },
-    {
-      $set: {
-        deletedAt: Date.now(),
-        email: `deleted_${userId}@deleted.Atai.invalid`,
-        name: "Deleted user",
-        passwordHash: undefined,
-        googleId: undefined,
-        imageUrl: undefined,
-      },
-    },
+    buildUpdate({
+      deletedAt: Date.now(),
+      email: `deleted_${userId}@deleted.Atai.invalid`,
+      name: "Deleted user",
+      // Credentials and profile references must be REMOVED, not blanked —
+      // a surviving password hash or OAuth token would keep the account
+      // usable. `buildUpdate` routes every undefined value to `$unset`.
+      passwordHash: undefined,
+      googleId: undefined,
+      githubId: undefined,
+      githubAccessToken: undefined,
+      imageUrl: undefined,
+      imageFileId: undefined,
+    }),
   )
 }
 
@@ -325,7 +328,7 @@ export async function linkGitHubToUser(
   const col = await usersCol()
   await col.updateOne(
     { id: userId },
-    { $set: { githubId, githubUsername, githubAccessToken, imageUrl: imageUrl ?? undefined, emailVerified: true, updatedAt: Date.now() } },
+    buildUpdate({ githubId, githubUsername, githubAccessToken, imageUrl, emailVerified: true, updatedAt: Date.now() }),
   )
 }
 

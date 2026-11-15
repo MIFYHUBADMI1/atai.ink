@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ArrowRight, BookOpen, Code2, Compass, DollarSign, Info, LayoutDashboard, Menu, X, Zap } from "lucide-react"
+import { ArrowRight, BookOpen, Code2, Compass, DollarSign, Info, LayoutDashboard, Menu, Newspaper, X, Zap } from "lucide-react"
 import { buttonVariants } from "@/components/ui/button"
 import { AccountMenu } from "@/components/account-menu"
 import { useSession } from "@/lib/client/api"
@@ -38,6 +38,7 @@ const defaultLinks: NavLink[] = [
   { href: "/pricing", label: "Pricing", icon: DollarSign },
   { href: "/about", label: "About", icon: Info },
   { href: "/resources", label: "Resources", icon: BookOpen },
+  { href: "/blog", label: "Blog", icon: Newspaper },
 ]
 
 const NAV_LINK =
@@ -82,6 +83,7 @@ export function SiteHeader({ activePage, links = defaultLinks, variant = "defaul
             <Link href="/pricing" className={NAV_LINK}>Pricing</Link>
             <Link href="/resources" className={NAV_LINK}>Resources</Link>
             <Link href="/docs" className={NAV_LINK}>Docs</Link>
+            <Link href="/blog" className={NAV_LINK}>Blog</Link>
             <Link href="/sdk" className={NAV_LINK}>SDK & API</Link>
             <Link href="/developers" className={NAV_LINK}>Developers</Link>
             <Link href="/about" className={NAV_LINK}>About</Link>

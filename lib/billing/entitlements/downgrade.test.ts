@@ -9,8 +9,16 @@ import {
 describe("downgrade two-flow (Gate 6, §Issue 4)", () => {
   it("catalog is the single source of truth for caps", () => {
     expect(maxBusinessesForPlan("growth")).toBe(4)
-    expect(maxBusinessesForPlan("explorer")).toBe(0)
+    // Explorer holds one planning business (production is capped separately).
+    expect(maxBusinessesForPlan("explorer")).toBe(1)
     expect(maxBusinessesForPlan("scale")).toBe("unlimited")
+  })
+
+  it("downgrade into Explorer keeps one planning business", () => {
+    const impact = computeDowngradeImpact("growth", "explorer", 4)
+    expect(impact.allowedBusinessesInToPlan).toBe(1)
+    expect(impact.overLimit).toBe(3)
+    expect(impact.requiresActiveSelection).toBe(true)
   })
 
   it("growth → starter with 4 businesses is over limit by 3", () => {

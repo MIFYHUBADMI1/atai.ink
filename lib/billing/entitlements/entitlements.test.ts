@@ -45,12 +45,26 @@ describe("legacy → commercial migration", () => {
 })
 
 describe("entitlement computation", () => {
-  it("Explorer is planning-only and cannot create businesses", () => {
+  it("Explorer holds one planning business but cannot build production", () => {
     const set = buildEntitlementSet("explorer", zero)
     expect(set.planningOnly).toBe(true)
-    const check = checkEntitlement(set, "createProject")
-    expect(check.allowed).toBe(false)
-    expect(check.code).toBe("EXPLORER_PLANNING_ONLY")
+    expect(set.businesses.max).toBe(1)
+    expect(set.productionApps.max).toBe(0)
+    // The free funnel must survive: a new Explorer may start a planning business.
+    expect(checkEntitlement(set, "createProject").allowed).toBe(true)
+    // Production is the wall.
+    const build = checkEntitlement(set, "buildProduction")
+    expect(build.allowed).toBe(false)
+    expect(build.code).toBe("EXPLORER_PLANNING_ONLY")
+    expect(checkEntitlement(set, "deploy").allowed).toBe(false)
+  })
+
+  it("Explorer blocks a second business with an upgrade prompt", () => {
+    const at1 = buildEntitlementSet("explorer", { ...zero, businesses: 1 })
+    const blocked = checkEntitlement(at1, "createProject")
+    expect(blocked.allowed).toBe(false)
+    expect(blocked.code).toBe("BUSINESS_LIMIT_REACHED")
+    expect(blocked.reason).toContain("Upgrade to Starter")
   })
 
   it("grandfathered legacy free keeps production capability", () => {

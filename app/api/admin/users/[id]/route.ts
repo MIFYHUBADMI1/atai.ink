@@ -1,6 +1,7 @@
 import { requireAdmin } from "@/lib/auth/session"
 import { ok, fail, handleRouteError } from "@/lib/api/respond"
 import { usersCol, sessionsCol } from "@/lib/db/collections"
+import { buildUpdate } from "@/lib/db/update"
 import { checkRateLimit } from "@/lib/auth/rate-limit"
 import { adminAdjustCredits, getCreditHistory } from "@/lib/billing/credit-service"
 import { logger } from "@/lib/logging/logger"
@@ -202,18 +203,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       case "delete": {
         await col.updateOne(
           { id },
-          {
-            $set: {
-              deletedAt: now,
-              email: `deleted_${id}@deleted.Atai.invalid`,
-              name: "Deleted user",
-              passwordHash: undefined,
-              googleId: undefined,
-              imageUrl: undefined,
-              imageFileId: undefined,
-              updatedAt: now,
-            },
-          },
+          buildUpdate({
+            deletedAt: now,
+            email: `deleted_${id}@deleted.Atai.invalid`,
+            name: "Deleted user",
+            // Removed, not blanked — a surviving hash or token would keep the
+            // account usable.
+            passwordHash: undefined,
+            googleId: undefined,
+            githubId: undefined,
+            githubAccessToken: undefined,
+            imageUrl: undefined,
+            imageFileId: undefined,
+            updatedAt: now,
+          }),
         )
         // Revoke all sessions
         const sessCol = await sessionsCol()

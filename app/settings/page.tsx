@@ -36,6 +36,20 @@ export default async function SettingsPage() {
             </div>
           </div>
           <Link
+            href="/settings/ai"
+            className="group flex items-center justify-between gap-4 border border-border bg-card p-6 transition-colors hover:border-primary/30 hover:bg-accent/40 md:col-span-2"
+          >
+            <div className="min-w-0">
+              <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">AI co-founder</p>
+              <h2 className="mt-3 text-lg font-medium">Choose your engine</h2>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Pick the model behind your co-founder — four free engines, six paid ones billed per message in
+                credits. Switch any time.
+              </p>
+            </div>
+            <span className="font-mono text-xs text-primary transition-all group-hover:translate-x-0.5">→</span>
+          </Link>
+          <Link
             href="/settings/features"
             className="group flex items-center justify-between gap-4 border border-border bg-card p-6 transition-colors hover:border-primary/30 hover:bg-accent/40 md:col-span-2"
           >
@@ -91,9 +105,9 @@ export default async function SettingsPage() {
             </div>
           </section>
         ) : null}
-        {/* ── WhatsApp Community Banner ── */}
+        {/* ── WhatsApp Channel Banner ── */}
         <a
-          href="https://chat.whatsapp.com/CB3zVz7UnsQLfDjjk04gt1"
+          href="https://whatsapp.com/channel/0029Vb9sizc2Jl8CaYWJhZ1N"
           target="_blank"
           rel="noopener noreferrer"
           className="group relative block overflow-hidden rounded-xl border border-[#25D366]/40 bg-gradient-to-br from-[#25D366]/10 via-[#128C7E]/5 to-[#075E54]/10 p-6 transition-all duration-200 hover:border-[#25D366]/70 hover:shadow-lg hover:shadow-[#25D366]/10"
@@ -113,14 +127,14 @@ export default async function SettingsPage() {
 
             <div className="min-w-0 flex-1 pr-10">
               <div className="flex flex-wrap items-center gap-2">
-                <p className="font-semibold text-foreground">Join the Atai Community on WhatsApp</p>
+                <p className="font-semibold text-foreground">Follow the Atai WhatsApp Channel</p>
               </div>
               <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
                 🎁 <strong className="text-foreground">Monthly token drops</strong> & exclusive discount codes — up to{" "}
-                <strong className="text-[#25D366]">96% off</strong> any plan. Holiday deals, building competitions (win free credits!), and insider perks before anyone else. Don't miss out — the community is where the real rewards happen.
+                <strong className="text-[#25D366]">96% off</strong> any plan. Holiday deals, building competitions (win free credits!), and insider perks before anyone else. Don't miss out — the channel is where the real rewards happen.
               </p>
               <p className="mt-3 inline-flex items-center gap-1.5 font-mono text-xs font-medium text-[#25D366] transition-all group-hover:gap-2.5">
-                Join the group
+                Follow the channel
                 <svg className="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
                 </svg>

@@ -5,7 +5,8 @@ import { Check, X, ChevronDown, Mail } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { CheckoutButton } from "@/components/billing/checkout-button"
 import { PlanChangeDialog } from "@/components/billing/plan-change-dialog"
-import { formatUSD, CREDIT_UNIT_NAME, SUBSCRIPTION_PLANS } from "@/lib/billing/config"
+import { formatUSD, CREDIT_UNIT_NAME } from "@/lib/billing/config"
+import { getCommercialPlans } from "@/lib/billing/entitlements/commercial-plans"
 import { translateFeature } from "@/lib/billing/feature-copy"
 import type { PlanAvailability, SubscriptionPlan } from "@/lib/billing/config"
 import { planCustomerInitiatedDowngrade } from "@/lib/billing/entitlements/downgrade"
@@ -35,6 +36,8 @@ interface PlanCardProps {
   /** The user's current business count — lets the change dialog show the
    * downgrade business-cap impact before confirmation (Gate 6, Flow A). */
   currentBusinesses?: number
+  /** Selected billing cycle from the pricing page toggle (commercial only). */
+  billingCycle?: "monthly" | "annual"
 }
 
 const COMMERCIAL_PLAN_IDS = new Set<string>(["explorer", "starter", "growth", "scale", "enterprise"])
@@ -70,6 +73,7 @@ export function PlanCard({
   translateLabels = false,
   allPlans,
   currentBusinesses,
+  billingCycle = "monthly",
 }: PlanCardProps) {
   const [selected, setSelected] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -83,10 +87,14 @@ export function PlanCard({
   const visibleNotIncluded = filterUnlaunchedFeatures(plan.notIncluded ?? [], plan.availability)
 
   const isActive = activePlanId === plan.id
-  const hasOtherActivePlan = Boolean(activePlanId) && !isActive && activePlanId !== "free"
+  const planSource = allPlans ?? getCommercialPlans()
+  const activePlan = planSource.find((p) => p.id === activePlanId) ?? null
+  // A free account (legacy "free" or the commercial "explorer") is not an
+  // active paid subscription, so other cards must offer purchase, not a switch.
+  const activePlanIsPaid = Boolean(activePlan && activePlan.priceUSD > 0)
+  const hasOtherActivePlan = Boolean(activePlanId) && !isActive && activePlanIsPaid
   const isHighlighted = selected || isActive || plan.popular
 
-  const planSource = allPlans ?? SUBSCRIPTION_PLANS
   const currentPlan = hasOtherActivePlan
     ? (planSource.find((p) => p.id === activePlanId) ?? null)
     : null
@@ -94,7 +102,17 @@ export function PlanCard({
   // Purchase-state logic for the commercial catalog reconciliation.
   const isFree = plan.priceUSD === 0
   const isContact = plan.purchaseState === "contact" || plan.purchaseState === "soon"
-  const isPurchasable = !isFree && plan.purchaseState === "available" && Boolean(plan.dodoProductId)
+  // Annual checkout is purchasable whenever the plan has an annual price —
+  // checkout creates the annual Dodo product on demand when the owner has not
+  // pre-provisioned one.
+  const annualAvailable = Boolean(plan.annualPriceUSD) && plan.annualPurchaseState === "available"
+  const effectiveCycle = billingCycle === "annual" && annualAvailable ? "annual" : "monthly"
+  const annualRequestedButUnavailable = billingCycle === "annual" && !annualAvailable && !isFree && !isContact
+  const isPurchasable =
+    !isFree &&
+    (effectiveCycle === "annual"
+      ? annualAvailable
+      : plan.purchaseState === "available")
 
   // Downgrade consequences (Gate 6, Flow A) — only when switching to a cheaper
   // commercial plan and the current business count is known.
@@ -212,11 +230,20 @@ export function PlanCard({
       <div className="mt-5 pb-5 border-b border-border">
         {plan.priceUSD === 0 ? (
           <span className="text-3xl font-bold">Free</span>
+        ) : effectiveCycle === "annual" && plan.annualPriceUSD ? (
+          <>
+            <span className="text-3xl font-bold">{formatUSD(plan.annualPriceUSD)}</span>
+            <span className="ml-1 text-sm text-muted-foreground">/year</span>
+            {plan.annualSavingsPct ? (
+              <span className="ml-2 text-xs font-medium text-primary">save {plan.annualSavingsPct}%</span>
+            ) : null}
+            <p className="mt-1 text-xs text-muted-foreground">12 months for the price of 11 · credits issued monthly</p>
+          </>
         ) : (
           <>
             <span className="text-3xl font-bold">{formatUSD(plan.priceUSD)}</span>
             <span className="ml-1 text-sm text-muted-foreground">/month</span>
-            {plan.annualPriceUSD ? (
+            {annualAvailable && plan.annualPriceUSD ? (
               <span className="ml-2 text-xs text-muted-foreground">
                 or {formatUSD(plan.annualPriceUSD)}/yr
                 {plan.annualSavingsPct ? (
@@ -226,6 +253,11 @@ export function PlanCard({
             ) : null}
           </>
         )}
+        {annualRequestedButUnavailable ? (
+          <p className="mt-1 text-[11px] leading-snug text-muted-foreground/80">
+            Annual billing isn&rsquo;t available on this plan yet — checkout bills monthly.
+          </p>
+        ) : null}
         <p className="mt-1 text-xs text-muted-foreground font-mono">
           {plan.mirrorCredits > 0
             ? `${plan.mirrorCredits.toLocaleString()} ${CREDIT_UNIT_NAME}`
@@ -286,6 +318,7 @@ export function PlanCard({
             <CheckoutButton
               type="subscription"
               productId={plan.id}
+              billingCycle={effectiveCycle}
               className={cn(
                 "mt-6 w-full",
                 (plan.popular || selected)
@@ -347,7 +380,7 @@ export function PlanCard({
         fetch("/api/billing/checkout", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "subscription", productId: plan.id }),
+          body: JSON.stringify({ type: "subscription", productId: plan.id, billingCycle: effectiveCycle }),
         })
           .then((r) => r.json())
           .then((json) => {

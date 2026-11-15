@@ -19,6 +19,8 @@ export default function robots(): MetadataRoute.Robots {
     "/docs/database-manager",
     "/docs/growth-marketing",
     "/docs/troubleshooting",
+    "/blog",
+    "/blog/",
     "/developers",
     "/sdk",
     "/start",

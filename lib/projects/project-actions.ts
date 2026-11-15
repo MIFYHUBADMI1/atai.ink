@@ -12,6 +12,7 @@ import { getInfrastructurePlan } from "@/lib/infrastructure/plans"
 import { buildFollowupAgentPrompt, buildInitialBuildPrompt } from "@/lib/analysis/prompt-builder"
 import { getBuildCost } from "@/lib/billing/build-auth"
 import { getDeploymentCosts } from "@/lib/billing/runtime-config"
+import { authorizeProductionWork } from "@/lib/billing/entitlements/require"
 import { getProjectAttachments, clearProjectAttachments } from "@/lib/projects/attachments"
 import {
   getPlanSection,
@@ -110,6 +111,15 @@ export async function startProjectBuild(userId: string, projectId: string): Prom
   }
   if (project.state === "building" || project.state === "deploying") {
     return { ok: false, status: 409, code: "AGENT_RUNNING", message: "This project is already being built." }
+  }
+  const buildDenied = await authorizeProductionWork(userId, "buildProduction")
+  if (buildDenied) {
+    return {
+      ok: false,
+      status: 402,
+      code: buildDenied.code ?? "PLAN_LIMIT",
+      message: buildDenied.reason ?? "Your plan does not include production builds.",
+    }
   }
   if (!project.specification) {
     return { ok: false, status: 409, code: "VALIDATION", message: "This project has no application plan yet." }
@@ -334,6 +344,15 @@ export async function startProjectDeploy(userId: string, projectId: string): Pro
   }
   if (project.state === "building" || project.state === "deploying") {
     return { ok: false, status: 409, code: "BUSY", message: "Please wait for the current operation to finish." }
+  }
+  const deployDenied = await authorizeProductionWork(userId, "deploy")
+  if (deployDenied) {
+    return {
+      ok: false,
+      status: 402,
+      code: deployDenied.code ?? "PLAN_LIMIT",
+      message: deployDenied.reason ?? "Your plan does not include hosting a production business.",
+    }
   }
   if (!isTotalumConfigured()) {
     return { ok: false, status: 503, code: "PROVIDER_NOT_CONFIGURED", message: "Deployment service is not connected." }
