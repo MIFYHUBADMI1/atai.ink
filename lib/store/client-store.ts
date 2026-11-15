@@ -17,8 +17,11 @@
  * 3. Clears completely on logout so no data bleeds between accounts.
  *
  * Polling cadence:
- * - Session (/api/me): background refresh every 120s (was 30s) + on-demand
+ * - Session (/api/me): background revalidation every 5 minutes while the tab
+ *   is visible + immediately on tab focus when stale + on-demand
  *   invalidation after any credits-changing action (build, top-up, etc.)
+ * - Theme (/api/user/theme): fetched once per session alongside session init;
+ *   PATCHed on change. Never re-polled.
  * - Projects (/api/projects): no background polling; invalidated on create,
  *   delete, or explicit refresh only.
  * - CreditCosts (/api/credit-costs): fetched once, never re-fetched
@@ -28,12 +31,14 @@
 import { create } from "zustand"
 import type { SessionInfo, CreditCostTable } from "@/lib/client/api"
 import type { ProjectSummary } from "@/lib/types/project"
+import type { Theme } from "@/components/theme-provider"
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-const SESSION_REFRESH_INTERVAL_MS = 120_000 // 2 minutes
-const STALE_THRESHOLD_MS = 60_000 // consider stale after 60s
+const SESSION_REFRESH_INTERVAL_MS = 300_000 // 5 minutes — shared-data revalidation policy
+const STALE_THRESHOLD_MS = 300_000 // stale after 5 minutes
 let sessionFetchGeneration = 0
+let sessionInflight: Promise<void> | null = null
 
 class ApiClientError extends Error {
   status: number
@@ -109,6 +114,15 @@ interface CreditCostsSlice {
   fetchCreditCosts: () => Promise<void>
 }
 
+interface ThemeSlice {
+  theme: Theme | null
+  themeFetched: boolean
+  themeLoading: boolean
+  fetchTheme: () => Promise<void>
+  /** Optimistic local update + fire-and-forget persistence. */
+  setTheme: (theme: Theme) => void
+}
+
 // ─── Lifecycle slice ─────────────────────────────────────────────────────────
 
 interface LifecycleSlice {
@@ -118,7 +132,7 @@ interface LifecycleSlice {
 
 // ─── Combined store type ─────────────────────────────────────────────────────
 
-type ClientStore = SessionSlice & ProjectsSlice & CreditCostsSlice & LifecycleSlice
+type ClientStore = SessionSlice & ProjectsSlice & CreditCostsSlice & ThemeSlice & LifecycleSlice
 
 // ─── Store implementation ────────────────────────────────────────────────────
 
@@ -132,23 +146,31 @@ export const useClientStore = create<ClientStore>((set, get) => ({
   sessionFetchedAt: null,
   _sessionTimer: null,
 
-  fetchSession: async () => {
+  fetchSession: () => {
+    // In-flight dedup: N components calling fetchSession simultaneously share
+    // ONE /api/me request instead of N.
+    if (sessionInflight) return sessionInflight
     const generation = ++sessionFetchGeneration
     set({ sessionLoading: true, sessionError: null })
-    try {
-      const data = await apiFetch<SessionInfo>("/api/me")
-      if (generation !== sessionFetchGeneration) return
-      set({ session: data, sessionLoading: false, sessionError: null, sessionFetchedAt: Date.now() })
-    } catch (e) {
-      if (generation !== sessionFetchGeneration) return
-      const signedOut = isUnauthorized(e) || (e instanceof Error && e.name === "TimeoutError")
-      set({
-        session: signedOut ? null : get().session,
-        sessionLoading: false,
-        sessionError: signedOut ? null : e instanceof Error ? e.message : "Failed to load session",
-        sessionFetchedAt: Date.now(),
-      })
-    }
+    sessionInflight = (async () => {
+      try {
+        const data = await apiFetch<SessionInfo>("/api/me")
+        if (generation !== sessionFetchGeneration) return
+        set({ session: data, sessionLoading: false, sessionError: null, sessionFetchedAt: Date.now() })
+      } catch (e) {
+        if (generation !== sessionFetchGeneration) return
+        const signedOut = isUnauthorized(e) || (e instanceof Error && e.name === "TimeoutError")
+        set({
+          session: signedOut ? null : get().session,
+          sessionLoading: false,
+          sessionError: signedOut ? null : e instanceof Error ? e.message : "Failed to load session",
+          sessionFetchedAt: Date.now(),
+        })
+      } finally {
+        sessionInflight = null
+      }
+    })()
+    return sessionInflight
   },
 
   invalidateSession: async () => {
@@ -226,6 +248,33 @@ export const useClientStore = create<ClientStore>((set, get) => ({
     }
   },
 
+  // ── Theme ──────────────────────────────────────────────────────────────────
+
+  theme: null,
+  themeFetched: false,
+  themeLoading: false,
+
+  fetchTheme: async () => {
+    if (get().themeFetched || get().themeLoading) return
+    set({ themeLoading: true })
+    try {
+      const data = await apiFetch<{ theme: Theme }>("/api/user/theme")
+      set({ theme: data.theme, themeFetched: true, themeLoading: false })
+    } catch {
+      set({ themeFetched: true, themeLoading: false })
+    }
+  },
+
+  setTheme: (theme: Theme) => {
+    set({ theme })
+    void fetch("/api/user/theme", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ theme }),
+    }).catch(() => { /* unauthenticated — localStorage stays authoritative */ })
+  },
+
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   clearAll: () => {
@@ -244,6 +293,9 @@ export const useClientStore = create<ClientStore>((set, get) => ({
       creditCosts: null,
       creditCostsLoading: false,
       creditCostsFetchedAt: null,
+      theme: null,
+      themeFetched: false,
+      themeLoading: false,
     })
   },
 }))

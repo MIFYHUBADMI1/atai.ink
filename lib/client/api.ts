@@ -268,6 +268,20 @@ export function useSession() {
     return () => stopSessionRefresh()
   }, [startSessionRefresh, stopSessionRefresh])
 
+  // Resume intelligently: when a hidden tab becomes visible again, revalidate
+  // shared data once IF it's stale — no polling while the user isn't looking.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return
+      const { sessionFetchedAt, sessionLoading } = useClientStore.getState()
+      if (!sessionLoading && (!sessionFetchedAt || Date.now() - sessionFetchedAt > 300_000)) {
+        void useClientStore.getState().fetchSession()
+      }
+    }
+    document.addEventListener("visibilitychange", onVisible)
+    return () => document.removeEventListener("visibilitychange", onVisible)
+  }, [])
+
   return {
     session,
     error: sessionError ? new Error(sessionError) : null,
@@ -278,6 +292,25 @@ export function useSession() {
     isLoading: sessionLoading || (!session && !sessionFetchedAt),
     refresh: invalidateSession,
   }
+}
+
+// ─── useAccountTheme ──────────────────────────────────────────────────────────
+//
+// Server-persisted theme preference from the shared store — fetched once per
+// session, never re-polled. ThemeProvider consumes this instead of issuing
+// its own /api/user/theme request on every mount.
+
+export function useAccountTheme() {
+  const theme = useClientStore((s) => s.theme)
+  const themeFetched = useClientStore((s) => s.themeFetched)
+  const fetchTheme = useClientStore((s) => s.fetchTheme)
+  const setThemePref = useClientStore((s) => s.setTheme)
+
+  useEffect(() => {
+    if (!themeFetched) void fetchTheme()
+  }, [themeFetched, fetchTheme])
+
+  return { theme, themeFetched, setTheme: setThemePref }
 }
 
 // ─── useProjects ──────────────────────────────────────────────────────────────

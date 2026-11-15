@@ -7,6 +7,7 @@ import { ok, handleRouteError } from "@/lib/api/respond"
 import { toPublicUser } from "@/lib/auth/users"
 import { singleFlight } from "@/lib/cache/single-flight"
 import { subscriptionRecordsCol } from "@/lib/db/collections"
+import { logger } from "@/lib/logging/logger"
 
 const CACHE_HEADERS = {
   // Private: per-user data, must not be shared by CDN.
@@ -29,12 +30,15 @@ const CACHE_HEADERS = {
  * for multiple requests.
  */
 export async function GET() {
+  const t0 = Date.now()
   try {
     const user = await requireUser()
+    const tAuth = Date.now()
 
     // Single-flight wrapper: concurrent identical calls share one DB query.
     const fetcher = singleFlight<Response>(`api.me:${user.id}`)
-    return fetcher(async () => {
+    const res = await fetcher(async () => {
+      const tQ = Date.now()
       const [balance, transactions, subRows] = await Promise.all([
         getBalance(user.id),
         store.listTransactions(user.id, 30),
@@ -65,6 +69,14 @@ export async function GET() {
         },
       }, { headers: CACHE_HEADERS })
     })
+    // Request-level timing — auth vs data queries vs total. No PII logged.
+    logger.info("api.me", "timing", {
+      userId: user.id,
+      authMs: tAuth - t0,
+      dataMs: Date.now() - tAuth,
+      totalMs: Date.now() - t0,
+    })
+    return res
   } catch (e) {
     return handleRouteError("api.me", e)
   }

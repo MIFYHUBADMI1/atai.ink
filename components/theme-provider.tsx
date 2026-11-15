@@ -9,6 +9,7 @@ import {
   useRef,
   type ReactNode,
 } from "react"
+import { useAccountTheme } from "@/lib/client/api"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -130,26 +131,21 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return () => mq.removeEventListener("change", handler)
   }, [])
 
-  // After mount: load saved theme from DB — DB preference wins over localStorage (AC 8)
+  // After mount: adopt the server-persisted theme from the shared store.
+  // The store fetches /api/user/theme once per session (deduplicated across
+  // all consumers) — DB preference wins over localStorage (AC 8).
+  const accountTheme = useAccountTheme()
   useEffect(() => {
-    if (!mounted) return
-    fetch("/api/user/theme", { credentials: "include" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (!data?.data?.theme) return
-        const dbTheme = data.data.theme as Theme
-        if (!THEMES.includes(dbTheme)) return
-        setThemeState((current) => {
-          if (current === dbTheme) return current
-          localStorage.setItem(STORAGE_KEY, dbTheme)
-          applyTheme(dbTheme, systemDarkRef.current)
-          return dbTheme
-        })
-      })
-      .catch(() => {
-        // Unauthenticated or offline — localStorage value is authoritative
-      })
-  }, [mounted])
+    if (!mounted || !accountTheme.themeFetched || !accountTheme.theme) return
+    const dbTheme = accountTheme.theme as Theme
+    if (!THEMES.includes(dbTheme)) return
+    setThemeState((current) => {
+      if (current === dbTheme) return current
+      try { localStorage.setItem(STORAGE_KEY, dbTheme) } catch { }
+      applyTheme(dbTheme, systemDarkRef.current)
+      return dbTheme
+    })
+  }, [mounted, accountTheme.theme, accountTheme.themeFetched])
 
   const setTheme = useCallback((next: Theme) => {
     if (!THEMES.includes(next)) return
@@ -158,16 +154,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     try { localStorage.setItem(STORAGE_KEY, next) } catch { }
     applyTheme(next, sd)
 
-    // Persist to DB fire-and-forget (AC 7)
-    fetch("/api/user/theme", {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ theme: next }),
-    }).catch(() => {
-      // Not authenticated — localStorage is enough
-    })
-  }, [])
+    // Persist via the shared store — optimistic local update + PATCH.
+    // Falls back silently for unauthenticated visitors (localStorage only).
+    accountTheme.setTheme(next)
+  }, [accountTheme])
 
   return (
     <ThemeContext.Provider
