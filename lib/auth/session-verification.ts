@@ -112,14 +112,44 @@ export async function resendSessionVerificationCode(
     windowMs: 15 * 60_000,
     errorCode: "VERIFICATION_RATE_LIMITED",
   })
+
+  // Anti-abuse: 3-minute cooldown between resends, and after 3 resends the
+  // code is blocked for 24 hours. Support can unlock a genuinely locked-out
+  // user after identity checks.
+  const now = Date.now()
+  const resendCount = doc.resendCount ?? 0
+  const blockedUntil = doc.resendBlockedUntil?.getTime() ?? 0
+  if (resendCount >= 3) {
+    if (blockedUntil > now) {
+      throw new AppError(
+        "VERIFICATION_RATE_LIMITED",
+        "Too many code resends. If you think this is a mistake, contact support at hi@atai.ink with your email address and name.",
+      )
+    }
+    await col.updateOne({ _id: doc._id }, { $set: { resendCount: 0 }, $unset: { resendBlockedUntil: "" } })
+  }
+  const lastResentAt = doc.lastResentAt?.getTime() ?? 0
+  if (lastResentAt && now - lastResentAt < 3 * 60_000) {
+    throw new AppError("VERIFICATION_RATE_LIMITED", "Please wait 3 minutes before resending the code.")
+  }
   if (!isSmtpConfigured()) return { sent: false, reason: "unconfigured" }
+
+  const nextResendCount = resendCount + 1
 
   for (let attempt = 0; attempt < 5; attempt++) {
     const code = generateNumericCode(CODE_DIGITS)
     try {
       await col.updateOne(
         { _id: doc._id },
-        { $set: { tokenHash: hashToken(code), expiresAt: new Date(Date.now() + CODE_TTL_MS) } },
+        {
+          $inc: { resendCount: 1 },
+          $set: {
+            tokenHash: hashToken(code),
+            expiresAt: new Date(now + CODE_TTL_MS),
+            lastResentAt: new Date(now),
+            ...(nextResendCount >= 3 ? { resendBlockedUntil: new Date(now + 24 * 60 * 60_000) } : {}),
+          },
+        },
       )
     } catch (e) {
       if (e instanceof Error && /E11000|duplicate key/i.test(e.message)) continue

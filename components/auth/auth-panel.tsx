@@ -86,6 +86,7 @@ export function AuthPanel({
   const [emailOpen, setEmailOpen] = useState(false)
   const [sessionCode, setSessionCode] = useState("")
   const [sessionVerifyCtx, setSessionVerifyCtx] = useState<{ id?: string; email: string } | null>(null)
+  const [sessionCooldown, setSessionCooldown] = useState(0)
 
   const busy = submitting || oauthProvider !== null
 
@@ -98,7 +99,14 @@ export function AuthPanel({
     setOauthProvider(null)
     setResendState("idle")
     setSessionCode("")
+    setSessionCooldown(view === "session-verify" ? 180 : 0)
   }, [view])
+
+  useEffect(() => {
+    if (sessionCooldown <= 0) return
+    const timer = setInterval(() => setSessionCooldown((value) => Math.max(0, value - 1)), 1000)
+    return () => clearInterval(timer)
+  }, [sessionCooldown > 0])
 
   useEffect(() => {
     if (isOpen === false) setEmailOpen(false)
@@ -146,6 +154,7 @@ export function AuthPanel({
     try {
       const result = await resendSessionVerificationCode(sessionVerifyCtx.id)
       setResendState(result.sent ? "sent" : "error")
+      if (result.sent) setSessionCooldown(180)
     } catch {
       setResendState("error")
     }
@@ -403,10 +412,14 @@ export function AuthPanel({
             <button
               type="button"
               className={cn(buttonVariants({ variant: "outline", size: "lg" }), "h-11 w-full")}
-              disabled={resendState === "sending"}
+              disabled={resendState === "sending" || sessionCooldown > 0}
               onClick={onResendSessionCode}
             >
-              {resendState === "sending" ? "Sending..." : "Resend code"}
+              {resendState === "sending"
+                ? "Sending..."
+                : sessionCooldown > 0
+                  ? `Resend code (${Math.floor(sessionCooldown / 60)}:${String(sessionCooldown % 60).padStart(2, "0")})`
+                  : "Resend code"}
             </button>
           ) : null}
           <button type="button" className="text-center text-sm font-medium text-primary underline-offset-4 hover:underline" onClick={() => onViewChange("login")}>

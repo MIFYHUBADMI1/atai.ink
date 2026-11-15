@@ -29,6 +29,13 @@ export function SessionVerifyClient({
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [resendState, setResendState] = useState<"idle" | "sending" | "sent" | "error">("idle")
+  const [resendCooldown, setResendCooldown] = useState(180)
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return
+    const timer = setInterval(() => setResendCooldown((value) => Math.max(0, value - 1)), 1000)
+    return () => clearInterval(timer)
+  }, [resendCooldown > 0])
 
   useEffect(() => {
     let cancelled = false
@@ -63,6 +70,7 @@ export function SessionVerifyClient({
     try {
       const result = await resendSessionVerificationCode(vid)
       setResendState(result.sent ? "sent" : "error")
+      if (result.sent) setResendCooldown(180)
     } catch {
       setResendState("error")
     }
@@ -108,10 +116,14 @@ export function SessionVerifyClient({
           <button
             type="button"
             className={cn(buttonVariants({ variant: "outline", size: "lg" }), "h-11 w-full")}
-            disabled={resendState === "sending"}
+            disabled={resendState === "sending" || resendCooldown > 0}
             onClick={onResend}
           >
-            {resendState === "sending" ? "Sending..." : "Resend code"}
+            {resendState === "sending"
+              ? "Sending..."
+              : resendCooldown > 0
+                ? `Resend code (${Math.floor(resendCooldown / 60)}:${String(resendCooldown % 60).padStart(2, "0")})`
+                : "Resend code"}
           </button>
         ) : null}
       </form>

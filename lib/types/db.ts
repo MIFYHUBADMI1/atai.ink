@@ -178,6 +178,10 @@ export interface VerificationTokenDoc {
   createdAt: number
   expiresAt: Date
   usedAt?: number
+  /** Session-eviction resend abuse controls. */
+  resendCount?: number
+  lastResentAt?: Date
+  resendBlockedUntil?: Date
 }
 
 export interface RateLimitDoc {
