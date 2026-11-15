@@ -54,6 +54,10 @@ const ONBOARDING_COMPOSER_KEYS: ComposerStorageKeys = {
 }
 
 const BEAT_TITLE: Record<MissionBeat, { heading: string; description: string }> = {
+  theme: {
+    heading: "Make Atai feel like yours",
+    description: "Pick a theme for your workspace. You can change it anytime in Settings → Appearance.",
+  },
   vision: { heading: ONBOARDING_COPY.visionHeading, description: ONBOARDING_COPY.visionDescription },
   tour: {
     heading: "Take the quick tour",
@@ -113,7 +117,7 @@ function FirstMissionInner() {
   const [mode, setMode] = useState<StartMode>("idea")
   const [modeTouched, setModeTouched] = useState(false)
   const [followUp, setFollowUp] = useState("")
-  const [beat, setBeat] = useState<MissionBeat>("vision")
+  const [beat, setBeat] = useState<MissionBeat>("theme")
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [source, setSource] = useState("")
@@ -160,7 +164,7 @@ function FirstMissionInner() {
       if (draft?.followUp) setFollowUp(draft.followUp)
       if (draft?.mode) setMode(draft.mode)
       if (draft?.modeTouched) setModeTouched(true)
-      if (draft?.beat) setBeat(draft.beat)
+      if (draft?.beat) setBeat(draft.beat === "vision" && draft.flowVersion !== 2 ? "theme" : draft.beat)
       if (draft?.source) setSource(draft.source)
       if (draft?.role) setRole(draft.role)
       if (draft?.building) setBuilding(draft.building)
@@ -221,8 +225,9 @@ function FirstMissionInner() {
 
   const includeVerify = Boolean(session && !session.user.emailVerified) || beat === "verify"
   const includeVideo = Boolean(videoEmbed) || beat === "tour"
-  const beats = missionBeatList(includeContext && beat !== "vision", includeVerify && beat !== "vision", includeVideo)
-  const progress = missionProgress(beat, includeContext && beat !== "vision", includeVerify && beat !== "vision", includeVideo)
+  const countOptionalBeats = beat !== "theme" && beat !== "vision"
+  const beats = missionBeatList(includeContext && countOptionalBeats, includeVerify && countOptionalBeats, includeVideo)
+  const progress = missionProgress(beat, includeContext && countOptionalBeats, includeVerify && countOptionalBeats, includeVideo)
 
   useEffect(() => {
     if (surface !== "mission" || !session) return
@@ -244,6 +249,7 @@ function FirstMissionInner() {
           hoursPerDay,
           intent,
           selectedPlanId,
+          flowVersion: 2,
         }),
       )
     } catch {
@@ -312,13 +318,17 @@ function FirstMissionInner() {
   }
 
   function previousBeat() {
-    const list = missionBeatList(includeContext && beat !== "vision", includeVerify && beat !== "vision", includeVideo)
+    const list = missionBeatList(
+      includeContext && countOptionalBeats,
+      includeVerify && countOptionalBeats,
+      includeVideo,
+    )
     const index = list.indexOf(beat)
     if (index <= 0) {
-      setBeat("vision")
+      setBeat("theme")
       return
     }
-    setBeat(list[index - 1] ?? "vision")
+    setBeat(list[index - 1] ?? "theme")
   }
 
   function dropMissionFromUrl() {
@@ -393,10 +403,10 @@ function FirstMissionInner() {
   const title = beat === "context" ? followUpPrompt(effectiveMode) : BEAT_TITLE[beat].heading
   const description = beat === "context" ? "One line is enough. Skip if you already said it." : BEAT_TITLE[beat].description
   const showContinue =
-    beat === "context" || beat === "plan" || hasBeatValue(beat, { source, role, revenueTarget, targetUsers, effortScale, intent })
+    beat === "theme" || beat === "context" || beat === "plan" || hasBeatValue(beat, { source, role, revenueTarget, targetUsers, effortScale, intent })
 
   return (
-    <div className="fixed inset-0 z-50 flex h-dvh flex-col overflow-hidden bg-background text-foreground">
+    <div className="onboarding-shell fixed inset-0 z-50 flex h-dvh flex-col overflow-hidden bg-background text-foreground">
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/60 px-4 py-2.5 sm:px-6">
         <BrandMark />
         <div className="flex min-w-0 items-center gap-2">
@@ -423,8 +433,18 @@ function FirstMissionInner() {
         />
       </div>
 
-      <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col justify-center gap-4 overflow-hidden px-4 py-4 sm:gap-5 sm:px-6">
-        {firstName && beat === "vision" ? <p className="text-sm text-muted-foreground">Welcome, {firstName}.</p> : null}
+      <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col overflow-y-auto px-4 py-4 sm:px-6">
+        <div className="flex w-full flex-1 flex-col justify-center gap-4 sm:gap-5">
+        {firstName && beat === "theme" ? <p className="text-sm text-muted-foreground">Welcome, {firstName}.</p> : null}
+
+        {beat === "theme" ? (
+          <BeatShell title={title} description={description}>
+            <OnboardingThemePicker />
+            <p className="text-xs leading-5 text-muted-foreground">
+              The preview updates as you choose. You can change it anytime in Settings → Appearance.
+            </p>
+          </BeatShell>
+        ) : null}
 
         {beat === "vision" ? (
           <>
@@ -433,11 +453,6 @@ function FirstMissionInner() {
               <p className="mt-2 max-w-xl text-pretty text-sm leading-6 text-muted-foreground">{description}</p>
             </div>
             <div className="flex min-h-0 flex-col gap-3">
-              <div>
-                <p className="text-sm font-medium text-indigo-600 dark:text-indigo-300">Pick your Atai theme</p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">Choose how Atai should look while you plan. You can change it anytime in Settings → Appearance.</p>
-              </div>
-              <OnboardingThemePicker />
               {draftHydrated ? (
                 <LandingComposer
                   showIntro={false}
@@ -648,12 +663,13 @@ function FirstMissionInner() {
         ) : null}
 
         {error ? <p className="text-sm text-destructive" role="alert">{error}</p> : null}
+        </div>
       </div>
 
       <footer className="shrink-0 border-t border-border/60 px-4 py-3 sm:px-6">
         <div className="mx-auto flex w-full max-w-2xl items-center justify-between gap-3">
           <div className="flex items-center gap-1">
-            {beat !== "vision" ? (
+            {beat !== "theme" ? (
               <Button variant="ghost" onClick={previousBeat} disabled={busy} className="text-muted-foreground">
                 Back
               </Button>

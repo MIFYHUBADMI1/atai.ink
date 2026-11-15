@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   composeVision,
+  missionBeatList,
   missionProgress,
   needsFollowUp,
   parseFirstMissionDraft,
@@ -84,18 +85,24 @@ describe("onboarding state", () => {
     expect(composeVision("Build a waste platform", "Independent restaurants")).toContain("Independent restaurants")
   })
 
+  it("leads with the theme picker before every other beat", () => {
+    expect(missionBeatList(false, false, false).slice(0, 2)).toEqual(["theme", "vision"])
+    expect(missionBeatList(true, true, true).slice(0, 2)).toEqual(["theme", "vision"])
+    expect(missionBeatList(false, false, true)).toHaveLength(10)
+  })
+
   it("reports step progress so founders can see when onboarding ends", () => {
-    expect(missionProgress("vision", false)).toMatchObject({ step: 1, total: 8 })
-    expect(missionProgress("win", false)).toMatchObject({ step: 4, total: 8 })
-    expect(missionProgress("plan", false)).toMatchObject({ step: 8, total: 8 })
-    expect(missionProgress("context", true).step).toBe(2)
-    expect(missionProgress("verify", false, true)).toMatchObject({ step: 2, total: 9 })
+    expect(missionProgress("theme", false, false, true)).toMatchObject({ step: 1, total: 10 })
+    expect(missionProgress("vision", false, false, true)).toMatchObject({ step: 2, total: 10 })
+    expect(missionProgress("plan", false, false, true)).toMatchObject({ step: 10, total: 10 })
+    expect(missionProgress("context", true, false, true).step).toBe(4)
+    expect(missionProgress("verify", false, true, true)).toMatchObject({ step: 4, total: 11 })
   })
 
   it("slots the tour beat after vision only when a video is configured", () => {
-    expect(missionProgress("tour", false, false, true)).toMatchObject({ step: 2, total: 9 })
-    expect(missionProgress("plan", false, false, true)).toMatchObject({ step: 9, total: 9 })
-    expect(missionProgress("source", false, false, true)).toMatchObject({ step: 3, total: 9 })
+    expect(missionProgress("tour", false, false, true)).toMatchObject({ step: 3, total: 10 })
+    expect(missionProgress("plan", false, false, true)).toMatchObject({ step: 10, total: 10 })
+    expect(missionProgress("source", false, false, true)).toMatchObject({ step: 4, total: 10 })
   })
 
   it("drops mission=1 from the dashboard url so skip can stick", () => {

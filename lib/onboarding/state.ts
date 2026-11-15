@@ -16,18 +16,22 @@ export type OnboardingSource =
 
 export type FirstMissionSurface = "hide" | "redirect-pending" | "mission" | "empty-cta"
 
-export type MissionBeat =
-  | "vision"
-  | "tour"
-  | "verify"
-  | "context"
-  | "source"
-  | "role"
-  | "win"
-  | "users"
-  | "pace"
-  | "intent"
-  | "plan"
+export const MISSION_BEATS = [
+  "theme",
+  "vision",
+  "tour",
+  "verify",
+  "context",
+  "source",
+  "role",
+  "win",
+  "users",
+  "pace",
+  "intent",
+  "plan",
+] as const
+
+export type MissionBeat = (typeof MISSION_BEATS)[number]
 
 export type FirstMissionDraft = {
   vision?: string
@@ -44,10 +48,11 @@ export type FirstMissionDraft = {
   hoursPerDay?: string
   intent?: string
   selectedPlanId?: string
+  flowVersion?: number
 }
 
 export function missionBeatList(includeContext: boolean, includeVerify = false, includeVideo = false): MissionBeat[] {
-  const beats: MissionBeat[] = ["vision"]
+  const beats: MissionBeat[] = ["theme", "vision"]
   if (includeVideo) beats.push("tour")
   if (includeVerify) beats.push("verify")
   if (includeContext) beats.push("context")
@@ -81,6 +86,9 @@ export function parseFirstMissionDraft(raw: string | null): FirstMissionDraft | 
     try {
       const parsed = JSON.parse(trimmed) as FirstMissionDraft
       if (!parsed || typeof parsed !== "object") return null
+      if (parsed.beat && !MISSION_BEATS.includes(parsed.beat)) {
+        return { ...parsed, beat: undefined }
+      }
       return parsed
     } catch {
       return null
