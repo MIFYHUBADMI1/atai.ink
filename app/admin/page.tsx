@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { jsonFetcher } from "@/lib/client/api"
 import { AdminSelfCredit } from "@/components/admin-self-credit"
+import { OnboardingVideoCard } from "@/components/admin/onboarding-video-card"
 import { ADMIN_LEAVE, ADMIN_NAV, allAdminNavItems } from "@/components/admin/admin-nav-config"
 import { cn } from "@/lib/utils"
 
@@ -679,6 +680,11 @@ export default function AdminDashboardPage() {
           ) : null}
         </section>
       ) : null}
+
+      <section className="mt-10">
+        <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Site content</p>
+        <OnboardingVideoCard />
+      </section>
 
       <section className="mt-10 rounded-2xl border border-border bg-card p-5">
         <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Operator utility</p>

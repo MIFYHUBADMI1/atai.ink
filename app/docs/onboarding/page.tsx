@@ -6,6 +6,7 @@ import { ArrowLeft, ArrowRight, LifeBuoy } from "lucide-react"
 import { SiteHeader } from "@/components/site-header"
 import { SiteFooter } from "@/components/site-footer"
 import { MarkdownArticle } from "@/components/resources/markdown-article"
+import { OnboardingGuideVideo } from "@/components/onboarding-guide-video"
 import { markdownHeadings } from "@/lib/resources/media"
 import { extractFaqs } from "@/lib/docs/faq"
 import { SITE_URL } from "@/lib/env"
@@ -196,6 +197,7 @@ export default function OnboardingGuidePage() {
             </Link>
             .
           </p>
+          <OnboardingGuideVideo />
         </div>
       </section>
 

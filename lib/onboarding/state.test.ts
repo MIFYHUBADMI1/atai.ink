@@ -92,6 +92,12 @@ describe("onboarding state", () => {
     expect(missionProgress("verify", false, true)).toMatchObject({ step: 2, total: 9 })
   })
 
+  it("slots the tour beat after vision only when a video is configured", () => {
+    expect(missionProgress("tour", false, false, true)).toMatchObject({ step: 2, total: 9 })
+    expect(missionProgress("plan", false, false, true)).toMatchObject({ step: 9, total: 9 })
+    expect(missionProgress("source", false, false, true)).toMatchObject({ step: 3, total: 9 })
+  })
+
   it("drops mission=1 from the dashboard url so skip can stick", () => {
     expect(pathWithoutMissionParam("/dashboard", "mission=1")).toBe("/dashboard")
     expect(pathWithoutMissionParam("/dashboard", "?mission=1&tab=activity")).toBe("/dashboard?tab=activity")

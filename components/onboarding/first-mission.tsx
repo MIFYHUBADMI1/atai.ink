@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import { ChoiceGrid } from "@/components/onboarding/choice-grid"
 import { OnboardingPlanStep } from "@/components/onboarding/plan-step"
 import { useProjects, useSession } from "@/lib/client/api"
+import { useOnboardingVideoEmbedUrl } from "@/lib/client/onboarding-video"
+import { VideoEmbed } from "@/components/video-embed"
 import { peekPendingStart, restorePendingStart, resendVerificationEmail, savePendingStart } from "@/lib/auth/client-intent"
 import { recordOnboardingDismissed, saveOnboardingProfile } from "@/lib/onboarding/activate"
 import { ONBOARDING_COPY, MODE_COPY } from "@/lib/onboarding/copy"
@@ -44,6 +46,10 @@ const MODES: StartMode[] = ["idea", "website", "url", "github"]
 
 const BEAT_TITLE: Record<MissionBeat, { heading: string; description: string }> = {
   vision: { heading: ONBOARDING_COPY.visionHeading, description: ONBOARDING_COPY.visionDescription },
+  tour: {
+    heading: "Take the quick tour",
+    description: "A short walkthrough of how Atai turns your starting point into a running business.",
+  },
   context: { heading: "", description: "" },
   source: {
     heading: "How did you find Atai?",
@@ -93,6 +99,7 @@ function FirstMissionInner() {
   const searchParams = useSearchParams()
   const { session, refresh } = useSession()
   const { projects, isLoading: projectsLoading } = useProjects()
+  const videoEmbed = useOnboardingVideoEmbedUrl()
   const [vision, setVision] = useState("")
   const [mode, setMode] = useState<StartMode>("idea")
   const [modeTouched, setModeTouched] = useState(false)
@@ -179,8 +186,9 @@ function FirstMissionInner() {
   }, [beat, session?.user.emailVerified, effectiveMode, vision])
 
   const includeVerify = Boolean(session && !session.user.emailVerified) || beat === "verify"
-  const beats = missionBeatList(includeContext && beat !== "vision", includeVerify && beat !== "vision")
-  const progress = missionProgress(beat, includeContext && beat !== "vision", includeVerify && beat !== "vision")
+  const includeVideo = Boolean(videoEmbed) || beat === "tour"
+  const beats = missionBeatList(includeContext && beat !== "vision", includeVerify && beat !== "vision", includeVideo)
+  const progress = missionProgress(beat, includeContext && beat !== "vision", includeVerify && beat !== "vision", includeVideo)
 
   useEffect(() => {
     if (surface !== "mission" || !session) return
@@ -270,7 +278,7 @@ function FirstMissionInner() {
   }
 
   function previousBeat() {
-    const list = missionBeatList(includeContext && beat !== "vision", includeVerify && beat !== "vision")
+    const list = missionBeatList(includeContext && beat !== "vision", includeVerify && beat !== "vision", includeVideo)
     const index = list.indexOf(beat)
     if (index <= 0) {
       setBeat("vision")
@@ -301,6 +309,13 @@ function FirstMissionInner() {
     }
   }
 
+  /** The beat that follows the vision step when no tour video is queued. */
+  function postVisionBeat(): MissionBeat {
+    if (session && !session.user.emailVerified) return "verify"
+    if (needsFollowUp(effectiveMode, vision)) return "context"
+    return "source"
+  }
+
   function continueFromVision() {
     const message = validateStartInput(effectiveMode, vision)
     if (message) {
@@ -309,15 +324,7 @@ function FirstMissionInner() {
     }
     if (!building) setBuilding(signalForMode(effectiveMode))
     persistQuiet({ signalType: signalForMode(effectiveMode), businessDescription: vision.trim() })
-    if (session && !session.user.emailVerified) {
-      go("verify")
-      return
-    }
-    if (needsFollowUp(effectiveMode, vision)) {
-      go("context")
-      return
-    }
-    go("source")
+    go(includeVideo ? "tour" : postVisionBeat())
   }
 
   async function finish() {
@@ -442,6 +449,18 @@ function FirstMissionInner() {
               <p className="text-xs text-muted-foreground">{MODE_COPY[effectiveMode].hint}</p>
             </div>
           </>
+        ) : null}
+
+        {beat === "tour" ? (
+          <BeatShell title={title} description={description}>
+            {videoEmbed ? (
+              <VideoEmbed title="Getting Started with Atai" src={videoEmbed} />
+            ) : (
+              <p className="rounded-2xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
+                The tour video isn&apos;t available right now — you can keep going.
+              </p>
+            )}
+          </BeatShell>
         ) : null}
 
         {beat === "context" ? (
@@ -618,6 +637,9 @@ function FirstMissionInner() {
           ) : null}
           {beat === "context" ? (
             <Button onClick={() => go("source")} disabled={busy}>Continue</Button>
+          ) : null}
+          {beat === "tour" ? (
+            <Button onClick={() => go(postVisionBeat())} disabled={busy}>Continue</Button>
           ) : null}
           {beat === "verify" ? (
             <Button

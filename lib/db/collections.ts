@@ -36,6 +36,7 @@ import type {
   FeedbackRewardDoc,
   FeedbackSettingsDoc,
 } from "@/lib/feedback/types"
+import type { SiteSettingsDoc } from "@/lib/site-settings"
 
 /** Cache the Db reference across hot reloads so we don't re-resolve per call. */
 const globalForDb = globalThis as unknown as {
@@ -338,6 +339,12 @@ export async function feedbackAttachmentsCol() {
 }
 export async function feedbackSettingsCol() {
   return (await getDbCached()).collection<FeedbackSettingsDoc & { _id?: unknown }>("feedback_settings")
+}
+
+// ─── Site-wide settings ──────────────────────────────────────────────────────
+
+export async function siteSettingsCol() {
+  return (await getDbCached()).collection<SiteSettingsDoc & { _id?: unknown }>("site_settings")
 }
 
 /** Append-only audit trail for every administrative feedback action. */

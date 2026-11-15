@@ -18,6 +18,7 @@ export type FirstMissionSurface = "hide" | "redirect-pending" | "mission" | "emp
 
 export type MissionBeat =
   | "vision"
+  | "tour"
   | "verify"
   | "context"
   | "source"
@@ -45,16 +46,17 @@ export type FirstMissionDraft = {
   selectedPlanId?: string
 }
 
-export function missionBeatList(includeContext: boolean, includeVerify = false): MissionBeat[] {
+export function missionBeatList(includeContext: boolean, includeVerify = false, includeVideo = false): MissionBeat[] {
   const beats: MissionBeat[] = ["vision"]
+  if (includeVideo) beats.push("tour")
   if (includeVerify) beats.push("verify")
   if (includeContext) beats.push("context")
   beats.push("source", "role", "win", "users", "pace", "intent", "plan")
   return beats
 }
 
-export function missionProgress(beat: MissionBeat, includeContext: boolean, includeVerify = false) {
-  const beats = missionBeatList(includeContext, includeVerify)
+export function missionProgress(beat: MissionBeat, includeContext: boolean, includeVerify = false, includeVideo = false) {
+  const beats = missionBeatList(includeContext, includeVerify, includeVideo)
   const index = Math.max(0, beats.indexOf(beat))
   return {
     step: index + 1,

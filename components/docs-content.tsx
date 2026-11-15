@@ -37,6 +37,7 @@ import { SiteFooter } from "@/components/site-footer"
 import { DocsSearch } from "@/components/docs-search"
 import { DocsResourceBridge } from "@/components/docs-resource-bridge"
 import { VideoEmbed } from "@/components/video-embed"
+import { useOnboardingVideoEmbedUrl } from "@/lib/client/onboarding-video"
 import { ScrollProgress } from "@/components/scroll-progress"
 import { BrandMark } from "@/components/brand-logo"
 
@@ -69,6 +70,7 @@ const sectionMeta = [
    ═══════════════════════════════════════════════════════════════ */
 
 export function DocsContent() {
+  const onboardingVideoEmbed = useOnboardingVideoEmbedUrl()
   const [visibleIds, setVisibleIds] = useState<string[]>(
     sectionMeta.map((s) => s.id),
   )
@@ -193,12 +195,11 @@ export function DocsContent() {
                 You don&apos;t need to know how to code. You don&apos;t need a technical co-founder. You don&apos;t need to assemble a team. Atai brings together an AI co-founder, specialist agents, product development, technology, and infrastructure so you can focus on the vision and the customers.
               </p>
 
-              {/* Video placeholder — replace src with your YouTube/Vimeo URL when ready */}
+              {/* Admin-configured onboarding video — hidden until one is set in /admin */}
               <VideoEmbed
                 title="Getting Started with Atai"
                 duration="3:45"
-              /* Uncomment and paste your video URL when ready: */
-              /* src="https://www.youtube.com/embed/YOUR_VIDEO_ID" */
+                src={onboardingVideoEmbed ?? undefined}
               />
 
               <h3 className="text-lg font-semibold text-foreground mt-8">What you&apos;ll need</h3>
