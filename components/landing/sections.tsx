@@ -337,6 +337,7 @@ export function LandingPlan() {
               alt="Atai workspace showing founder overview, team activity, and AI collaboration"
               width={1672}
               height={941}
+              priority
             />
           </FadeIn>
         </div>

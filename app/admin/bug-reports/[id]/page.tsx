@@ -53,6 +53,7 @@ export default function AdminBugReportDetailPage({ params }: { params: Promise<{
   const [customAmount, setCustomAmount] = useState("")
   const [rewardNote, setRewardNote] = useState("")
   const [tiers, setTiers] = useState<{ id: string; label: string; credits: number }[]>([])
+  const [incidentInput, setIncidentInput] = useState("")
 
   useSWR<{ rewardTiers: { id: string; label: string; credits: number }[] }>(
     "/api/admin/feedback/settings", jsonFetcher,
@@ -101,7 +102,6 @@ export default function AdminBugReportDetailPage({ params }: { params: Promise<{
     act("resp", async () => { await patchReport(id, { publicResponse: response, ...(reason ? { reason } : {}) }); setResponse(""); setReason("") }, "Response sent to user")
   const linkIncident = () =>
     act("incident", () => patchReport(id, { incidentId: incidentInput || null }), "Incident link updated")
-  const [incidentInput, setIncidentInput] = useState("")
   const approveReward = () =>
     act("reward", async () => {
       const payload = rewardMode === "tier"
