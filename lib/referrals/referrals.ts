@@ -16,8 +16,10 @@ import { getMongoClient } from "@/lib/db/mongodb"
  *   - Max 2,000 credits per referred user.
  */
 
-const REFERRAL_CODE_PREFIX = "ATA"
+const REFERRAL_CODE_PREFIX = "ATAI"
 const REFERRAL_CODE_LENGTH = 6
+/** Custom codes: ATAI- plus a 3–30 char suffix of letters, numbers, and dashes. */
+const CUSTOM_REFERRAL_CODE_PATTERN = /^ATAI-[A-Z0-9](?:[A-Z0-9-]{1,28}[A-Z0-9])$/
 /** Legacy fallback constants — live values come from admin-configurable
  * runtime settings (lib/billing/runtime-config.ts) at grant time. */
 const VERIFICATION_REWARD = 500
@@ -41,7 +43,7 @@ async function getRuntimeRewards() {
 // ─── Referral Code Generation ───────────────────────────────────────────────
 
 /**
- * Generate a unique referral code in the format ATA-XXXXXX.
+ * Generate a unique referral code in the format ATAI-XXXXXX.
  * Uses alphanumeric characters (uppercase) excluding ambiguous chars (0, O, I, L).
  */
 function generateReferralCode(): string {
@@ -74,6 +76,47 @@ export async function ensureReferralCode(userId: string): Promise<string> {
     }
   }
   throw new Error("Failed to generate unique referral code after multiple attempts")
+}
+
+/** Normalize and validate a user-chosen referral code. Returns null when invalid. */
+export function normalizeCustomReferralCode(input: string): string | null {
+  const code = input.trim().toUpperCase()
+  return CUSTOM_REFERRAL_CODE_PATTERN.test(code) ? code : null
+}
+
+/**
+ * Set a user's referral code. Pass a custom code string, or omit it to
+ * auto-generate a fresh ATAI-XXXXXX code. Existing codes keep working —
+ * referrals resolve by stored value, so old ATA-/MSA- codes are unaffected.
+ */
+export async function setReferralCode(userId: string, customCode?: string): Promise<string> {
+  const col = await usersCol()
+  const user = await col.findOne({ id: userId, deletedAt: { $exists: false } })
+  if (!user) throw new Error("User not found")
+
+  let code = ""
+  if (customCode !== undefined) {
+    const normalized = normalizeCustomReferralCode(customCode)
+    if (!normalized) {
+      throw new Error("Referral code must start with ATAI- and use 3–30 letters, numbers, or dashes after it.")
+    }
+    const taken = await col.findOne({ referralCode: normalized, deletedAt: { $exists: false }, id: { $ne: userId } })
+    if (taken) throw new Error("That referral code is already taken.")
+    code = normalized
+  } else {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const candidate = generateReferralCode()
+      const existing = await col.findOne({ referralCode: candidate, deletedAt: { $exists: false }, id: { $ne: userId } })
+      if (!existing) {
+        code = candidate
+        break
+      }
+    }
+    if (!code) throw new Error("Failed to generate unique referral code after multiple attempts")
+  }
+
+  await col.updateOne({ id: userId }, { $set: { referralCode: code, updatedAt: Date.now() } })
+  return code
 }
 
 /**

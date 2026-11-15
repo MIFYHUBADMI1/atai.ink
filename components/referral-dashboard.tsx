@@ -5,7 +5,7 @@ import useSWR from "swr"
 import { Copy, Check, Gift, Rocket, Users, Clock, CheckCircle2, ExternalLink, Shield } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { jsonFetcher } from "@/lib/client/api"
+import { jsonFetcher, patchJson } from "@/lib/client/api"
 import { toast } from "sonner"
 
 interface ReferralInfo {
@@ -51,8 +51,10 @@ function formatDate(ts: number): string {
 }
 
 export function ReferralDashboard() {
-  const { data, error, isLoading } = useSWR<ReferralInfo>("/api/referrals", jsonFetcher)
+  const { data, error, isLoading, mutate } = useSWR<ReferralInfo>("/api/referrals", jsonFetcher)
   const [copied, setCopied] = useState(false)
+  const [codeInput, setCodeInput] = useState("")
+  const [savingCode, setSavingCode] = useState(false)
 
   async function copyLink() {
     if (!data) return
@@ -63,6 +65,39 @@ export function ReferralDashboard() {
       setTimeout(() => setCopied(false), 2000)
     } catch {
       toast.error("Failed to copy link")
+    }
+  }
+
+  async function saveCustomCode() {
+    const code = codeInput.trim().toUpperCase()
+    if (!code) {
+      toast.error("Enter a code starting with ATAI-")
+      return
+    }
+    setSavingCode(true)
+    try {
+      const res = await patchJson<{ referralCode: string; referralLink: string }>("/api/referrals", { code })
+      setCodeInput("")
+      await mutate()
+      toast.success(`Referral code updated to ${res.referralCode}`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't update your referral code")
+    } finally {
+      setSavingCode(false)
+    }
+  }
+
+  async function generateAutoCode() {
+    setSavingCode(true)
+    try {
+      const res = await patchJson<{ referralCode: string }>("/api/referrals", { auto: true })
+      setCodeInput("")
+      await mutate()
+      toast.success(`New referral code: ${res.referralCode}`)
+    } catch {
+      toast.error("Couldn't generate a new referral code")
+    } finally {
+      setSavingCode(false)
     }
   }
 
@@ -119,6 +154,44 @@ export function ReferralDashboard() {
           <p className="mt-2 font-mono text-xs text-muted-foreground">
             Your code: <span className="text-foreground">{data.referralCode}</span>
           </p>
+        </CardContent>
+      </Card>
+
+      {/* Customize code */}
+      <Card>
+        <CardContent className="py-6">
+          <p className="text-sm font-medium text-muted-foreground mb-3">Your Referral Code</p>
+          <p className="text-xs leading-5 text-muted-foreground mb-4">
+            Codes start with <span className="font-mono text-foreground">ATAI-</span>. Pick your own suffix or let Atai generate one.
+          </p>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <input
+              type="text"
+              value={codeInput}
+              onChange={(event) => setCodeInput(event.target.value)}
+              placeholder="ATAI-YOUR-NAME"
+              maxLength={40}
+              className="h-11 flex-1 rounded-lg border border-border bg-muted/50 px-4 font-mono text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => void saveCustomCode()}
+                disabled={savingCode || !codeInput.trim()}
+                className="inline-flex h-11 items-center justify-center rounded-lg border border-border px-4 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Save code
+              </button>
+              <button
+                type="button"
+                onClick={() => void generateAutoCode()}
+                disabled={savingCode}
+                className="inline-flex h-11 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Auto-generate
+              </button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
