@@ -112,7 +112,6 @@ const STRUCTURED_DATA = JSON.stringify({
       email: "support@atai.ink",
       telephone: "+256761819885",
       sameAs: [
-        "https://www.youtube.com/@mirrorsiteai",
         "https://github.com/atai-group",
       ],
       contactPoint: {

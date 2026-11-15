@@ -21,7 +21,7 @@ export const ONBOARDING_ROLES = [
 ] as const
 
 export const ONBOARDING_BUILDING = [
-  { id: "url", label: "Website mirroring", hint: "Start from a live site or product you already know." },
+  { id: "url", label: "From a website or product", hint: "Start from a live site or product you already know." },
   { id: "idea", label: "From scratch", hint: "Start from an idea, problem, or business in your own words." },
 ] as const
 

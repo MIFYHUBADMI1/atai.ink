@@ -22,7 +22,7 @@ export type TotalumErrorCode =
 const FRIENDLY: Record<TotalumErrorCode, string> = {
   MISSING_PROJECT_ID: "Something went wrong starting this build. Please try again.",
   PROJECT_NOT_FOUND: "We couldn't find this project. It may have been removed.",
-  PROJECT_ID_UNAVAILABLE: "That app address is already in use. Choose another project ID.",
+  PROJECT_ID_UNAVAILABLE: "That business address is already in use. Choose another address.",
   INSUFFICIENT_CREDITS: "You don't have enough credits for this build. Please top up and try again.",
   UNAUTHORIZED_PROJECT_ACCESS: "You don't have permission to perform this action on this project.",
   MAX_PROJECTS_REACHED: "You've reached your project limit. Please remove a project or upgrade.",
@@ -33,11 +33,11 @@ const FRIENDLY: Record<TotalumErrorCode, string> = {
   DEPLOYMENT_RUNNING: "A deployment is already in progress. Please wait for it to finish.",
   NO_PROCESS_RUNNING: "There's no active build to stop.",
   PROVIDER_NOT_CONFIGURED:
-    "The application builder isn't connected yet. Add your Totalum API key to enable building.",
+    "The build engine isn't connected yet. Add your Totalum API key to enable building.",
   PROVIDER_UNREACHABLE:
-    "The application builder couldn't be reached — the connection failed before your plan was sent. Nothing was built and nothing was charged, so it is safe to try again.",
+    "The build engine couldn't be reached — the connection failed before your plan was sent. Nothing was built and nothing was charged, so it is safe to try again.",
   TLS_CLOCK:
-    "Atai couldn't reach the application builder because this computer's clock looks wrong (the builder's security certificate isn't valid yet). Turn on automatic date and time in Windows, then try again.",
+    "Atai couldn't reach the build engine because this computer's clock looks wrong (the engine's security certificate isn't valid yet). Turn on automatic date and time in Windows, then try again.",
   UNKNOWN: "Something went wrong. Please try again.",
 }
 

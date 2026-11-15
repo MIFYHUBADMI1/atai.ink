@@ -1,21 +1,22 @@
 # Atai
 
-**Turn websites and ideas into working full-stack applications.**
+**Start, run, and grow your own business with AI teams.**
 
-> Atai is an AI-powered application development platform designed to dramatically reduce the distance between an idea and a working full-stack MVP. Analyze a website, describe an idea, or provide a product concept — and Atai generates a complete application foundation including frontend, backend, authentication, database, infrastructure, and deployment.
+> Atai is an AI-powered business platform that helps founders plan an online business, create its website or digital product, host it, manage day-to-day operations, and work toward customers and growth — all from one workspace.
 
 ---
 
 ## What is Atai?
 
-Atai is a web-based platform built by **ATAI — Advanced Technologies and AI Enterprises** that uses artificial intelligence to help users build full-stack applications faster. It sits between the idea stage and a working MVP, handling the repetitive scaffolding, boilerplate, and infrastructure setup so users can focus on product decisions.
+Atai is a web-based platform built by **ATAI — Advanced Technologies and AI Enterprises** that combines business planning, product creation, hosting, operations, and growth support. Specialized AI teams help with the offer, customers, pricing, website or product, launch, marketing, and next steps while the founder stays in control.
 
 ### Who is it for?
 
-- **Founders** who need to validate ideas quickly without a full development team
-- **Developers** who want to reduce boilerplate and accelerate prototyping
-- **Designers** who want to move from concept to functional prototype
-- **Product teams** that need rapid MVP development
+- **First-time business owners** who need a practical path from idea to launch
+- **Entrepreneurs and creators** turning skills, knowledge, or audiences into paid offers
+- **Small businesses** moving online or improving how they serve customers
+- **Small teams** that need planning, building, operations, and marketing help without hiring a full team
+- **Developers and product teams** who want to move faster from concept to a working product
 
 ---
 
@@ -24,22 +25,22 @@ Atai is a web-based platform built by **ATAI — Advanced Technologies and AI En
 1. **Input** — Provide a starting point: a website URL, a product idea, or a description of what you want to build
 2. **Analysis** — Atai analyzes the input, understands the product intent, and maps structure, features, and requirements
 3. **Planning** — The system creates a structured project plan with pages, user roles, workflows, data models, and authentication flows
-4. **Generation** — Atai generates a complete full-stack application foundation
-5. **Output** — You receive a working application with frontend, backend, database, authentication, and infrastructure
+4. **Build** — Atai creates the website, product, or application foundation your business needs
+5. **Launch & grow** — You get a working product with hosting, customer accounts, payments, and room to keep improving
 
 ### Two entry modes
 
 | Mode | Description |
 |------|-------------|
 | **Website** | Submit a URL to a website you own or have permission to analyze. Atai examines page structure, layout, navigation, components, visual patterns, and functionality. |
-| **Idea** | Describe what you want to build. Atai transforms high-level intent into structured application requirements and generates the application. |
+| **Idea** | Describe the business you want to start. Atai turns high-level intent into a structured business and product plan. |
 
 ---
 
 ## Key Features
 
-### Application Generation
-- Full-stack application generation (frontend + backend)
+### Product Creation
+- Website and digital-product creation (frontend + backend when needed)
 - Authentication flows (registration, login, email verification, sessions)
 - Database infrastructure (models, relationships, CRUD operations)
 - API layers and server logic
@@ -114,7 +115,7 @@ Credit amounts are provisional until the launch financial model ratifies them.
 |--------|------|
 | Website analysis | 5 credits |
 | Plan generation | 5 credits |
-| Application generation | 25,000 / 50,000 / 75,000 (by tier) |
+| Product build | 25,000 / 50,000 / 75,000 (by tier) |
 | Free subdomain deployment | 500 credits |
 | Custom domain deployment | 500 credits |
 | Welcome bonus | 500 credits |
@@ -123,7 +124,7 @@ Credit amounts are provisional until the launch financial model ratifies them.
 
 ## Referral Program
 
-- Share your unique referral code (MSA-XXXXXX)
+- Share your unique referral code (ATA-XXXXXX)
 - Earn 500 credits when a referred user verifies their account
 - Earn 1,500 credits when the referred user reaches 75,000 qualifying usage
 - Max 2,000 credits per referred user
@@ -145,9 +146,7 @@ Credit amounts are provisional until the launch financial model ratifies them.
 
 ## Payment Methods
 
-Atai accepts **mobile money** payments via:
-- **MTN Mobile Money**
-- **Airtel Mobile Money**
+Atai uses **Dodo Payments** for subscriptions and permanent credit packs.
 
 ---
 

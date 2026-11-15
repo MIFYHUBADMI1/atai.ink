@@ -46,15 +46,16 @@ import {
   combineLinkPrompt,
 } from "@/lib/start/detect-input"
 import {
-  DEFAULT_COMPOSER_PREFS,
+  DEFAULT_COMPOSER_STORAGE_KEYS,
   loadComposerPrefs,
   saveComposerPrefs,
   saveComposerFileContents,
-  clearComposerFileContents,
   MAX_ATTACHMENTS,
   MAX_ATTACHMENT_BYTES,
   MAX_TOTAL_ATTACHMENT_BYTES,
   type ComposerAttachment,
+  type ComposerPrefs,
+  type ComposerStorageKeys,
 } from "@/lib/start/composer-prefs"
 import {
   appendFinal,
@@ -237,12 +238,20 @@ function readFileAsDataUri(file: File): Promise<string> {
   })
 }
 
+export type ComposerDraft = ComposerPrefs
+
 export function LandingComposer({
   lockedMode,
   showModes = true,
   showIntro = true,
   surface = "landing",
   className,
+  storageKeys,
+  initialValues,
+  onDraftChange,
+  onDraftSubmit,
+  autoDetectMode = false,
+  submitLabel,
 }: {
   lockedMode?: StartMode
   showModes?: boolean
@@ -250,6 +259,12 @@ export function LandingComposer({
   /** Where the composer is mounted — keeps /new funnel events separate from the landing hero. */
   surface?: string
   className?: string
+  storageKeys?: ComposerStorageKeys
+  initialValues?: Partial<ComposerPrefs>
+  onDraftChange?: (draft: ComposerDraft) => void
+  onDraftSubmit?: (draft: ComposerDraft) => void
+  autoDetectMode?: boolean
+  submitLabel?: string
 } = {}) {
   const router = useRouter()
   const { session, refresh: refreshSession } = useSession()
@@ -260,6 +275,10 @@ export function LandingComposer({
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null)
   const promptRef = useRef("")
   const titleTouchedRef = useRef(false)
+  const initialValuesRef = useRef(initialValues)
+  const onDraftChangeRef = useRef(onDraftChange)
+  const onDraftSubmitRef = useRef(onDraftSubmit)
+  const storageKeysRef = useRef<ComposerStorageKeys>(storageKeys ?? DEFAULT_COMPOSER_STORAGE_KEYS)
   const listeningRef = useRef(false)
   const voiceBaseRef = useRef("")
   const fromDictationRef = useRef(false)
@@ -298,31 +317,45 @@ export function LandingComposer({
   const advancedCount = (agents.length > 1 ? 1 : 0) + (tool ? 1 : 0) + (auto !== "auto" ? 1 : 0)
 
   useEffect(() => {
-    const prefs = loadComposerPrefs()
-    setPrompt(prefs.prompt)
-    if (prefs.title.trim()) {
-      setTitle(prefs.title)
+    onDraftChangeRef.current = onDraftChange
+    onDraftSubmitRef.current = onDraftSubmit
+    storageKeysRef.current = storageKeys ?? DEFAULT_COMPOSER_STORAGE_KEYS
+  }, [onDraftChange, onDraftSubmit, storageKeys])
+
+  useEffect(() => {
+    const keys = storageKeysRef.current
+    const prefs = loadComposerPrefs(keys)
+    const initial = initialValuesRef.current
+    const merged: ComposerPrefs = { ...prefs, ...initial, files: initial?.files ?? prefs.files }
+    setPrompt(merged.prompt)
+    if (merged.title.trim()) {
+      setTitle(merged.title)
       titleTouchedRef.current = true
     }
-    setMode(lockedMode ?? prefs.mode)
-    setAgents(prefs.agents)
-    setTool(prefs.tool)
-    setAuto(prefs.auto)
-    setFiles(prefs.files)
+    setMode(lockedMode ?? merged.mode)
+    setAgents(merged.agents)
+    setTool(merged.tool)
+    setAuto(merged.auto)
+    setFiles(merged.files)
     setHydrated(true)
   }, [])
 
   useEffect(() => {
     if (!hydrated) return
-    saveComposerPrefs({ prompt, title, mode, agents, tool, auto, files })
+    saveComposerPrefs({ prompt, title, mode, agents, tool, auto, files }, storageKeysRef.current)
   }, [hydrated, prompt, title, mode, agents, tool, auto, files])
 
   // Attachment contents persist under their own key so a refresh restores the
   // full files, not just name chips.
   useEffect(() => {
     if (!hydrated) return
-    saveComposerFileContents(files)
+    saveComposerFileContents(files, storageKeysRef.current)
   }, [hydrated, files])
+
+  useEffect(() => {
+    if (!hydrated) return
+    onDraftChangeRef.current?.({ prompt, title, mode, agents, tool, auto, files })
+  }, [hydrated, prompt, title, mode, agents, tool, auto, files])
 
   // Keep the name field a confirmed, prefilled input rather than a silent
   // derivation: until the user edits it, mirror the suggestion for the current
@@ -414,7 +447,7 @@ export function LandingComposer({
 
   function requireAccount() {
     if (session) return true
-    saveComposerPrefs({ prompt, title, mode, agents, tool, auto, files })
+    saveComposerPrefs({ prompt, title, mode, agents, tool, auto, files }, storageKeysRef.current)
     openAuth("signup", { next: "/new/idea" })
     return false
   }
@@ -498,6 +531,10 @@ export function LandingComposer({
     }
     fromDictationRef.current = false
     applyPrompt(value)
+    if (autoDetectMode) {
+      const nextMode = detectStartMode(value)
+      if (nextMode) setMode((current) => (current === nextMode ? current : nextMode))
+    }
   }
 
   function changeLink(nextUrl: string, nextNotes: string) {
@@ -509,6 +546,10 @@ export function LandingComposer({
     setLinkUrl(nextUrl)
     setLinkNotes(nextNotes)
     applyPrompt(combined)
+    if (autoDetectMode) {
+      const nextMode = detectStartMode(combined)
+      if (nextMode) setMode((current) => (current === nextMode ? current : nextMode))
+    }
   }
 
   function stopLevelMeter() {
@@ -683,6 +724,11 @@ export function LandingComposer({
     const pendingFiles = files
       .filter((file): file is ComposerAttachment & { content: string } => Boolean(file.content))
       .map(({ name, content, size }) => ({ name, content, size }))
+    if (onDraftSubmitRef.current) {
+      onDraftSubmitRef.current({ prompt: saved, title: savedTitle, mode: nextMode, agents, tool, auto, files })
+      setSubmitting(false)
+      return
+    }
     savePendingStart({
       prompt: saved,
       title: savedTitle,
@@ -695,7 +741,7 @@ export function LandingComposer({
     })
     // The handoff owns the attachments from here; clear them so the composer
     // starts fresh when the founder returns.
-    saveComposerPrefs({ prompt, title: savedTitle, mode: nextMode, agents, tool, auto, files: [] })
+    saveComposerPrefs({ prompt, title: savedTitle, mode: nextMode, agents, tool, auto, files: [] }, storageKeysRef.current)
     setFiles([])
     trackStartSubmitted({ method: nextMode, surface, authenticated: Boolean(session) })
     setSubmitting(true)
@@ -1091,7 +1137,7 @@ export function LandingComposer({
           <button
             type="submit"
             disabled={!canSend}
-            aria-label={submitting ? "Preparing your business plan" : "Plan my business"}
+            aria-label={submitting ? "Preparing your business plan" : (submitLabel ?? "Plan my business")}
             className={cn(
               "grid size-9 shrink-0 place-items-center rounded-full transition-transform duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:translate-y-px",
               canSend

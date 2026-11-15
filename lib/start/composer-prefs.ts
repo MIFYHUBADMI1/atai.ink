@@ -5,6 +5,16 @@ export const COMPOSER_PREFS_KEY = "atai:landing-composer"
  * keystroke and must never re-serialize megabytes of base64. */
 export const COMPOSER_FILE_CONTENTS_KEY = "atai:landing-composer-file-contents"
 
+export type ComposerStorageKeys = {
+  prefs: string
+  contents: string
+}
+
+export const DEFAULT_COMPOSER_STORAGE_KEYS: ComposerStorageKeys = {
+  prefs: COMPOSER_PREFS_KEY,
+  contents: COMPOSER_FILE_CONTENTS_KEY,
+}
+
 export const MAX_ATTACHMENTS = 6
 /** Per-file raw size cap (base64 inflates ~33% on the way to the builder). */
 export const MAX_ATTACHMENT_BYTES = 1024 * 1024
@@ -49,10 +59,10 @@ function readJson<T>(key: string): Partial<T> | null {
   }
 }
 
-export function loadComposerPrefs(): ComposerPrefs {
+export function loadComposerPrefs(keys: ComposerStorageKeys = DEFAULT_COMPOSER_STORAGE_KEYS): ComposerPrefs {
   if (typeof window === "undefined") return DEFAULT_COMPOSER_PREFS
-  const parsed = readJson<ComposerPrefs>(COMPOSER_PREFS_KEY) ?? {}
-  const contents = readJson<Record<string, string>>(COMPOSER_FILE_CONTENTS_KEY) ?? {}
+  const parsed = readJson<ComposerPrefs>(keys.prefs) ?? {}
+  const contents = readJson<Record<string, string>>(keys.contents) ?? {}
   const files = (Array.isArray(parsed.files) ? parsed.files : []).map((file) => ({
     ...file,
     ...(typeof contents[file.id] === "string" ? { content: contents[file.id] } : {}),
@@ -67,29 +77,29 @@ export function loadComposerPrefs(): ComposerPrefs {
   }
 }
 
-export function saveComposerPrefs(prefs: ComposerPrefs) {
+export function saveComposerPrefs(prefs: ComposerPrefs, keys: ComposerStorageKeys = DEFAULT_COMPOSER_STORAGE_KEYS) {
   if (typeof window === "undefined") return
   // Strip content — the per-keystroke save carries metadata only.
   const files = prefs.files.map(({ content: _content, ...file }) => file)
-  sessionStorage.setItem(COMPOSER_PREFS_KEY, JSON.stringify({ ...prefs, files }))
+  sessionStorage.setItem(keys.prefs, JSON.stringify({ ...prefs, files }))
 }
 
 /** Persist attachment contents (data URIs) under their own key. */
-export function saveComposerFileContents(files: ComposerAttachment[]) {
+export function saveComposerFileContents(files: ComposerAttachment[], keys: ComposerStorageKeys = DEFAULT_COMPOSER_STORAGE_KEYS) {
   if (typeof window === "undefined") return
   try {
     const contents: Record<string, string> = {}
     for (const file of files) {
       if (file.content) contents[file.id] = file.content
     }
-    sessionStorage.setItem(COMPOSER_FILE_CONTENTS_KEY, JSON.stringify(contents))
+    sessionStorage.setItem(keys.contents, JSON.stringify(contents))
   } catch {
     // Quota exceeded — metadata chips survive; submit-time caps keep the
     // pending-start copy small.
   }
 }
 
-export function clearComposerFileContents() {
+export function clearComposerFileContents(keys: ComposerStorageKeys = DEFAULT_COMPOSER_STORAGE_KEYS) {
   if (typeof window === "undefined") return
-  sessionStorage.removeItem(COMPOSER_FILE_CONTENTS_KEY)
+  sessionStorage.removeItem(keys.contents)
 }

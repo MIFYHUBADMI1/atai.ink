@@ -550,7 +550,7 @@ export default function AdminDashboardPage() {
             <div className="flex flex-wrap gap-3">
               {stats.onboarding.bySignalType.map((s) => (
                 <span key={s.label} className="rounded-full border border-border px-3 py-1 text-sm">
-                  {s.label === "url" ? "Website mirroring" : s.label === "idea" ? "From scratch" : s.label}
+                  {s.label === "url" ? "From a website or product" : s.label === "idea" ? "From scratch" : s.label}
                   <span className="ml-2 font-mono text-xs text-muted-foreground">{s.count}</span>
                 </span>
               ))}

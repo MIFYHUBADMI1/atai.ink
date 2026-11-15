@@ -70,7 +70,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (!isTotalumConfigured()) {
       return fail(
         "PROVIDER_NOT_CONFIGURED",
-        "The application builder isn't connected yet. Add your Totalum API key to enable building.",
+        "The build engine isn't connected yet. Add your Totalum API key to enable building.",
         503,
       )
     }

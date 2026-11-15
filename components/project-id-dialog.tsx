@@ -59,7 +59,7 @@ export function ProjectIdDialog({
       await onConfirm(requestedProjectId)
       onOpenChange(false)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "This app address could not be reserved.")
+      setError(cause instanceof Error ? cause.message : "This business address could not be reserved.")
     } finally {
       setSubmitting(false)
     }
@@ -72,7 +72,7 @@ export function ProjectIdDialog({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Globe2 className="size-4 text-primary" aria-hidden />
-              Choose your app address
+              Choose your business address
             </DialogTitle>
             <DialogDescription>
               This becomes your application&apos;s subdomain. Choose a name that belongs to your product—Atai will not add its branding or a random suffix.

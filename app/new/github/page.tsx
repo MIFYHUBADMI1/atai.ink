@@ -22,7 +22,7 @@ const STEPS = [
   {
     icon: Hammer,
     label: "Build",
-    body: "Atai turns that into a working application you can review, ship, and keep improving.",
+    body: "Atai turns that into a working product your business can use — reviewed, shipped, and improved over time.",
   },
 ]
 

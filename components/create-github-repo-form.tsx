@@ -177,8 +177,8 @@ export function CreateGitHubRepoForm({ hasGitHub }: { hasGitHub: boolean }) {
           >
             <Copy className={cn("size-4 shrink-0", subMode === "clone" ? "text-primary" : "text-muted-foreground")} />
             <div>
-              <p className={cn("text-sm font-medium", subMode === "clone" ? "text-foreground" : "text-muted-foreground")}>Clone</p>
-              <p className="text-xs text-muted-foreground">Build from scratch</p>
+              <p className={cn("text-sm font-medium", subMode === "clone" ? "text-foreground" : "text-muted-foreground")}>Rebuild</p>
+              <p className="text-xs text-muted-foreground">Start a new product from the repo</p>
             </div>
           </button>
           <button
@@ -194,7 +194,7 @@ export function CreateGitHubRepoForm({ hasGitHub }: { hasGitHub: boolean }) {
             <Layers className={cn("size-4 shrink-0", subMode === "extend" ? "text-primary" : "text-muted-foreground")} />
             <div>
               <p className={cn("text-sm font-medium", subMode === "extend" ? "text-foreground" : "text-muted-foreground")}>Extend</p>
-              <p className="text-xs text-muted-foreground">Continue existing app</p>
+              <p className="text-xs text-muted-foreground">Continue the existing product</p>
             </div>
           </button>
         </div>
@@ -232,7 +232,7 @@ export function CreateGitHubRepoForm({ hasGitHub }: { hasGitHub: boolean }) {
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2">
           <Label htmlFor="project-name" className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-            Project name <span className="text-destructive">*</span>
+            Business name <span className="text-destructive">*</span>
           </Label>
           {suggestedTitle && title.trim() !== suggestedTitle ? (
             <button
@@ -251,7 +251,7 @@ export function CreateGitHubRepoForm({ hasGitHub }: { hasGitHub: boolean }) {
         <Input
           id="project-name"
           autoComplete="off"
-          placeholder="Name your workspace — this becomes your project title"
+          placeholder="Name your business — this becomes the workspace title"
           value={title}
           maxLength={MAX_PROJECT_TITLE_LENGTH}
           onChange={(e) => {
@@ -265,7 +265,7 @@ export function CreateGitHubRepoForm({ hasGitHub }: { hasGitHub: boolean }) {
           disabled={busy}
         />
         <p className="text-xs text-muted-foreground">
-          {title.length > 0 && titleError ? titleError : "Required — Atai won’t name the project for you."}
+          {title.length > 0 && titleError ? titleError : "Required — Atai won’t name the business for you."}
         </p>
       </div>
 
@@ -301,7 +301,7 @@ export function CreateGitHubRepoForm({ hasGitHub }: { hasGitHub: boolean }) {
           />
           {userRequest.trim().length === 0 && (
             <p className="text-xs text-muted-foreground">
-              Describe what you want to add, change, or improve in the application.
+              Describe what you want to add, change, or improve in the product.
             </p>
           )}
         </div>
@@ -310,7 +310,7 @@ export function CreateGitHubRepoForm({ hasGitHub }: { hasGitHub: boolean }) {
       {/* Preferences button */}
       <div className="flex items-center justify-between rounded-lg border border-border bg-card p-3">
         <div className="flex flex-col gap-1">
-          <p className="text-sm font-medium">Project preferences</p>
+          <p className="text-sm font-medium">Business preferences</p>
           <p className="text-xs text-muted-foreground">
             {preferences ? "Database, stack type, and auth configured" : "Set database, stack type, and auth preferences"}
           </p>
@@ -347,11 +347,11 @@ export function CreateGitHubRepoForm({ hasGitHub }: { hasGitHub: boolean }) {
       {/* Mode-specific info */}
       <div className="rounded-lg border border-border bg-muted/40 p-4">
         <p className="mb-2 font-mono text-xs uppercase tracking-widest text-muted-foreground">
-          {subMode === "clone" ? "Clone mode" : "Extend mode"}
+          {subMode === "clone" ? "Rebuild mode" : "Extend mode"}
         </p>
         <p className="text-sm text-muted-foreground">
           {subMode === "clone"
-            ? "We'll read your README and repository structure, then build a new application from scratch that implements the same functionality."
+            ? "We'll read your README and repository structure, then plan a new product from scratch that serves the same customers and use cases."
             : "We'll download your existing codebase and continue from where it left off, adding the features and changes you specify."}
         </p>
       </div>
@@ -372,7 +372,7 @@ export function CreateGitHubRepoForm({ hasGitHub }: { hasGitHub: boolean }) {
         ) : (
           <>
             <GitHubIcon className="size-4 mr-2" />
-            {subMode === "clone" ? "Clone & build" : "Extend application"}
+            {subMode === "clone" ? "Start rebuild" : "Extend product"}
           </>
         )}
       </Button>

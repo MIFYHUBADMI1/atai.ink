@@ -58,7 +58,7 @@ export async function prepareRequestedProjectId(
       ok: false,
       status: 422,
       code: "PROJECT_ID_REQUIRED",
-      message: "Choose your app address before starting the build.",
+      message: "Choose your business address before starting the build.",
     }
   }
 
@@ -73,7 +73,7 @@ export async function prepareRequestedProjectId(
       ok: false,
       status: 409,
       code: "PROJECT_ID_UNAVAILABLE",
-      message: "That app address is already in use. Choose another project ID.",
+      message: "That business address is already in use. Choose another address.",
     }
   }
 
@@ -83,7 +83,7 @@ export async function prepareRequestedProjectId(
       ok: false,
       status: 409,
       code: "PROJECT_ID_UNAVAILABLE",
-      message: "That app address was just taken. Choose another project ID.",
+      message: "That business address was just taken. Choose another address.",
     }
   }
 
@@ -125,7 +125,7 @@ export async function startProjectBuild(userId: string, projectId: string): Prom
     return { ok: false, status: 409, code: "VALIDATION", message: "This project has no application plan yet." }
   }
   if (!isTotalumConfigured()) {
-    return { ok: false, status: 503, code: "PROVIDER_NOT_CONFIGURED", message: "The application builder isn't connected yet. Add your Totalum API key to enable building." }
+    return { ok: false, status: 503, code: "PROVIDER_NOT_CONFIGURED", message: "The build engine isn't connected yet. Add your Totalum API key to enable building." }
   }
 
   const preparedProjectId = await prepareRequestedProjectId(project)
@@ -259,7 +259,7 @@ export async function sendProjectFollowup(userId: string, projectId: string, pro
     }
   }
   if (!isTotalumConfigured()) {
-    return { ok: false, status: 503, code: "PROVIDER_NOT_CONFIGURED", message: "The application builder isn't connected yet." }
+    return { ok: false, status: 503, code: "PROVIDER_NOT_CONFIGURED", message: "The build engine isn't connected yet." }
   }
 
   const userMsg = { id: cryptoId(), role: "user" as const, content: trimmed, at: Date.now() }

@@ -147,7 +147,7 @@ export async function chargeScrapeCredits(userId: string, projectId: string, pip
   logger.info("credits.scrape", "charged", { userId, projectId, amount: cost, mode: pipelineMode ?? "legacy" })
 }
 
-/** Charge a user for a deep crawl (full-site exact replica mode). */
+/** Charge a user for a deep crawl (full-site research mode). */
 export async function chargeDeepCrawlCredits(userId: string, projectId: string, pipelineMode?: "legacy" | "heavy") {
   const cost = await getDeepCrawlCost(pipelineMode)
   const modeLabel = pipelineMode === "heavy" ? "Heavy mode" : "Legacy mode"
@@ -156,7 +156,7 @@ export async function chargeDeepCrawlCredits(userId: string, projectId: string, 
     userId,
     type: "consume",
     amount: -cost,
-    reason: `Deep crawl — full site replica (${modeLabel})`,
+    reason: `Deep crawl — full-site research (${modeLabel})`,
     // Trusted server-derived project context — persisted on the ledger entry.
     metadata: { projectId },
     createdAt: Date.now(),

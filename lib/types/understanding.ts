@@ -82,6 +82,8 @@ export const ProjectUnderstandingSchema = z.object({
   screenshots: z.array(z.string()).default([]),
   rawEvidenceReferences: z.array(z.string()).default([]),
   confidenceNotes: z.string().optional(),
+  /** Founder-supplied reference material for planning (attachments). Untrusted input. */
+  founderContext: z.string().optional(),
 })
 export type ProjectUnderstanding = z.infer<typeof ProjectUnderstandingSchema>
 

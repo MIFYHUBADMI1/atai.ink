@@ -351,7 +351,7 @@ function SidebarBody({
             </li>
             <li>
               <Link href="/new" className="block px-2 py-1 text-xs text-primary hover:underline">
-                Create new project
+                Create new business
               </Link>
             </li>
           </ul>

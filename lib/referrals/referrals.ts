@@ -16,7 +16,7 @@ import { getMongoClient } from "@/lib/db/mongodb"
  *   - Max 2,000 credits per referred user.
  */
 
-const REFERRAL_CODE_PREFIX = "MSA"
+const REFERRAL_CODE_PREFIX = "ATA"
 const REFERRAL_CODE_LENGTH = 6
 /** Legacy fallback constants — live values come from admin-configurable
  * runtime settings (lib/billing/runtime-config.ts) at grant time. */
@@ -41,7 +41,7 @@ async function getRuntimeRewards() {
 // ─── Referral Code Generation ───────────────────────────────────────────────
 
 /**
- * Generate a unique referral code in the format MSA-XXXXXX.
+ * Generate a unique referral code in the format ATA-XXXXXX.
  * Uses alphanumeric characters (uppercase) excluding ambiguous chars (0, O, I, L).
  */
 function generateReferralCode(): string {

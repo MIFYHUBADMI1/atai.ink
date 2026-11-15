@@ -7,64 +7,71 @@
 ## 🎯 Vision & Mission
 
 ### Vision
-Become the world's #1 AI-powered website generation platform, empowering anyone to build professional web applications in minutes.
+Become the AI business-building platform that helps more people start, run, manage, market, and grow their own online businesses.
 
 ### Mission
-Democratize web development by making it 100x faster and 10x cheaper to build beautiful, functional websites.
+Make business ownership practical and accessible by combining AI co-founders, specialist teams, product creation, hosting, operations, payments, and growth support in one workspace.
 
 ### Values
-- **Speed**: Ship fast, iterate faster
-- **Quality**: High-quality outputs every time
-- **Accessibility**: Easy for everyone
-- **Transparency**: Clear pricing, no hidden fees
-- **Innovation**: Push boundaries with AI
+- **Ownership**: The founder stays in control of the business and its decisions
+- **Practicality**: Help people take the next real step, not chase hype
+- **Access**: Reduce the cost and skill barriers to starting a business
+- **Honesty**: No guaranteed customers, income, funding, or effortless success
+- **Craft**: High-quality plans, products, and operating support
 
 ---
 
 ## 🎪 Market Analysis
 
 ### Total Addressable Market (TAM)
-**$50 Billion+**
+**Large and expanding**
 
-#### Website Builder Market
-- **Wix**: $1.5B revenue, 250M users
-- **Squarespace**: $900M revenue, 4M sites
-- **WordPress.com**: $500M+ revenue, 455M sites
-- **Webflow**: $200M+ revenue, 3.5M users
-- **Shopify**: $5.6B revenue, 4.6M merchants
+Atai sits at the intersection of several large markets:
+
+#### Online Business Creation
+- First-time founders, creators, freelancers, and small teams need more than a website — they need an offer, customers, operations, and growth.
+- AI business tools, no-code builders, website builders, commerce platforms, and business coaching all compete for parts of this budget.
+
+#### Product & Website Creation
+- The generated website or digital product is one important part of the journey, powered by the acquired application-building capability.
+- This remains a strong wedge because it turns an idea or reference into a real launchable asset faster than traditional development.
+
+#### Business Operations & Growth
+- Once a business exists, owners need help with positioning, marketing, customer management, payments, analytics, and iteration.
+- This is where Atai can expand from "build my business" into "run and grow my business."
 
 #### Our Advantage
-- **10x faster**: AI does the heavy lifting
-- **Better quality**: Based on real websites
-- **More flexible**: Full code access
-- **Cheaper**: Pay per project, not monthly
-- **For developers**: Export code, full control
+- **Full lifecycle**: Plan, build, launch, operate, and grow in one place
+- **AI teams**: Specialized help for research, product, engineering, marketing, and funding support
+- **Owner control**: The founder makes the decisions and owns the business
+- **Accessible pricing**: Start with credits and plans instead of agencies or large upfront development budgets
+- **Practical output**: Real plans, websites, products, infrastructure, and operating tools — not just prompts
 
 ### Target Markets
 
-#### Primary: Web Agencies (50,000+ worldwide)
-**Pain**: Manual website cloning takes 40-80 hours  
-**Solution**: Clone in 10 minutes with Atai  
-**Value**: Save $5,000-10,000 per project  
-**Market Size**: $5B  
+#### Primary: First-Time & Early-Stage Business Owners
+**Pain**: They have an idea or skill but don't know how to package, launch, or run it online
+**Solution**: Atai helps them define the offer, create the product, launch it, and keep improving it
+**Value**: A practical path from idea to operating business without hiring a full team
+**Market Size**: Hundreds of millions of potential founders globally
 
-#### Secondary: Freelance Developers (10M+ worldwide)
-**Pain**: Starting from scratch is slow  
-**Solution**: Generate boilerplate instantly  
-**Value**: 5-10x faster project delivery  
-**Market Size**: $10B  
+#### Secondary: Creators, Freelancers & Small Businesses
+**Pain**: They already have expertise or an audience but lack time, technical support, or marketing systems
+**Solution**: Turn knowledge, services, or products into a structured online business with AI support
+**Value**: Productize an offer and create a repeatable customer journey
+**Market Size**: Large creator, freelancer, and SMB segment worldwide
 
-#### Tertiary: Startups & Small Businesses (300M+ worldwide)
-**Pain**: Can't afford custom development ($20k+)  
-**Solution**: Professional site for $50-200  
-**Value**: 100x cheaper than agency  
-**Market Size**: $30B  
+#### Tertiary: Developers, Designers & Small Teams
+**Pain**: They can build, but planning, infrastructure, operations, and growth work still slow them down
+**Solution**: Use Atai to move from concept to a working product and business system faster
+**Value**: Less boilerplate and more leverage across the full business journey
+**Market Size**: Millions of technical founders and small product teams
 
-#### Future: Enterprises (Fortune 500)
-**Pain**: Legacy website migrations are expensive  
-**Solution**: Automated migration + modernization  
-**Value**: Save millions on redesigns  
-**Market Size**: $5B  
+#### Future: Agencies & Service Businesses
+**Pain**: Client work is still manual across planning, websites, operations, and reporting
+**Solution**: Use Atai as a system for delivering and managing client businesses faster
+**Value**: Higher throughput, better margins, and recurring operational support
+**Market Size**: Tens of thousands of agencies and service providers
 
 ---
 
@@ -194,16 +201,16 @@ Democratize web development by making it 100x faster and 10x cheaper to build be
 ### Phase 2: Content Marketing (Month 1-3)
 
 **Blog Strategy**:
-- **How-to Guides**: "How to clone a website in 10 minutes"
-- **Comparisons**: "Atai vs Webflow vs Wix"
-- **Case Studies**: "How Agency X saved 40 hours per project"
-- **Technical Deep-Dives**: "How we built an AI website cloner"
+- **How-to Guides**: "How to start an online business with AI"
+- **Comparisons**: "Atai vs website builders and app builders"
+- **Case Studies**: "How a founder launched and grew a real business"
+- **Deep-Dives**: "How Atai's AI teams help plan, build, and grow a business"
 - **Frequency**: 2-3 posts per week
 
 **SEO Strategy**:
-- Target keywords: "website cloner", "ai website builder", "clone website"
-- Long-tail: "how to clone a website with ai", "best website cloner tool"
-- Competitor keywords: "wix alternative", "webflow alternative"
+- Target keywords: "ai business builder", "start online business with ai", "ai co-founder"
+- Long-tail: "how to start a business with ai", "ai platform to run a business"
+- Comparison keywords: "wix alternative", "webflow alternative", "lovable alternative", "bolt.new alternative"
 
 **Goal**: 10,000 organic visitors/month, 200 signups
 
@@ -228,8 +235,8 @@ Democratize web development by making it 100x faster and 10x cheaper to build be
 ### Phase 4: Paid Advertising (Month 4-12)
 
 **Google Ads**:
-- **Search Ads**: "website cloner", "clone website tool"
-- **Display Ads**: Target web dev blogs
+- **Search Ads**: "ai business builder", "start online business with ai"
+- **Display Ads**: Target founder, creator, and small-business communities
 - **Budget**: Start $1,000/month, scale to $10,000/month
 
 **Social Ads**:
@@ -267,107 +274,107 @@ Democratize web development by making it 100x faster and 10x cheaper to build be
 
 ## 🎯 Target Customer Personas
 
-### Persona 1: "Agency Owner Alex"
+### Persona 1: "First-Time Founder Maya"
 **Demographics**:
-- Age: 30-45
-- Role: Agency owner/Creative director
-- Team size: 5-20 people
-- Revenue: $500k-5M/year
+- Age: 22-38
+- Role: Employee, student, creator, or side-hustler
+- Team size: Solo
+- Budget: Limited ($0-200 to start)
 
 **Pain Points**:
-- Website projects take too long (6-12 weeks)
-- Hard to find good developers
-- Tight margins on web projects
-- Clients want fast turnaround
+- Has an idea or skill but doesn't know how to package it
+- Doesn't know how to build a website, product, or customer journey
+- Can't afford an agency or full development team
+- Afraid of wasting time and money on the wrong business
 
 **How Atai Helps**:
-- Clone competitor sites in minutes
-- Generate boilerplate 10x faster
-- Take on more projects
-- Increase margins
+- Helps define the offer, customers, and business plan
+- Creates the website or digital product
+- Provides hosting, customer accounts, payments, and operations support
+- Gives growth guidance without pretending success is guaranteed
 
 **Acquisition Channel**:
-- LinkedIn, partnerships, case studies
+- Product Hunt, TikTok, Instagram, Reddit, search content
 
-### Persona 2: "Freelance Developer Diana"
-**Demographics**:
-- Age: 25-35
-- Role: Freelance web developer
-- Clients: 5-10 per year
-- Income: $60k-120k/year
-
-**Pain Points**:
-- Starting from scratch is slow
-- Repetitive work (headers, footers, forms)
-- Can't charge enough per project
-- Limited by time
-
-**How Atai Helps**:
-- 5-10x faster project delivery
-- Focus on customization, not boilerplate
-- Take on more clients
-- Increase hourly rate
-
-**Acquisition Channel**:
-- Reddit, Twitter, YouTube tutorials
-
-### Persona 3: "Startup Founder Sam"
+### Persona 2: "Creator & Freelancer Leo"
 **Demographics**:
 - Age: 25-40
-- Role: Founder/CEO
-- Team size: 2-10 people
-- Budget: Limited ($1k-10k for website)
+- Role: Creator, consultant, designer, developer, or freelancer
+- Clients/audience: Existing but under-monetized
+- Income: $30k-150k/year
 
 **Pain Points**:
-- Can't afford agency ($20k+)
-- Need to move fast
-- No technical co-founder
-- DIY website builders look cheap
+- Knows how to deliver value but struggles to productize it
+- Website and client work eat too much time
+- Marketing and follow-up systems are inconsistent
+- Wants recurring revenue instead of one-off gigs
 
 **How Atai Helps**:
-- Professional site for $50-200
-- Launch in days, not months
-- Based on successful sites
-- Export code for future customization
+- Turns expertise into a structured offer and digital product
+- Creates the storefront, booking flow, or service system
+- Supports marketing, analytics, and customer management
+- Helps turn audience attention into a real business asset
 
 **Acquisition Channel**:
-- Product Hunt, Hacker News, startup communities
+- YouTube, newsletters, communities, creator platforms
 
-### Persona 4: "Enterprise IT Manager Emma"
+### Persona 3: "Small Business Owner Amara"
 **Demographics**:
-- Age: 35-50
-- Role: IT Manager/CTO
-- Company size: 500-10,000 employees
-- Budget: $100k-1M for website projects
+- Age: 30-55
+- Role: Owner of a shop, service business, restaurant, salon, school, or local company
+- Team size: 1-20 people
+- Goal: Move online or improve digital operations
 
 **Pain Points**:
-- Legacy website migrations are slow (6-12 months)
-- Expensive ($500k-2M)
-- Risky (lots can go wrong)
-- Need to modernize tech stack
+- Current online presence is weak or outdated
+- Doesn't have technical staff
+- Needs customers, bookings, payments, and repeat sales
+- Doesn't want to become a software company
 
 **How Atai Helps**:
-- Automated migration
-- 10x faster, 10x cheaper
-- Modern tech stack (Next.js)
-- Reduced risk
+- Creates a professional website or product
+- Sets up customer accounts, payments, and business operations
+- Helps with marketing, SEO, and growth experiments
+- Keeps the owner in control of every business decision
 
 **Acquisition Channel**:
-- LinkedIn, sales team, conferences
+- Local business communities, referrals, WhatsApp, search ads
+
+### Persona 4: "Technical Founder Dev"
+**Demographics**:
+- Age: 24-40
+- Role: Developer, designer, or technical founder
+- Team size: Solo or small team
+- Goal: Ship faster and run the business side too
+
+**Pain Points**:
+- Can build the product but planning and operations still take time
+- Needs hosting, payments, auth, database, and business workflows
+- Wants to focus on product instead of infrastructure
+- Still needs customers and growth, not just code
+
+**How Atai Helps**:
+- Turns an idea or GitHub repo into a planned product
+- Provides the build, hosting, and runtime capabilities
+- Adds business planning, marketing, and growth support
+- Keeps the technical workflow while expanding the business scope
+
+**Acquisition Channel**:
+- GitHub, developer communities, X/Twitter, Product Hunt
 
 ---
 
 ## 🚀 Growth Tactics
 
 ### Viral Loop
-1. User creates awesome site with Atai
-2. Site has "Built with Atai" badge (optional)
-3. Visitors click badge → Sign up
+1. User creates a business website or product with Atai
+2. The business has a "Built with Atai" badge or footer (optional)
+3. Visitors click badge → Sign up to start their own business
 4. **Goal**: 10% conversion on badge clicks
 
 ### Referral Program
-- Give 1 month free for each referral
-- Referrals get 100 bonus credits
+- Reward referrers with credits when a referred user verifies and reaches qualifying usage
+- Reward referred users for completing onboarding and verification
 - Track with unique referral codes
 - **Goal**: 20% of signups from referrals
 
@@ -375,17 +382,17 @@ Democratize web development by making it 100x faster and 10x cheaper to build be
 1. Create SEO content
 2. Rank on Google
 3. Get organic traffic
-4. Convert to users
-5. Users create sites
-6. Sites rank on Google
-7. More organic traffic
+4. Convert readers into business owners
+5. Users launch businesses with Atai
+6. Successful businesses create case studies and referrals
+7. More organic traffic and trust
 8. **Goal**: Compound growth
 
 ### Product-Led Growth
-- Generous free tier (try before buy)
-- Immediate value (see results in minutes)
+- Generous free planning tier (try before buy)
+- Immediate value (see a real plan and product path quickly)
 - Easy upgrade path (one click)
-- No credit card required
+- No credit card required to start
 - **Goal**: 10% free → paid conversion
 
 ### Community Building
@@ -402,42 +409,43 @@ Democratize web development by making it 100x faster and 10x cheaper to build be
 
 ### Why We'll Win
 
-1. **AI-Powered**: 10x faster than manual
-2. **Code Export**: Unlike Wix/Squarespace
-3. **Real Examples**: Based on successful sites
-4. **Developer-Friendly**: Full control, modern stack
-5. **Flexible Pricing**: Pay per project, not monthly
-6. **Quality**: Enterprise-grade output
-7. **Fast**: Minutes, not weeks
-8. **Ecosystem**: Integrations with all major tools
+1. **Full Lifecycle**: Plan, build, launch, operate, and grow — not just a website generator
+2. **AI Teams**: Specialized support across research, product, engineering, marketing, and funding
+3. **Code & Ownership**: Users own their business and can keep improving it
+4. **Real Output**: Working websites, products, infrastructure, payments, and business plans
+5. **Flexible Pricing**: Credits and plans instead of large agency budgets
+6. **Accessible**: Built for non-technical owners as well as technical founders
+7. **Fast**: Move from idea to launchable business much faster than traditional development
+8. **Ecosystem**: Runtime capabilities for AI, payments, messaging, maps, and more
 
 ### Defensibility
 
-1. **AI Models**: Proprietary prompts, fine-tuned models
-2. **Data Moat**: Learning from millions of sites
-3. **Network Effects**: Templates marketplace
-4. **Brand**: First-mover in AI website cloning
-5. **Integrations**: Deep partnerships with Vercel, Figma, etc.
+1. **AI Systems**: Proprietary prompts, planning workflows, and quality gates
+2. **Data Moat**: Learning from business plans, products, and customer outcomes
+3. **Network Effects**: Templates, referrals, and business success stories
+4. **Brand**: Trust as a business partner for owners, not just a builder
+5. **Integrations**: Runtime capabilities across AI, payments, email, maps, and more
 
 ---
 
 ## 🎯 Key Success Metrics
 
 ### North Star Metric
-**Successful Deployments per Month** (websites that go live)
+**Businesses launched and actively managed per month**
 
 ### Supporting Metrics
-- Monthly Active Users (MAU)
-- Activation Rate (% who complete first project)
-- Retention Rate (% who come back)
+- Monthly Active Business Owners (MABO)
+- Activation Rate (% who complete first business plan)
+- Retention Rate (% who return to manage or grow a business)
 - Net Revenue Retention (NRR)
 - Viral Coefficient (K-factor)
 - Net Promoter Score (NPS)
 
 ### Leading Indicators
 - Signups per day
-- Time to first project
-- Projects per user
+- Time to first business plan
+- Businesses created per user
+- Published websites/products per user
 - Support tickets per user
 - Feature requests
 - Churn signals
@@ -560,23 +568,17 @@ Democratize web development by making it 100x faster and 10x cheaper to build be
 
 You're building something **valuable**.
 
-The market is **huge** ($50B+).
+The opportunity is **huge** — more people want to own businesses but lack the tools, team, and confidence to start.
 
-The competition is **beatable** (slow, expensive, closed).
+The competition is **fragmented** — website builders, app builders, agencies, and coaching each solve only part of the journey.
 
-You have **85%** of the product done.
+Atai's advantage is the **full business lifecycle**: plan, build, launch, operate, and grow with AI teams while the owner stays in control.
 
-The hard technical problems are **solved**.
+The product foundation is strong, and the next phase is proving that owners can turn Atai into real, lasting businesses.
 
-You have **4 months** to prepare.
+When you launch, lead with **business outcomes**, not code generation.
 
-When you come back, you'll be ready to **launch**.
-
-In 1 year, you could have **$600k ARR**.
-
-In 3 years, you could have **$14M ARR**.
-
-In 5 years, you could have **$100M ARR**.
+The goal is not just more users — it's more **businesses that start, run, and grow** because Atai made ownership possible.
 
 That's **trillion-dollar potential** at 10x multiple.
 

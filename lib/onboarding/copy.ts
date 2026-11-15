@@ -11,16 +11,16 @@ export const ONBOARDING_COPY = {
   verifySpam: "Check spam or promotions if you don't see it within a minute.",
   skipHint: "Skip for now",
   selectToContinue: "Tap an option to continue",
-  visionHeading: "What are you building?",
+  visionHeading: "What business are you starting?",
   visionDescription:
     "A sentence is enough. Atai uses this to shape your first plan — you can refine it later.",
-  visionPlaceholder: "I'm building...",
+  visionPlaceholder: "I'm starting a business that...",
   visionLabel: "Your vision",
   examples: [
     "An AI platform that helps small businesses manage their finances.",
     "A marketplace connecting local farmers directly with restaurants.",
-    "I have a website but I want to turn it into a real product.",
-    "I want to build something around this GitHub project.",
+    "I have a website but want to turn it into a business people can pay for.",
+    "I want to turn this existing product into a business.",
   ],
   gotIt: "Got it.",
   capabilitiesIntro: "Atai can help you turn this into:",
@@ -30,8 +30,8 @@ export const ONBOARDING_COPY = {
   secondaryCta: "Skip for now",
   continueToPlan: "Build the plan",
   skipError: "Couldn't save that. Try again, or refresh the page.",
-  emptyHeading: "What are you building?",
-  emptyBody: "Tell Atai the idea. We'll help you shape the plan, then build and launch.",
+  emptyHeading: "What business are you starting?",
+  emptyBody: "Tell Atai the idea. We'll help you shape the plan, then build and launch the business.",
   emptyCta: "Start with Atai",
   capturedVision: "Your vision",
   audienceLabel: "Who are you building this for?",
@@ -46,7 +46,7 @@ export const ONBOARDING_COPY = {
 
 export const MODE_COPY = {
   idea: { label: "Idea", hint: "Start from a problem or product in your own words." },
-  website: { label: "Mirror", hint: "Use an existing product or website as a reference." },
-  url: { label: "URL", hint: "Start from a live site you already have or want to study." },
+  website: { label: "Reference", hint: "Use an existing website or product as business inspiration." },
+  url: { label: "Website", hint: "Start from a live site you already have or want to study." },
   github: { label: "GitHub", hint: "Continue or rebuild from a repository." },
 } as const

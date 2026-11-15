@@ -21,6 +21,7 @@ import {
 import { chargeChatCredits, refundCollaboration } from "@/lib/analysis/collaborate-credits"
 import { getAvailableCredits } from "@/lib/billing/credit-service"
 import { getCollaborateCosts } from "@/lib/billing/runtime-config"
+import { getProjectAttachmentContext } from "@/lib/projects/attachments"
 import { getPlanSection } from "@/lib/analysis/plan-sections"
 import {
   appendProjectChatMessages,
@@ -143,6 +144,7 @@ async function post(
     }
 
     const spec = project.specification
+    const attachmentContext = await getProjectAttachmentContext(id).catch(() => "")
 
     const context = buildCollaborateContext({
       spec,
@@ -156,6 +158,7 @@ async function post(
       activeSection,
       founderVision: project.idea,
       sourceUrl: project.sourceUrl,
+      attachments: attachmentContext || undefined,
     })
 
     const chatPrompt = `${context}\n\n---\nFOUNDER MESSAGE:\n${activeSection

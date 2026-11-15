@@ -63,7 +63,7 @@ export interface ProjectPipelineRecovery {
 
 export type ProjectMode = "website" | "scratch" | "github"
 
-/** How the website was analyzed: "relevant" (AI-interpreted) or "deep" (exact replica). */
+/** How the website was analyzed: "relevant" (AI-interpreted) or "deep" (full-site research). */
 export type CrawlMode = "relevant" | "deep"
 
 /** User-selected pipeline quality mode: "legacy" (fast, single-stage) or "heavy" (7-stage enhanced pipeline). */

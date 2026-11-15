@@ -14,7 +14,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const project = await store.getProject(id)
     if (!project || project.userId !== user.id) return fail("UNAUTHORIZED_PROJECT_ACCESS", "We couldn't find this project.", 404)
     if (!project.totalumProjectId) return fail("NO_TOTALUM_PROJECT", "This project hasn't been built yet.", 400)
-    if (!isTotalumConfigured()) return fail("PROVIDER_NOT_CONFIGURED", "The application builder isn't connected yet.", 503)
+    if (!isTotalumConfigured()) return fail("PROVIDER_NOT_CONFIGURED", "The build engine isn't connected yet.", 503)
 
     const tables = await getDatabaseTables(project.totalumProjectId)
     return ok(tables)

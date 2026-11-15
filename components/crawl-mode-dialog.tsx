@@ -59,7 +59,7 @@ export function CrawlModeDialog({ open, onOpenChange, onSelect, url }: CrawlMode
                   <span className="rounded-full bg-primary/10 px-2 py-0.5 font-mono text-[10px] text-primary">Standard</span>
                 </div>
                 <p className="mt-1.5 text-sm leading-6 text-muted-foreground">
-                  Our AI engine reads your site&apos;s structure, extracts product logic, maps user flows, and generates a complete application blueprint — including authentication flows, data models, and interactive states.
+                  Our AI engine reads your site&apos;s structure, extracts the offer and customer logic, maps user flows, and generates a complete business and product blueprint — including customer accounts, data models, and interactive states.
                 </p>
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   {[
@@ -101,7 +101,7 @@ export function CrawlModeDialog({ open, onOpenChange, onSelect, url }: CrawlMode
                   <span className="rounded-full bg-primary/10 px-2 py-0.5 font-mono text-[10px] text-primary">500 credits</span>
                 </div>
                 <p className="mt-1.5 text-sm leading-6 text-muted-foreground">
-                  We deploy 30+ AI agents to crawl your entire site — every page, every route, every state. They handle heavy JavaScript, authentication middleware, protected dashboards, dynamic content, and user-facing lockages. Everything is captured and reconstructed as an exact replica.
+                  We deploy 30+ AI agents to study your entire site — every page, every route, every state. They handle heavy JavaScript, authentication middleware, protected dashboards, dynamic content, and user-facing lockages. Everything is captured as a detailed reference for your own business plan.
                 </p>
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   {[
@@ -117,7 +117,7 @@ export function CrawlModeDialog({ open, onOpenChange, onSelect, url }: CrawlMode
                   ))}
                 </div>
                 <p className="mt-2 font-mono text-xs text-muted-foreground">
-                  Best for: full site clones, complex SPAs, authenticated apps, preserving every detail
+                  Best for: full-site research, complex products, authenticated experiences, preserving every detail
                 </p>
               </div>
               {selected === "deep" && <CheckMark />}

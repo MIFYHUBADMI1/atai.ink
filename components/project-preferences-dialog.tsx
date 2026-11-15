@@ -54,10 +54,10 @@ export function ProjectPreferencesDialog({ open, onOpenChange, onSubmit, mode }:
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="size-4 text-primary" />
-            Configure Your Application
+            Configure your product
           </DialogTitle>
           <DialogDescription>
-            Tell us about your {mode === "website" ? "mirrored" : mode === "github" ? "GitHub" : "planned"} app so the AI builds exactly what you need.
+            Tell us about your {mode === "website" ? "reference-based" : mode === "github" ? "GitHub-based" : "new"} product so the AI can plan it accurately.
           </DialogDescription>
         </DialogHeader>
 
@@ -79,16 +79,16 @@ export function ProjectPreferencesDialog({ open, onOpenChange, onSubmit, mode }:
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <Globe className="size-5 text-primary" />
-                <h3 className="text-lg font-medium">What&apos;s the app name?</h3>
+                <h3 className="text-lg font-medium">What&apos;s the product name?</h3>
               </div>
               <p className="text-sm text-muted-foreground">
-                What name or brand should your application use? This becomes the project name and is used in headers, titles, and throughout the UI.
+                What name or brand should your product use? This becomes the business name and is used in headers, titles, and throughout the UI.
               </p>
               <div className="space-y-2">
-                <Label htmlFor="app-name">Application name</Label>
+                <Label htmlFor="app-name">Product name</Label>
                 <Input
                   id="app-name"
-                  placeholder={mode === "website" ? "e.g. Interior Design Studio" : mode === "github" ? "e.g. My App" : "e.g. Habit Tracker"}
+                  placeholder={mode === "website" ? "e.g. Interior Design Studio" : mode === "github" ? "e.g. My Storefront" : "e.g. Habit Tracker"}
                   value={prefs.appName ?? ""}
                   onChange={(e) => update("appName", e.target.value)}
                 />
@@ -166,10 +166,10 @@ export function ProjectPreferencesDialog({ open, onOpenChange, onSubmit, mode }:
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <Server className="size-5 text-primary" />
-                <h3 className="text-lg font-medium">Application type</h3>
+                <h3 className="text-lg font-medium">Product type</h3>
               </div>
               <p className="text-sm text-muted-foreground">
-                What kind of application do you want? This determines whether the AI builds a backend, frontend, or both.
+                What kind of product do you want? This determines whether the AI plans a backend, frontend, or both.
               </p>
               <div className="grid gap-3">
                 {([
@@ -206,7 +206,7 @@ export function ProjectPreferencesDialog({ open, onOpenChange, onSubmit, mode }:
                 <h3 className="text-lg font-medium">Authentication providers</h3>
               </div>
               <p className="text-sm text-muted-foreground">
-                Which authentication methods should be built into your app?
+                Which authentication methods should be built into your product?
               </p>
               <div className="grid gap-3">
                 {([
@@ -244,7 +244,7 @@ export function ProjectPreferencesDialog({ open, onOpenChange, onSubmit, mode }:
                 <h3 className="text-lg font-medium">Anything else?</h3>
               </div>
               <p className="text-sm text-muted-foreground">
-                Any specific requirements, preferences, or details the AI should know about your application?
+                Any specific requirements, preferences, or details the AI should know about your product?
               </p>
               <Textarea
                 placeholder="e.g. Dark theme preferred, must support RTL, use specific color palette, target mobile users first..."
@@ -262,7 +262,7 @@ export function ProjectPreferencesDialog({ open, onOpenChange, onSubmit, mode }:
                 <h3 className="text-lg font-medium">Anything else?</h3>
               </div>
               <p className="text-sm text-muted-foreground">
-                Any specific requirements, preferences, or details the AI should know about your application?
+                Any specific requirements, preferences, or details the AI should know about your product?
               </p>
               <Textarea
                 placeholder="e.g. Dark theme preferred, must support RTL, use specific color palette, target mobile users first..."
@@ -274,7 +274,7 @@ export function ProjectPreferencesDialog({ open, onOpenChange, onSubmit, mode }:
               {/* Summary */}
               <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-2">
                 <p className="text-xs font-medium text-primary uppercase tracking-wide">Summary</p>
-                {prefs.appName && <p className="text-sm"><span className="text-muted-foreground">App name:</span> {prefs.appName}</p>}
+                {prefs.appName && <p className="text-sm"><span className="text-muted-foreground">Product name:</span> {prefs.appName}</p>}
                 <p className="text-sm"><span className="text-muted-foreground">Stack:</span> {prefs.stackType === "fullstack" ? "Full-stack" : prefs.stackType === "frontend" ? "Frontend only" : prefs.stackType === "backend" ? "Backend only" : "AI decides"}</p>
                 <p className="text-sm"><span className="text-muted-foreground">Database:</span> {prefs.databaseChoice === "builtin" ? "Built-in managed database" : `Custom (${prefs.customDbProvider || "unspecified"})`}</p>
                 {prefs.stackType !== "frontend" && prefs.stackType !== "backend" && (

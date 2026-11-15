@@ -129,7 +129,7 @@ const faqStructuredData = {
       name: "How do I contact Atai?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "You can reach us by email at support@atai.ink, by phone or WhatsApp at +256761819885, or through our YouTube channel at https://www.youtube.com/@mirrorsiteai.",
+        text: "You can reach us by email at support@atai.ink or by phone or WhatsApp at +256761819885.",
       },
     },
   ],
@@ -208,7 +208,7 @@ const faqItems = [
   },
   {
     q: "How do I get support?",
-    a: "Email support@atai.ink, WhatsApp/call +256761819885, or visit our YouTube channel at https://www.youtube.com/@mirrorsiteai.",
+    a: "Email support@atai.ink, or WhatsApp/call +256761819885.",
   },
   {
     q: "Can I use my own domain?",
@@ -369,19 +369,19 @@ export default function TermsPage() {
             </div>
           </Section>
 
-          <Section id="ai-output" number="6" icon={Cpu} title="AI-Generated Applications & Output">
-            <p>Atai uses advanced AI systems to generate application code, user interfaces, database structures, infrastructure configurations, business plans, and other outputs based on your inputs.</p>
-            <p>We take output quality seriously. The platform includes AI quality gates and production-readiness checks designed to make every generated application immediately launchable with real users in mind.</p>
+          <Section id="ai-output" number="6" icon={Cpu} title="AI-Generated Business Products & Output">
+            <p>Atai uses advanced AI systems to generate website and product code, user interfaces, database structures, infrastructure configurations, business plans, and other outputs based on your inputs.</p>
+            <p>We take output quality seriously. The platform includes AI quality gates and production-readiness checks designed to make every generated website or product ready to launch with real users in mind.</p>
             <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 flex items-start gap-3">
               <AlertTriangle className="size-4 text-amber-500 mt-0.5 shrink-0" />
               <div className="text-sm">
                 <p className="font-medium text-foreground mb-1">AI output is powerful — your review makes it perfect.</p>
-                <p>Our generated applications are designed to be strong starting points ready for production. Before going live with real users or real transactions, we recommend reviewing the application, testing your key flows, and verifying it meets your specific business needs. No platform can predict every nuance of your unique vision — that final step is yours.</p>
+                <p>Our generated websites and products are designed to be strong starting points ready for production. Before going live with real users or real transactions, we recommend reviewing the output, testing your key flows, and verifying it meets your specific business needs. No platform can predict every nuance of your unique vision — that final step is yours.</p>
               </div>
             </div>
             <p>As a user of Atai, your role includes:</p>
             <ul className="list-disc list-inside space-y-1 ml-4">
-              <li>Reviewing your generated application before going live</li>
+              <li>Reviewing your generated website or product before going live</li>
               <li>Testing key user flows and business logic</li>
               <li>Configuring your production environment and secrets</li>
               <li>Inspecting third-party integrations and dependencies</li>
@@ -713,7 +713,7 @@ export default function TermsPage() {
 
           <Section id="contact" number="34" icon={Phone} title="Contact Us">
             <p>We are here for you. If you have questions about these Terms, need support, or just want to share feedback, reach out through any of the following:</p>
-            <div className="grid gap-4 sm:grid-cols-3 my-4">
+            <div className="grid gap-4 sm:grid-cols-2 my-4">
               <div className="rounded-xl border border-border bg-card p-5">
                 <p className="font-medium text-sm text-foreground mb-2">Email</p>
                 <a href="mailto:support@atai.ink" className="text-sm text-primary hover:underline break-all">support@atai.ink</a>
@@ -723,8 +723,8 @@ export default function TermsPage() {
                 <a href="tel:+256761819885" className="text-sm text-primary hover:underline">+256 761 819 885</a>
               </div>
               <div className="rounded-xl border border-border bg-card p-5">
-                <p className="font-medium text-sm text-foreground mb-2">YouTube</p>
-                <a href="https://www.youtube.com/@mirrorsiteai" target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline break-all">@mirrorsiteai</a>
+                <p className="font-medium text-sm text-foreground mb-2">GitHub</p>
+                <a href="https://github.com/atai-group" target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline break-all">github.com/atai-group</a>
               </div>
             </div>
             <p className="text-sm text-muted-foreground">We aim to respond to all enquiries within 1–2 business days.</p>

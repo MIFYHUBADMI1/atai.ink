@@ -438,7 +438,7 @@ export default function AdminUsersPage() {
                 >
                   <option value="">All types</option>
                   {uniqueSignals.map((s) => (
-                    <option key={s} value={s}>{s === "url" ? "Website mirroring" : s === "idea" ? "From scratch" : s}</option>
+                    <option key={s} value={s}>{s === "url" ? "From a website or product" : s === "idea" ? "From scratch" : s}</option>
                   ))}
                 </select>
               )}
@@ -660,7 +660,7 @@ export default function AdminUsersPage() {
                     <div className="flex justify-between"><span className="text-muted-foreground">Role</span><span>{selectedUser.onboarding.role}</span></div>
                   )}
                   {selectedUser.onboarding?.signalType && (
-                    <div className="flex justify-between"><span className="text-muted-foreground">Building</span><span>{selectedUser.onboarding.signalType === "url" ? "Website mirroring" : selectedUser.onboarding.signalType === "idea" ? "From scratch" : selectedUser.onboarding.signalType}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Starting point</span><span>{selectedUser.onboarding.signalType === "url" ? "From a website or product" : selectedUser.onboarding.signalType === "idea" ? "From scratch" : selectedUser.onboarding.signalType}</span></div>
                   )}
                   {selectedUser.onboarding?.businessGoal && (
                     <div className="flex justify-between gap-4"><span className="text-muted-foreground">Goal</span><span className="text-right">{selectedUser.onboarding.businessGoal}</span></div>

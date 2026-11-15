@@ -95,7 +95,7 @@ export function planCustomerInitiatedDowngrade(
   } else {
     consequences.push(`All ${currentBusinesses} business(es) remain active on ${to}.`)
   }
-  consequences.push("New business creation is blocked at the new cap immediately; existing apps keep serving through period end.")
+  consequences.push("New business creation is blocked at the new cap immediately; existing businesses keep serving through period end.")
   consequences.push("Included custom-domain registrations apply going forward; domains beyond the included count renew per policy.")
   consequences.push(scheduledAtPeriodEnd
     ? "The downgrade takes effect at the end of the current billing period."

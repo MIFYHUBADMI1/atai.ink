@@ -127,7 +127,7 @@ export default async function ResourcesPage() {
         <header className="max-w-3xl">
           <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-indigo-600 dark:text-indigo-300">Resources</p>
           <h1 className="mt-3 text-balance text-3xl font-black tracking-tight sm:text-5xl">
-            Build smarter. Launch faster. Grow with clarity.
+            Plan better. Launch faster. Grow with clarity.
           </h1>
           <p className="mt-4 text-pretty text-base leading-7 text-muted-foreground sm:text-lg">
             Practical guides, playbooks, tutorials, roadmaps, templates, documents, images, and videos for turning

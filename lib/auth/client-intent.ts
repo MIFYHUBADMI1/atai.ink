@@ -17,7 +17,7 @@ export type PendingStart = {
   pipelineMode?: "legacy" | "heavy"
   idempotencyKey?: string
   /** Files the founder attached in the composer (data URIs). Shared with the
-   * application builder with the first build. */
+   * build pipeline with the first build. */
   files?: Array<{ name: string; content: string; size?: number }>
 }
 

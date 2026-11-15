@@ -151,7 +151,7 @@ function shell(title: string, bodyHtml: string, accentColor?: string): string {
             color:#ffffff;
             animation:float 3s ease-in-out infinite, pulse 2.5s ease-in-out infinite;
             box-shadow:0 8px 32px rgba(99,102,241,0.35), 0 0 0 1px rgba(99,102,241,0.2);
-          ">M</div>
+          ">A</div>
           <div style="
             margin-top:14px;
             font-size:13px;
@@ -202,7 +202,7 @@ function shell(title: string, bodyHtml: string, accentColor?: string): string {
           text-align:center;
         ">
           <p style="font-size:11px;color:#52525b;margin:0;line-height:1.6;">
-            &copy; 2026 Atai &middot; Build smarter, ship faster
+            &copy; 2026 Atai &middot; Your business. Your AI teams.
           </p>
           <p style="font-size:10px;color:#3f3f46;margin:8px 0 0 0;line-height:1.4;">
             This is a transactional email regarding your account.
@@ -285,17 +285,17 @@ export function verificationEmail(name: string, verifyUrl: string) {
     "Confirm your email",
     `<p style="font-size:15px;line-height:1.7;color:#d4d4d8;margin:0 0 4px 0;">Hey <strong style="color:#f4f4f5;">${escapeHtml(name)}</strong> 👋</p>
      <p style="font-size:15px;line-height:1.7;color:#a1a1aa;margin:0 0 20px 0;">
-       Welcome to the future of app building. Confirm your email and unlock AI-powered development.
+       Welcome to Atai. Confirm your email to unlock your free credits and start planning the business you want to run.
      </p>
      ${button(verifyUrl, "✨ Verify Email Address")}
      ${infoBox("⏱ This link expires in <strong style=\"color:#d4d4d8;\">24 hours</strong>. If you didn't create this account, just ignore this email.")}
      ${statRow([
        { label: "Free Credits", value: "500" },
-       { label: "Deploy Time", value: "< 1m" },
-       { label: "Setup", value: "0s" },
+       { label: "Plan First", value: "Yes" },
+       { label: "Card Needed", value: "No" },
      ])}
      <p style="font-size:12px;color:#71717a;text-align:center;margin:0;line-height:1.6;">
-       You're joining <strong style="color:#d4d4d8;">2,400+</strong> builders shipping apps with AI.
+       Your next step: shape the offer, customers, and plan for a business of your own.
      </p>`,
   )
   const text = `Hey ${name}, confirm your email: ${verifyUrl} (expires in 24 hours)`
@@ -321,7 +321,7 @@ export function passwordResetEmail(name: string, resetUrl: string) {
        color:#a1a1aa;
        line-height:1.6;
      ">
-       <strong style="color:#f4f4f5;">🛡️ Your data stays safe.</strong> Resetting your password won't affect your projects, credits, or deployments.
+       <strong style="color:#f4f4f5;">🛡️ Your data stays safe.</strong> Resetting your password won't affect your businesses, plans, credits, or published sites.
      </div>`,
   )
   const text = `Hey ${name}, reset your password: ${resetUrl} (expires in 1 hour)`

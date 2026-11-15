@@ -6,7 +6,7 @@ import { boundedTimeoutMs } from "../shared/http"
  * Atai Runtime — Firecrawl adapter configuration (server-only, Phase 10).
  *
  * REUSES the existing FIRECRAWL_API_KEY server credential — the same
- * environment variable the build-time mirror pipeline uses (Phase 10 §9: do
+ * environment variable the build-time website research pipeline uses (Phase 10 §9: do
  * not invent duplicate environment configuration). The two FLOWS remain
  * strictly separate: this adapter serves runtime requests through the
  * Runtime Router; the build pipeline keeps its own client under

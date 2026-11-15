@@ -259,7 +259,7 @@ describe("POST /api/projects/:id/launch — billing resume", () => {
 
   it("returns the project-ID preparation failure without starting a build", async () => {
     mocks.prepareRequestedProjectId.mockResolvedValue({
-      ok: false, code: "PROJECT_ID_UNAVAILABLE", status: 409, message: "That app address is already in use.",
+      ok: false, code: "PROJECT_ID_UNAVAILABLE", status: 409, message: "That business address is already in use.",
     })
 
     const response = await post({ requestedProjectId: "taken-app" })
@@ -267,7 +267,7 @@ describe("POST /api/projects/:id/launch — billing resume", () => {
     expect(response.status).toBe(409)
     expect(await response.json()).toEqual({
       ok: false,
-      error: { code: "PROJECT_ID_UNAVAILABLE", message: "That app address is already in use." },
+      error: { code: "PROJECT_ID_UNAVAILABLE", message: "That business address is already in use." },
     })
     expect(mocks.autoLaunchBuild).not.toHaveBeenCalled()
   })

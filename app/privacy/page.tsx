@@ -113,7 +113,7 @@ const faqStructuredData = {
       name: "How do I contact Atai about privacy?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Contact us at support@atai.ink, by phone or WhatsApp at +256761819885, or through our YouTube channel at https://www.youtube.com/@mirrorsiteai.",
+        text: "Contact us at support@atai.ink, or by phone or WhatsApp at +256761819885.",
       },
     },
   ],
@@ -160,11 +160,11 @@ const faqItems = [
   },
   {
     q: "Does Atai store my projects?",
-    a: "Yes. Atai stores project information including your ideas, prompts, website references, generated specifications, application code, and project metadata. This is stored to provide the service and maintain your project history.",
+    a: "Yes. Atai stores project information including your ideas, prompts, website references, generated specifications, website or product code, and project metadata. This is stored to provide the service and maintain your project history.",
   },
   {
     q: "Does Atai send my project data to AI providers?",
-    a: "Yes. Atai transmits project inputs (prompts, ideas, website analysis data, and project context) to third-party AI infrastructure providers when necessary to generate applications and provide platform functionality.",
+    a: "Yes. Atai transmits project inputs (prompts, ideas, website analysis data, and project context) to third-party AI infrastructure providers when necessary to generate websites, products, plans, and provide platform functionality.",
   },
   {
     q: "Is my data used to train AI models?",
@@ -192,7 +192,7 @@ const faqItems = [
   },
   {
     q: "How do I contact Atai about privacy?",
-    a: "Email support@atai.ink, call or WhatsApp +256761819885, or visit our YouTube channel at https://www.youtube.com/@mirrorsiteai.",
+    a: "Email support@atai.ink, or call/WhatsApp +256761819885.",
   },
 ]
 
@@ -375,10 +375,10 @@ export default function PrivacyPage() {
             <div className="space-y-4 text-base leading-7 text-muted-foreground">
               <p>When you submit ideas, prompts, business requirements, project information, website references, or other development content to Atai, we process that information to:</p>
               <ul className="list-disc list-inside space-y-1 ml-4">
-                <li>Understand the application or business you want to build</li>
+                <li>Understand the business or product you want to build</li>
                 <li>Create structured project context and planning</li>
                 <li>Generate project plans and specifications</li>
-                <li>Generate application code, UI, and infrastructure configuration</li>
+                <li>Generate website or product code, UI, and infrastructure configuration</li>
                 <li>Provide development previews and deployment</li>
                 <li>Support AI-assisted iteration after launch</li>
                 <li>Maintain your project state and history</li>
@@ -693,7 +693,7 @@ export default function PrivacyPage() {
             </h2>
             <div className="space-y-4 text-base leading-7 text-muted-foreground">
               <p>If you have any questions about this Privacy Policy, want to exercise your privacy rights, or have a privacy-related concern, we are here to help:</p>
-              <div className="grid gap-4 sm:grid-cols-3 my-4">
+              <div className="grid gap-4 sm:grid-cols-2 my-4">
                 <div className="rounded-xl border border-border bg-card p-5">
                   <p className="font-medium text-sm text-foreground mb-2">Email</p>
                   <a href="mailto:support@atai.ink" className="text-sm text-primary hover:underline break-all">support@atai.ink</a>
@@ -703,8 +703,8 @@ export default function PrivacyPage() {
                   <a href="tel:+256761819885" className="text-sm text-primary hover:underline">+256 761 819 885</a>
                 </div>
                 <div className="rounded-xl border border-border bg-card p-5">
-                  <p className="font-medium text-sm text-foreground mb-2">YouTube</p>
-                  <a href="https://www.youtube.com/@mirrorsiteai" target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline break-all">@mirrorsiteai</a>
+                  <p className="font-medium text-sm text-foreground mb-2">GitHub</p>
+                  <a href="https://github.com/atai-group" target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline break-all">github.com/atai-group</a>
                 </div>
               </div>
               <p>We aim to respond to all privacy enquiries within 5 business days.</p>

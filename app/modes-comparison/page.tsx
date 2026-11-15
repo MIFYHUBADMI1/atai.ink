@@ -23,8 +23,8 @@ export default function ModesComparisonPage() {
               Pipeline Modes Comparison
             </h1>
             <p className="max-w-2xl text-pretty text-lg leading-8 text-muted-foreground">
-              Atai offers two pipeline modes for generating applications from websites or ideas. Choose
-              the right mode for your project based on complexity, quality needs, and time constraints.
+              Atai offers two pipeline modes for planning business websites and products from a website, idea, or codebase. Choose
+              the right mode for your business based on complexity, quality needs, and time constraints.
             </p>
           </div>
         </div>
@@ -38,7 +38,7 @@ export default function ModesComparisonPage() {
                   <Zap className="size-5 text-primary" />
                   <h2 className="text-2xl font-semibold">Atai Standard</h2>
                 </div>
-                <p className="text-sm text-muted-foreground">Fast and efficient for simple projects</p>
+                <p className="text-sm text-muted-foreground">Fast and efficient for simple business products</p>
               </div>
               <span className="rounded-full bg-primary/10 px-3 py-1 font-mono text-xs font-medium text-primary">
                 DEFAULT
@@ -65,7 +65,7 @@ export default function ModesComparisonPage() {
                 <div className="flex flex-col gap-1">
                   <p className="font-medium">Best For</p>
                   <p className="text-sm text-muted-foreground">
-                    Simple apps, quick prototypes, landing pages, basic dashboards
+                    Simple websites, landing pages, early products, and basic customer dashboards
                   </p>
                 </div>
               </div>
@@ -97,7 +97,7 @@ export default function ModesComparisonPage() {
                   <Crown className="size-5 text-primary" />
                   <h2 className="text-2xl font-semibold">Atai Pro</h2>
                 </div>
-                <p className="text-sm text-muted-foreground">Premium quality for complex applications</p>
+                <p className="text-sm text-muted-foreground">Premium quality for complex business products</p>
               </div>
               <span className="rounded-full bg-primary px-3 py-1 font-mono text-xs font-medium text-primary-foreground">
                 PREMIUM
@@ -124,7 +124,7 @@ export default function ModesComparisonPage() {
                 <div className="flex flex-col gap-1">
                   <p className="font-medium">Best For</p>
                   <p className="text-sm text-muted-foreground">
-                    Complex SaaS apps, e-commerce platforms, enterprise dashboards, multi-feature applications
+                    Complex business products, customer portals, storefronts, and multi-feature platforms
                   </p>
                 </div>
               </div>
@@ -155,7 +155,7 @@ export default function ModesComparisonPage() {
         <div className="flex flex-col gap-6 rounded-xl border border-border bg-card p-8">
           <h2 className="text-2xl font-semibold">Pro Mode: 7-Stage Pipeline</h2>
           <p className="text-sm leading-6 text-muted-foreground">
-            The Pro pipeline processes your project through seven specialized stages to deliver significantly better results:
+            The Pro pipeline processes your business through seven specialized stages to deliver significantly better results:
           </p>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {[
@@ -182,7 +182,7 @@ export default function ModesComparisonPage() {
             <div className="flex flex-col gap-3">
               <h3 className="font-medium">Use Atai Standard when:</h3>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                {["You need quick iterations and fast results", "Your project is relatively simple or straightforward", "You're prototyping or testing an idea", "Credit efficiency is important", "The output quality meets your needs"].map(t => (
+                {["You need quick iterations and fast results", "Your business product is relatively simple or straightforward", "You're testing an idea before committing more resources", "Credit efficiency is important", "The output quality meets your needs"].map(t => (
                   <li key={t} className="flex gap-2"><span className="text-primary">•</span><span>{t}</span></li>
                 ))}
               </ul>
@@ -190,7 +190,7 @@ export default function ModesComparisonPage() {
             <div className="flex flex-col gap-3">
               <h3 className="font-medium">Use Atai Pro when:</h3>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                {["You need the highest possible quality", "Your application has complex features or workflows", "You're building a production-grade SaaS or e-commerce app", "The project justifies the additional time and credits", "You want comprehensive planning and validation"].map(t => (
+                {["You need the highest possible quality", "Your business has complex features, workflows, or customer journeys", "You're building a production-grade website, storefront, or SaaS product", "The business justifies the additional time and credits", "You want comprehensive planning and validation"].map(t => (
                   <li key={t} className="flex gap-2"><span className="text-primary">•</span><span>{t}</span></li>
                 ))}
               </ul>
@@ -200,7 +200,7 @@ export default function ModesComparisonPage() {
 
         <div className="flex justify-center">
           <Link href="/dashboard" className={buttonVariants({ size: "lg" })}>
-            Start a New Project
+            Start a New Business
           </Link>
         </div>
       </section>

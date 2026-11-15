@@ -382,10 +382,10 @@ function MirrorPipelineCostsCard({
       await patchJson("/api/admin/billing/configuration", {
         mirrorPipeline: Object.fromEntries(fields.map((f) => [f.key, nums[f.key]])),
       })
-      toast.success("Mirror pipeline costs updated.")
+      toast.success("Research pipeline costs updated.")
       onSaved()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not update mirror costs.")
+      toast.error(e instanceof Error ? e.message : "Could not update research costs.")
     } finally {
       setSaving(false)
     }
@@ -396,11 +396,11 @@ function MirrorPipelineCostsCard({
       <CardContent className="py-5">
         <div className="flex items-center gap-2 mb-1">
           <Globe className="size-4 text-primary" />
-          <p className="font-medium">Mirror & Crawl Pipeline</p>
+          <p className="font-medium">Website &amp; Product Pipeline</p>
           <Badge variant="secondary" className="ml-auto text-[10px]">Runtime-editable</Badge>
         </div>
         <p className="mb-4 text-xs text-muted-foreground">
-          Credits charged for website mirroring: scrape, plan generation, and full-site deep crawl — per pipeline mode. Set 0 to make an action free.
+          Credits charged when Atai studies a website or idea and prepares a business plan: scrape, plan generation, and full-site deep crawl — per pipeline mode. Set 0 to make an action free.
         </p>
         <div className="grid gap-4 sm:grid-cols-3">
           {fields.map((f) => (
@@ -958,7 +958,7 @@ export default function AdminConfigurationPage() {
         </section>
 
         <section className="mt-8">
-          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-4">Mirror & Crawl Costs</p>
+          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-4">Website Research Costs</p>
           {config?.mirrorPipelineCosts && (
             <MirrorPipelineCostsCard costs={config.mirrorPipelineCosts} onSaved={() => mutate()} />
           )}
@@ -1018,7 +1018,7 @@ export default function AdminConfigurationPage() {
 
         {/* ── Application Build Costs ── */}
         <section className="mt-8">
-          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-4">Application Build Costs</p>
+          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-4">Product Build Costs</p>
           <Card>
             <CardContent className="py-5">
               <div className="overflow-x-auto">

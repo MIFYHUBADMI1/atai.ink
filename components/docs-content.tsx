@@ -49,14 +49,14 @@ const sectionMeta = [
   { id: "getting-started", label: "Getting Started", icon: Rocket, keywords: ["signup", "register", "account", "first project", "quick start", "begin", "new user", "500 credits", "free"] },
   { id: "how-it-works", label: "How It Works", icon: Zap, keywords: ["understand", "plan", "build", "workflow", "process", "stages", "overview"] },
   { id: "pipeline-modes", label: "Atai Standard & Pro", icon: Crown, keywords: ["standard", "pro", "mode", "pipeline", "stages", "quality", "credits", "comparison", "7 stage"] },
-  { id: "website-mode", label: "Website Mode", icon: Globe, keywords: ["url", "website", "mirror", "clone", "scrape", "crawl", "deep crawl", "relevant", "link", "paste", "competitor"] },
+  { id: "website-mode", label: "Website Mode", icon: Globe, keywords: ["url", "website", "reference", "inspiration", "scrape", "crawl", "deep crawl", "relevant", "link", "paste", "competitor"] },
   { id: "idea-mode", label: "Idea Mode", icon: Lightbulb, keywords: ["idea", "describe", "description", "problem", "solution", "business model", "founder form", "target audience"] },
   { id: "collaborate", label: "Collaborate & Refine Plan", icon: Users, keywords: ["collaborate", "plan", "refine", "review", "chat", "ai chat", "plan_ready", "submit plan", "before build"] },
   { id: "understanding", label: "Understanding & Planning", icon: Compass, keywords: ["analysis", "plan", "features", "data model", "user flows", "design direction", "blueprint"] },
   { id: "editing-your-plan", label: "Editing Your Plan", icon: FileText, keywords: ["edit", "customize", "modify", "change", "enable", "disable", "features", "instructions"] },
-  { id: "building", label: "Building Your Application", icon: Code2, keywords: ["build", "generate", "compile", "deploy", "frontend", "backend", "database", "code"] },
+  { id: "building", label: "Building Your Product", icon: Code2, keywords: ["build", "generate", "compile", "deploy", "frontend", "backend", "database", "code"] },
   { id: "database-manager", label: "Database Manager", icon: Database, keywords: ["database", "tables", "records", "fields", "schema", "data", "crud", "create", "edit", "delete"] },
-  { id: "workspace", label: "Working With Your App", icon: Puzzle, keywords: ["workspace", "preview", "source code", "instruction bar", "database manager", "edit", "changes"] },
+  { id: "workspace", label: "Working With Your Product", icon: Puzzle, keywords: ["workspace", "preview", "source code", "instruction bar", "database manager", "edit", "changes"] },
   { id: "publishing", label: "Publishing & Domains", icon: Upload, keywords: ["publish", "domain", "subdomain", "dns", "deploy", "live", "url", "https", "custom domain"] },
   { id: "github", label: "GitHub Integration", icon: GitCompare, keywords: ["github", "git", "repo", "repository", "push", "auto-push", "build from", "source control", "version control", "connect", "oauth"] },
   { id: "credits", label: "Credits & Billing", icon: CreditCard, keywords: ["credits", "billing", "payment", "price", "cost", "top up", "dodo", "free"] },
@@ -156,8 +156,8 @@ export function DocsContent() {
                 { href: "/developers", icon: Zap, label: "Developer Portal", desc: "Infrastructure services, quickstart, and API access", color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-500/10" },
                 { href: "/pricing", icon: DollarSign, label: "Pricing", desc: "Plans, credit packs & build costs", color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10" },
                 { href: "/modes-comparison", icon: GitCompare, label: "Modes Comparison", desc: "Legacy vs Heavy pipeline breakdown", color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-500/10" },
-                { href: "/dashboard", icon: Rocket, label: "Dashboard", desc: "Your projects & activity", color: "text-primary", bg: "bg-primary/10" },
-                { href: "/new", icon: Lightbulb, label: "New Project", desc: "Start building a new app", color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10" },
+                { href: "/dashboard", icon: Rocket, label: "Dashboard", desc: "Your businesses & activity", color: "text-primary", bg: "bg-primary/10" },
+                { href: "/new", icon: Lightbulb, label: "New business", desc: "Start planning a business", color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10" },
                 { href: "/account", icon: Settings, label: "Account & Settings", desc: "Profile, security & billing", color: "text-sky-600 dark:text-sky-400", bg: "bg-sky-500/10" },
                 { href: "/referrals", icon: Users, label: "Refer & Earn", desc: "Share your referral link for credits", color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-500/10" },
                 { href: "/settings/billing", icon: CreditCard, label: "Billing", desc: "Manage your subscription & credits", color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-500/10" },
@@ -189,7 +189,7 @@ export function DocsContent() {
             <SectionHeader icon={Rocket} title="Getting Started" />
             <div className="space-y-6 text-muted-foreground leading-7">
               <p>
-                Atai is the AI business-building platform. You give it a starting point — a business idea, a competitor&apos;s website, or a GitHub repository — and it creates a complete, functional application you can collaborate on, refine, publish, and grow into a real business.
+                Atai is the AI business-building platform. You give it a starting point — a business idea, a competitor&apos;s website, or a GitHub repository — and it helps create a complete website or product you can collaborate on, refine, publish, and grow into a real business.
               </p>
               <p>
                 You don&apos;t need to know how to code. You don&apos;t need a technical co-founder. You don&apos;t need to assemble a team. Atai brings together an AI co-founder, specialist agents, product development, technology, and infrastructure so you can focus on the vision and the customers.
@@ -205,7 +205,7 @@ export function DocsContent() {
               <h3 className="text-lg font-semibold text-foreground mt-8">What you&apos;ll need</h3>
               <ul className="space-y-2">
                 <li className="flex items-start gap-2"><CheckCircle2 className="size-4 text-primary mt-1 shrink-0" /> A free Atai account</li>
-                <li className="flex items-start gap-2"><CheckCircle2 className="size-4 text-primary mt-1 shrink-0" /> A website address to mirror, or an idea to build from</li>
+                <li className="flex items-start gap-2"><CheckCircle2 className="size-4 text-primary mt-1 shrink-0" /> A website that inspires you, an existing product, or a business idea to start from</li>
                 <li className="flex items-start gap-2"><CheckCircle2 className="size-4 text-primary mt-1 shrink-0" /> Credits for building (new accounts start with 500 free credits)</li>
               </ul>
 
@@ -213,11 +213,11 @@ export function DocsContent() {
               <div className="space-y-4">
                 {[
                   { step: 1, title: "Create an account", body: "Sign up with your email or Google account. You get 500 free credits to start — no credit card required." },
-                  { step: 2, title: "Choose your starting point", body: "Describe your business idea using the Founder Form, paste a competitor's URL, or link a GitHub repository." },
-                  { step: 3, title: "Atai analyses and plans", body: "Atai reads your input, understands the product, and creates a complete structured app plan." },
+                  { step: 2, title: "Choose your starting point", body: "Describe your business idea, use a website that inspires you, or bring an existing GitHub codebase." },
+                  { step: 3, title: "Atai analyses and plans", body: "Atai reads your input, understands the business, and creates a structured plan you can review." },
                   { step: 4, title: "Collaborate & refine the plan", body: "Review your plan on the Collaborate page. Chat with the AI to adjust features, flows, and business model before anything is built." },
-                  { step: 5, title: "Submit and build", body: "Once you're happy with the plan, click Submit. Atai builds the full application — frontend, backend, database, auth, and infrastructure." },
-                  { step: 6, title: "Launch", body: "One click publishes your app to a free subdomain or your own domain. HTTPS, CDN, and global hosting included." },
+                  { step: 5, title: "Submit and build", body: "Once you're happy with the plan, click Submit. Atai builds the website or product — frontend, backend, database, customer accounts, and infrastructure." },
+                  { step: 6, title: "Launch", body: "One click publishes your business to a free subdomain or your own domain. HTTPS, CDN, and global hosting included." },
                   { step: 7, title: "Operate", body: "Manage your customers, product, data, payments and business from the Atai dashboard." },
                   { step: 8, title: "Grow", body: "Improve the product, acquire customers, experiment, and keep building as your business scales." },
                 ].map(({ step, title, body }) => (
@@ -257,7 +257,7 @@ export function DocsContent() {
               </div>
 
               <p>
-                The key difference from other tools is that Atai understands the full picture before building. It doesn&apos;t just generate screens — it creates a complete application with working data, user accounts, and real functionality.
+                The key difference from other tools is that Atai understands the full business picture before building. It doesn&apos;t just generate screens — it creates a complete website or product with working data, customer accounts, and real functionality.
               </p>
             </div>
             <SectionFeedbackInline sectionId="how-it-works" />
@@ -268,7 +268,7 @@ export function DocsContent() {
             <SectionHeader icon={Crown} title="Atai Standard & Pro Modes" />
             <div className="space-y-6 text-muted-foreground leading-7">
               <p>
-                Atai offers two pipeline modes when generating your application. You choose the mode when creating a new project — it controls how deeply the AI analyses, plans, and builds your app.
+                Atai offers two pipeline modes when planning your business website or product. You choose the mode when starting a new business — it controls how deeply the AI analyses, plans, and prepares the build.
               </p>
 
               <div className="grid gap-5 lg:grid-cols-2">
@@ -350,18 +350,18 @@ export function DocsContent() {
             <SectionHeader icon={Globe} title="Website Mode" />
             <div className="space-y-6 text-muted-foreground leading-7">
               <p>
-                Website Mode lets you point Atai at any live website and turn it into a working application. This is the most popular way to start.
+                Website Mode lets you point Atai at a live website and use it as business context for the website or product you want to create.
               </p>
 
               <h3 className="text-lg font-semibold text-foreground">How to use Website Mode</h3>
               <ol className="space-y-3 list-decimal list-inside">
-                <li>Go to your dashboard and click <strong className="text-foreground">New Project</strong></li>
-                <li>Select <strong className="text-foreground">Mirror a Website</strong></li>
-                <li>Paste the website address you want to mirror</li>
+                <li>Go to your dashboard and click <strong className="text-foreground">New business</strong></li>
+                <li>Select <strong className="text-foreground">Use a website</strong></li>
+                <li>Paste the website that inspires your business</li>
                 <li>Choose your analysis mode:
                   <ul className="mt-2 space-y-1 list-disc list-inside ml-4">
                     <li><strong className="text-foreground">Relevant Info</strong> — Atai analyzes the most important pages, understands the product, and creates a custom plan. Best for most projects.</li>
-                    <li><strong className="text-foreground">Deep Crawl</strong> — Atai crawls the entire website, collects every page, and builds an exact replica. Best when you need the whole site preserved.</li>
+                    <li><strong className="text-foreground">Deep Crawl</strong> — Atai reads more of the website and gives you the fullest picture for planning. Best when you need detailed market or product context.</li>
                   </ul>
                 </li>
                 <li>Review the analysis and plan that Atai creates</li>
@@ -395,7 +395,7 @@ export function DocsContent() {
             <SectionHeader icon={Lightbulb} title="Idea Mode — Founder Form" />
             <div className="space-y-6 text-muted-foreground leading-7">
               <p>
-                Idea Mode lets you start from a business description instead of a website. Rather than a single free-text box, Atai uses a structured <strong className="text-foreground">Founder Form</strong> — five fields that help the AI generate a far more accurate and relevant app plan.
+                Idea Mode lets you start from a business description instead of a website. Rather than a single free-text box, Atai uses a structured <strong className="text-foreground">Founder Form</strong> — five fields that help the AI generate a far more accurate and relevant business and product plan.
               </p>
 
               <h3 className="text-lg font-semibold text-foreground">The five fields</h3>
@@ -424,10 +424,10 @@ export function DocsContent() {
 
               <h3 className="text-lg font-semibold text-foreground">How to use Idea Mode</h3>
               <ol className="space-y-3 list-decimal list-inside">
-                <li>Go to your dashboard and click <strong className="text-foreground">New Project</strong></li>
-                <li>Select <strong className="text-foreground">Start from an Idea</strong></li>
-                <li>Fill in the Founder Form — at minimum the Problem and Solution fields</li>
-                <li>Click <strong className="text-foreground">Generate app plan</strong></li>
+                <li>Go to your dashboard and click <strong className="text-foreground">New business</strong></li>
+                <li>Select <strong className="text-foreground">Start from an idea</strong></li>
+                <li>Fill in the business details — at minimum the Problem and Solution fields</li>
+                <li>Click <strong className="text-foreground">Generate business plan</strong></li>
                 <li>Atai takes you to the Collaborate page to review and refine before building</li>
               </ol>
             </div>
@@ -498,17 +498,17 @@ export function DocsContent() {
             <SectionHeader icon={Compass} title="Understanding & Planning" />
             <div className="space-y-6 text-muted-foreground leading-7">
               <p>
-                After Atai analyzes your starting point, it creates a detailed application plan. This is the most important step — it&apos;s where Atai figures out exactly what your application needs.
+                After Atai analyzes your starting point, it creates a detailed business and product plan. This is the most important step — it&apos;s where Atai figures out exactly what your product needs.
               </p>
 
               <h3 className="text-lg font-semibold text-foreground">What the plan includes</h3>
               <div className="grid gap-3 sm:grid-cols-2">
                 {[
-                  { title: "Application Type", body: "What kind of application this is — a marketplace, a dashboard, a portfolio, etc." },
-                  { title: "Purpose", body: "A clear description of what the application does and who it's for." },
-                  { title: "Features", body: "A checklist of capabilities — authentication, dashboards, payments, file uploads, and more." },
-                  { title: "Data Model", body: "What information the application stores — users, products, orders, and how they relate." },
-                  { title: "User Flows", body: "Step-by-step paths users take through the application." },
+                  { title: "Product Type", body: "What kind of product this is — a marketplace, a dashboard, a portfolio, etc." },
+                  { title: "Purpose", body: "A clear description of what the product does and who it's for." },
+                  { title: "Features", body: "A checklist of capabilities — customer accounts, dashboards, payments, file uploads, and more." },
+                  { title: "Data Model", body: "What information the product stores — users, products, orders, and how they relate." },
+                  { title: "User Flows", body: "Step-by-step paths customers take through the product." },
                   { title: "Design Direction", body: "Colors, fonts, layout style, and visual approach." },
                 ].map(({ title, body }) => (
                   <div key={title} className="rounded-lg border border-border bg-card p-4">
@@ -536,9 +536,9 @@ export function DocsContent() {
               <h3 className="text-lg font-semibold text-foreground">What you can edit</h3>
               <ul className="space-y-2">
                 <li className="flex items-start gap-2"><CheckCircle2 className="size-4 text-primary mt-1 shrink-0" /> <span><strong className="text-foreground">Enable or disable features</strong> — turn on payments, admin panels, file uploads, or any other capability</span></li>
-                <li className="flex items-start gap-2"><CheckCircle2 className="size-4 text-primary mt-1 shrink-0" /> <span><strong className="text-foreground">Add or remove data types</strong> — define what information your application stores</span></li>
+                <li className="flex items-start gap-2"><CheckCircle2 className="size-4 text-primary mt-1 shrink-0" /> <span><strong className="text-foreground">Add or remove data types</strong> — define what information your product stores</span></li>
                 <li className="flex items-start gap-2"><CheckCircle2 className="size-4 text-primary mt-1 shrink-0" /> <span><strong className="text-foreground">Change the design direction</strong> — update colors, fonts, and visual style</span></li>
-                <li className="flex items-start gap-2"><CheckCircle2 className="size-4 text-primary mt-1 shrink-0" /> <span><strong className="text-foreground">Modify user flows</strong> — change how users move through the application</span></li>
+                <li className="flex items-start gap-2"><CheckCircle2 className="size-4 text-primary mt-1 shrink-0" /> <span><strong className="text-foreground">Modify user flows</strong> — change how customers move through the product</span></li>
                 <li className="flex items-start gap-2"><CheckCircle2 className="size-4 text-primary mt-1 shrink-0" /> <span><strong className="text-foreground">Add custom instructions</strong> — tell Atai about specific requirements or preferences</span></li>
               </ul>
 
@@ -551,7 +551,7 @@ export function DocsContent() {
 
           {/* ─── BUILDING ─── */}
           <section id="building" style={{ opacity: isVisible("building") ? 1 : 0.25, transition: "opacity 0.2s" }}>
-            <SectionHeader icon={Code2} title="Building Your Application" />
+            <SectionHeader icon={Code2} title="Building Your Product" />
             <div className="space-y-6 text-muted-foreground leading-7">
               <p>
                 When you click <strong className="text-foreground">Build</strong>, Atai generates your complete application. This usually takes a few minutes.

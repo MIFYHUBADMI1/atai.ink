@@ -31,7 +31,7 @@ const COPY: Record<
 > = {
   login: {
     title: "Welcome back",
-    subtitle: "Continue building with Atai.",
+    subtitle: "Continue working on your business with Atai.",
   },
   signup: {
     title: "Create your Atai account",

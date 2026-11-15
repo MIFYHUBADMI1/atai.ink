@@ -6,12 +6,20 @@ import { BrandMark } from "@/components/brand-logo"
 import { Button } from "@/components/ui/button"
 import { ChoiceGrid } from "@/components/onboarding/choice-grid"
 import { OnboardingPlanStep } from "@/components/onboarding/plan-step"
+import { OnboardingThemePicker } from "@/components/onboarding/theme-picker"
+import { LandingComposer } from "@/components/landing/composer"
+import {
+  loadComposerPrefs,
+  saveComposerPrefs,
+  type ComposerAttachment,
+  type ComposerStorageKeys,
+} from "@/lib/start/composer-prefs"
 import { useProjects, useSession } from "@/lib/client/api"
 import { useOnboardingVideoEmbedUrl } from "@/lib/client/onboarding-video"
 import { VideoEmbed } from "@/components/video-embed"
 import { peekPendingStart, restorePendingStart, resendVerificationEmail, savePendingStart } from "@/lib/auth/client-intent"
 import { recordOnboardingDismissed, saveOnboardingProfile } from "@/lib/onboarding/activate"
-import { ONBOARDING_COPY, MODE_COPY } from "@/lib/onboarding/copy"
+import { ONBOARDING_COPY } from "@/lib/onboarding/copy"
 import {
   ONBOARDING_INTENTS,
   ONBOARDING_PACE,
@@ -37,12 +45,13 @@ import {
 import {
   detectStartMode,
   promptForStart,
-  validateStartInput,
   type StartMode,
 } from "@/lib/start/detect-input"
-import { cn } from "@/lib/utils"
 
-const MODES: StartMode[] = ["idea", "website", "url", "github"]
+const ONBOARDING_COMPOSER_KEYS: ComposerStorageKeys = {
+  prefs: "atai:onboarding-composer",
+  contents: "atai:onboarding-composer-file-contents",
+}
 
 const BEAT_TITLE: Record<MissionBeat, { heading: string; description: string }> = {
   vision: { heading: ONBOARDING_COPY.visionHeading, description: ONBOARDING_COPY.visionDescription },
@@ -117,6 +126,9 @@ function FirstMissionInner() {
   const [intent, setIntent] = useState("")
   const [selectedPlanId, setSelectedPlanId] = useState("explorer")
   const [closed, setClosed] = useState(false)
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([])
+  const [projectTitle, setProjectTitle] = useState("")
+  const [draftHydrated, setDraftHydrated] = useState(false)
   const hydrated = useRef(false)
   const advanceTimer = useRef<number | null>(null)
 
@@ -141,8 +153,9 @@ function FirstMissionInner() {
     if (surface !== "mission" || !session || hydrated.current) return
     hydrated.current = true
     const existing = session.user.onboarding
+    let draft: ReturnType<typeof parseFirstMissionDraft> = null
     try {
-      const draft = parseFirstMissionDraft(sessionStorage.getItem(`${FIRST_MISSION_DRAFT_KEY}:${session.user.id}`))
+      draft = parseFirstMissionDraft(sessionStorage.getItem(`${FIRST_MISSION_DRAFT_KEY}:${session.user.id}`))
       if (draft?.vision) setVision(draft.vision)
       if (draft?.followUp) setFollowUp(draft.followUp)
       if (draft?.mode) setMode(draft.mode)
@@ -170,6 +183,27 @@ function FirstMissionInner() {
     if (existing?.intent) setIntent((current) => current || existing.intent || "")
     if (existing?.selectedPlanId) setSelectedPlanId((current) => (current !== "explorer" ? current : existing.selectedPlanId || "explorer"))
     if (existing?.businessDescription) setVision((current) => current || existing.businessDescription || "")
+    try {
+      const composerPrefs = loadComposerPrefs(ONBOARDING_COMPOSER_KEYS)
+      const restoredPrompt = draft?.vision?.trim()
+        ? draft.vision
+        : existing?.businessDescription?.trim()
+          ? existing.businessDescription
+          : composerPrefs.prompt
+      if (draft || existing?.businessDescription) {
+        saveComposerPrefs(
+          {
+            ...composerPrefs,
+            prompt: restoredPrompt,
+            mode: draft?.mode ?? composerPrefs.mode,
+          },
+          ONBOARDING_COMPOSER_KEYS,
+        )
+      }
+    } catch {
+      /* ignore */
+    }
+    setDraftHydrated(true)
   }, [surface, session])
 
   const detected = useMemo(() => detectStartMode(vision), [vision])
@@ -316,17 +350,6 @@ function FirstMissionInner() {
     return "source"
   }
 
-  function continueFromVision() {
-    const message = validateStartInput(effectiveMode, vision)
-    if (message) {
-      setError(message)
-      return
-    }
-    if (!building) setBuilding(signalForMode(effectiveMode))
-    persistQuiet({ signalType: signalForMode(effectiveMode), businessDescription: vision.trim() })
-    go(includeVideo ? "tour" : postVisionBeat())
-  }
-
   async function finish() {
     setBusy(true)
     setError(null)
@@ -342,13 +365,18 @@ function FirstMissionInner() {
   function persistStartIntent() {
     const composed = composeVision(promptForStart(effectiveMode, vision), followUp)
     if (!composed.trim()) return
+    const pendingFiles = attachments
+      .filter((file): file is ComposerAttachment & { content: string } => Boolean(file.content))
+      .map(({ name, content, size }) => ({ name, content, size }))
     savePendingStart({
       prompt: composed,
+      title: projectTitle.trim() || undefined,
       href: "/start",
       source: source || sourceForMode(effectiveMode, "dashboard"),
       signalType: building || signalForMode(effectiveMode),
       mode: effectiveMode,
       pipelineMode: "heavy",
+      files: pendingFiles.length ? pendingFiles : undefined,
     })
   }
 
@@ -365,7 +393,7 @@ function FirstMissionInner() {
   const title = beat === "context" ? followUpPrompt(effectiveMode) : BEAT_TITLE[beat].heading
   const description = beat === "context" ? "One line is enough. Skip if you already said it." : BEAT_TITLE[beat].description
   const showContinue =
-    beat === "vision" || beat === "context" || beat === "plan" || hasBeatValue(beat, { source, role, revenueTarget, targetUsers, effortScale, intent })
+    beat === "context" || beat === "plan" || hasBeatValue(beat, { source, role, revenueTarget, targetUsers, effortScale, intent })
 
   return (
     <div className="fixed inset-0 z-50 flex h-dvh flex-col overflow-hidden bg-background text-foreground">
@@ -404,49 +432,51 @@ function FirstMissionInner() {
               <h1 className="text-balance text-2xl font-black tracking-tight sm:text-3xl">{title}</h1>
               <p className="mt-2 max-w-xl text-pretty text-sm leading-6 text-muted-foreground">{description}</p>
             </div>
-            <div className="flex flex-col gap-3">
-              <label htmlFor="atai-vision" className="sr-only">{ONBOARDING_COPY.visionLabel}</label>
-              <textarea
-                id="atai-vision"
-                value={vision}
-                autoFocus
-                onChange={(event) => {
-                  setVision(event.target.value)
-                  if (!modeTouched) {
-                    const next = detectStartMode(event.target.value)
-                    if (next) setMode(next)
-                  }
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-                    event.preventDefault()
-                    continueFromVision()
-                  }
-                }}
-                placeholder={ONBOARDING_COPY.visionPlaceholder}
-                rows={3}
-                className="w-full resize-none rounded-2xl border border-border bg-card px-4 py-3 text-base leading-6 outline-none placeholder:text-muted-foreground focus-visible:border-indigo-500/40 focus-visible:ring-2 focus-visible:ring-indigo-500/20"
-              />
-              <div className="flex flex-wrap gap-2" role="group" aria-label="Starting point">
-                {MODES.map((id) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => {
-                      setMode(id)
-                      setModeTouched(true)
-                      setBuilding(signalForMode(id))
-                    }}
-                    className={cn(
-                      "rounded-full border px-3 py-1.5 text-sm",
-                      effectiveMode === id ? "border-indigo-500/40 bg-indigo-500/10" : "border-border text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {MODE_COPY[id].label}
-                  </button>
-                ))}
+            <div className="flex min-h-0 flex-col gap-3">
+              <div>
+                <p className="text-sm font-medium text-indigo-600 dark:text-indigo-300">Pick your Atai theme</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">Choose how Atai should look while you plan. You can change it anytime in Settings → Appearance.</p>
               </div>
-              <p className="text-xs text-muted-foreground">{MODE_COPY[effectiveMode].hint}</p>
+              <OnboardingThemePicker />
+              {draftHydrated ? (
+                <LandingComposer
+                  showIntro={false}
+                  showModes
+                  surface="onboarding"
+                  storageKeys={ONBOARDING_COMPOSER_KEYS}
+                  onDraftChange={(draft) => {
+                    setVision(draft.prompt)
+                    setProjectTitle(draft.title)
+                    setAttachments(draft.files)
+                    setMode(draft.mode)
+                    setModeTouched(true)
+                  }}
+                  onDraftSubmit={(draft) => {
+                    setVision(draft.prompt)
+                    setProjectTitle(draft.title)
+                    setAttachments(draft.files)
+                    setMode(draft.mode)
+                    setModeTouched(true)
+                    if (!building) setBuilding(signalForMode(draft.mode))
+                    persistQuiet({
+                      signalType: signalForMode(draft.mode),
+                      businessDescription: draft.prompt.trim(),
+                      businessGoal: draft.prompt.trim(),
+                    })
+                    const next = session && !session.user.emailVerified
+                      ? "verify"
+                      : needsFollowUp(draft.mode, draft.prompt)
+                        ? "context"
+                        : "source"
+                    go(includeVideo ? "tour" : next)
+                  }}
+                  autoDetectMode
+                  submitLabel="Continue"
+                  className="border-0 bg-transparent px-0 shadow-none"
+                />
+              ) : (
+                <div className="h-40 rounded-[1.35rem] border border-border bg-card/60" aria-hidden />
+              )}
             </div>
           </>
         ) : null}
@@ -632,9 +662,6 @@ function FirstMissionInner() {
               {ONBOARDING_COPY.secondaryCta}
             </Button>
           </div>
-          {beat === "vision" ? (
-            <Button onClick={continueFromVision} disabled={busy}>Continue</Button>
-          ) : null}
           {beat === "context" ? (
             <Button onClick={() => go("source")} disabled={busy}>Continue</Button>
           ) : null}

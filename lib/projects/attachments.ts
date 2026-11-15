@@ -68,6 +68,49 @@ export async function getProjectAttachments(projectId: string): Promise<ProjectA
   return collection.find({ projectId }).sort({ createdAt: 1, _id: 1 }).toArray()
 }
 
+const TEXT_ATTACHMENT_TYPES = /^(text\/|application\/(json|xml|x-yaml|yaml|csv|javascript|typescript)|image\/svg)/i
+const MAX_CONTEXT_FILE_CHARS = 6000
+const MAX_CONTEXT_TOTAL_CHARS = 16000
+
+function attachmentText(doc: ProjectAttachmentDoc): string | null {
+  const match = DATA_URI_PATTERN.exec(doc.content)
+  if (!match) return null
+  if (!TEXT_ATTACHMENT_TYPES.test(match[1])) return null
+  try {
+    const text = Buffer.from(match[2], "base64").toString("utf8")
+    return text.slice(0, MAX_CONTEXT_FILE_CHARS)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Plain-text context for planning/chat models. Text-like files are inlined
+ * (truncated); binaries and images are represented by metadata only — the
+ * builder still receives the original data URIs at launch.
+ */
+export async function getProjectAttachmentContext(projectId: string): Promise<string> {
+  const files = await getProjectAttachments(projectId).catch(() => [])
+  if (!files.length) return ""
+  const parts: string[] = []
+  let total = 0
+  for (const file of files) {
+    const text = attachmentText(file)
+    if (text) {
+      const block = `--- ${file.name} (${file.contentType}, ${file.size} bytes) ---\n${text}`
+      if (total + block.length > MAX_CONTEXT_TOTAL_CHARS) break
+      parts.push(block)
+      total += block.length
+      continue
+    }
+    const note = `- ${file.name} (${file.contentType}, ${file.size} bytes): attached binary/image asset — content not inlined for the model.`
+    if (total + note.length > MAX_CONTEXT_TOTAL_CHARS) break
+    parts.push(note)
+    total += note.length
+  }
+  return parts.join("\n\n")
+}
+
 export async function clearProjectAttachments(projectId: string): Promise<number> {
   const collection = await projectAttachmentsCol()
   const result = await collection.deleteMany({ projectId })

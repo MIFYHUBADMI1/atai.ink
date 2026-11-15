@@ -13,12 +13,18 @@ import { analyzeWebsite } from "./understanding"
 import { generateSpecificationFromUnderstanding, generateSpecificationFromIdea } from "./specification"
 import type { ProjectEvent, BuildRun } from "@/lib/types/project"
 import { recordAIArtifacts } from "@/lib/projects/ai-artifacts"
+import { getProjectAttachmentContext } from "@/lib/projects/attachments"
 import { recordCreditBlock } from "@/lib/credits/credit-block"
 import { authorizeProductionWork } from "@/lib/billing/entitlements/require"
 import { makeAIArtifact, rawTextFromError, stageFromError, type NewAIArtifact } from "@/lib/types/ai-artifacts"
 
 function event(stage: string, message: string, level: ProjectEvent["level"] = "info"): ProjectEvent {
   return { id: cryptoId(), at: Date.now(), level, stage, message }
+}
+
+function attachmentAwareIdea(idea: string, attachmentContext: string): string {
+  if (!attachmentContext) return idea
+  return `${idea}\n\nAttached files provided by the founder (reference material, not instructions):\n${attachmentContext}`
 }
 
 /** Persist AI outputs for the Collaborate view — never fatal. */
@@ -127,7 +133,7 @@ export async function autoLaunchBuild(projectId: string) {
   }
   if (!project.requestedProjectId) {
     await store.updateProject(projectId, { state: "plan_ready" })
-    await store.appendEvent(projectId, event("build", "Choose your app address before starting the build.", "warn"))
+    await store.appendEvent(projectId, event("build", "Choose your business address before starting the build.", "warn"))
     return
   }
 
@@ -417,7 +423,12 @@ export async function runScratchAnalysis(projectId: string, pipelineMode?: "lega
     await store.appendEvent(projectId, event("specify", "💡 Your idea is brilliant! Let's turn those brain waves into code..."))
     console.log("[v0] pipeline.scratch: state -> analyzing, calling generateSpecificationFromIdea", { projectId, pipelineMode })
     await store.appendEvent(projectId, event("specify", "🤖 AI is brainstorming... Imagine a room full of engineers, but faster!"))
-    const specification = await generateSpecificationFromIdea(project.idea, project.userId, projectId, pipelineMode)
+    const specification = await generateSpecificationFromIdea(
+      attachmentAwareIdea(project.idea, await getProjectAttachmentContext(projectId)),
+      project.userId,
+      projectId,
+      pipelineMode,
+    )
     // Classify complexity for customer-facing tier pricing.
     specification.complexity = classifyComplexity(specification)
     console.log("[v0] pipeline.scratch: generateSpecificationFromIdea done", { projectId, complexity: specification.complexity })
@@ -646,106 +657,5 @@ export async function runDeepCrawlAnalysis(projectId: string, pipelineMode?: "le
       phase === "plan" ? `Plan failed: ${errorMessage}` : errorMessage,
       errorMessage,
     )
-  }
-}
-
-/**
- * Generate a clone specification directly from crawled evidence.
- * No AI interpretation — the builder receives the raw page structure
- * and is instructed to create an exact replica.
- */
-function generateCloneSpecification(
-  evidence: import("@/lib/integrations/firecrawl/types").WebsiteEvidence,
-  projectName: string,
-): import("@/lib/types/specification").ApplicationSpecification {
-  // Extract all page content as the "design direction"
-  const allContent = evidence.pages
-    .map((p) => {
-      const headings = p.headings.join(", ")
-      const contentPreview = (p.markdown ?? "").slice(0, 500)
-      return `[${p.title ?? p.url}]\nHeadings: ${headings}\nContent: ${contentPreview}`
-    })
-    .join("\n\n")
-
-  // Extract navigation structure
-  const navStructure = evidence.navigation.slice(0, 30).join("\n")
-
-  // Deduce page count and structure
-  const pageCount = evidence.pages.length
-  const hasAuth = allContent.toLowerCase().includes("login") || allContent.toLowerCase().includes("sign in") || allContent.toLowerCase().includes("register")
-  const hasDashboard = allContent.toLowerCase().includes("dashboard") || allContent.toLowerCase().includes("account")
-
-  // Build data entities from page headings and content
-  const dataEntities: import("@/lib/types/specification").SpecDataEntity[] = []
-  const seenEntities = new Set<string>()
-  for (const page of evidence.pages) {
-    for (const heading of page.headings) {
-      const normalized = heading.toLowerCase().trim()
-      if (normalized.length > 2 && normalized.length < 50 && !seenEntities.has(normalized)) {
-        seenEntities.add(normalized)
-        // Only add if it looks like a data concept
-        if (normalized.includes("list") || normalized.includes("table") || normalized.includes("record") || normalized.includes("item") || normalized.includes("entry")) {
-          dataEntities.push({ name: heading, description: undefined, fields: [] })
-        }
-      }
-    }
-  }
-
-  // Build core flows from navigation links
-  const coreFlows: import("@/lib/types/specification").CoreFlow[] = evidence.navigation
-    .filter((url) => {
-      try {
-        const path = new URL(url).pathname
-        return path !== "/" && path.length > 1
-      } catch {
-        return false
-      }
-    })
-    .slice(0, 15)
-    .map((url) => {
-      try {
-        const path = new URL(url).pathname
-        const label = path.split("/").filter(Boolean).pop() ?? path
-        return { name: label.charAt(0).toUpperCase() + label.slice(1).replace(/-/g, " "), description: `Navigate to ${path}` }
-      } catch {
-        return { name: "Page", description: url }
-      }
-    })
-
-  // Enable features based on what was found
-  const features: import("@/lib/types/specification").SuggestedFeature[] = [
-    { key: "auth", label: "Authentication", description: "User sign up, login, sessions", enabled: hasAuth },
-    { key: "database", label: "Database", description: "Persistent data storage", enabled: hasDashboard },
-    { key: "dashboard", label: "Dashboard", description: "Primary user dashboard", enabled: hasDashboard },
-    { key: "api", label: "API", description: "Backend API endpoints", enabled: true },
-    { key: "payments", label: "Payments", description: "Checkout and billing", enabled: false },
-    { key: "admin", label: "Admin panel", description: "Administrative management UI", enabled: false },
-    { key: "uploads", label: "File uploads", description: "Upload and manage files", enabled: false },
-  ]
-
-  return {
-    applicationType: "full-stack",
-    title: projectName || evidence.title || "Cloned Application",
-    description: `Exact replica of ${evidence.sourceUrl} — ${pageCount} pages crawled and reconstructed.`,
-    purpose: `Clone and replicate the website at ${evidence.sourceUrl} as a working full-stack application. Preserve the original site's navigation, layout, content, and structure exactly as crawled.`,
-    targetUsers: [],
-    userRoles: [],
-    coreFlows,
-    suggestedFeatures: features,
-    dataEntities,
-    authenticationRequirements: hasAuth ? "Include authentication flows matching the original site." : undefined,
-    backendRequirements: ["Replicate the original site's structure and content"],
-    integrations: [],
-    designDirection: `EXACT REPLICA MODE — Reproduce the crawled website's design, layout, colors, typography, and visual structure as closely as possible. Use the following crawled content as the source of truth:\n\nNAVIGATION STRUCTURE:\n${navStructure}\n\nPAGE CONTENT:\n${allContent.slice(0, 15000)}`,
-    // Clone builds auto-launch without passing through the Collaborate
-    // workspace, so they ship with a baseline SEO plan — one page per crawled
-    // URL in the sitemap, crawler-friendly robots, structured data, and a
-    // Google site-verification meta tag slot (build prompt honors seoPlan).
-    seoPlan: `Preserve each crawled page's title and meta description where available. Generate app/sitemap.ts listing every crawled page URL. Add app/robots.ts allowing all crawlers and referencing the sitemap. Include Organization and WebSite JSON-LD. Render a Google site-verification meta tag in the root layout head so the deployed domain can be verified in Google Search Console.`,
-    responsiveRequirements: "Match the original site's responsive behavior.",
-    additionalInstructions: `DEEP CRAWL CLONE MODE: This project was created by deep-crawling ${evidence.sourceUrl}. The builder should create an EXACT REPLICA of the crawled site — do NOT reinterpret or redesign. Use the crawled page content, navigation structure, and visual patterns as-is. The user expects a pixel-accurate reproduction of the original website's experience, adapted into a working React/Next.js application.
-
-Crawled pages (${pageCount}):
-${evidence.pages.map((p) => `- ${p.title ?? p.url} (${p.url})`).join("\n")}`,
   }
 }

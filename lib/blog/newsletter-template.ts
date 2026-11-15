@@ -123,7 +123,7 @@ export function buildAnnouncementEmail(input: AnnouncementEmailInput): Announcem
         </div>
         <div style="padding:18px 28px;border-top:1px solid #e4e4e7;background:#fafafa;text-align:center;">
           <p style="margin:0;font-size:11px;color:#a1a1aa;line-height:1.6;">
-            &copy; ${new Date().getFullYear()} Atai · Build smarter, ship faster
+            &copy; ${new Date().getFullYear()} Atai · Your business. Your AI teams.
             ${
               unsubscribeUrl
                 ? `<br /><a href="${escapeHtml(unsubscribeUrl)}" style="color:#71717a;text-decoration:underline;">Unsubscribe from ${escapeHtml(publication)}</a>`
