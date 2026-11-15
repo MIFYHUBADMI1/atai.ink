@@ -434,7 +434,7 @@ function FirstMissionInner() {
       </div>
 
       <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col overflow-y-auto px-4 py-4 sm:px-6">
-        <div className="flex w-full flex-1 flex-col justify-center gap-4 sm:gap-5">
+        <div className="flex min-h-full w-full flex-col justify-center gap-4 sm:gap-5">
         {firstName && beat === "theme" ? <p className="text-sm text-muted-foreground">Welcome, {firstName}.</p> : null}
 
         {beat === "theme" ? (
