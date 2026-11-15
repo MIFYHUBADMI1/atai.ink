@@ -353,7 +353,7 @@ export async function adminPatch(
   if (!doc) throw new AppError("UNKNOWN", "We couldn't find that request.", 404)
   const now = Date.now()
   const $set: Record<string, unknown> = { updatedAt: now }
-  const $unset: Record<string, string> = {}
+  const $unset: Record<string, ""> = {}
 
   if (patch.status) {
     if (!isFeatureRequestStatus(patch.status)) throw new AppError("VALIDATION", "Invalid status.", 400)

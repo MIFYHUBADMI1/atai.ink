@@ -919,7 +919,7 @@ export async function patchIncident(id: string, adminId: string, patch: { status
   if (!doc) throw new AppError("UNKNOWN", "We couldn't find that incident.", 404)
   const now = Date.now()
   const $set: Record<string, unknown> = { updatedAt: now }
-  const $unset: Record<string, string> = {}
+  const $unset: Record<string, ""> = {}
   if (patch.status) {
     if (!["open", "investigating", "resolved", "closed"].includes(patch.status)) throw new AppError("VALIDATION", "Invalid incident status.", 400)
     $set.status = patch.status
