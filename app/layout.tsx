@@ -113,6 +113,7 @@ const STRUCTURED_DATA = JSON.stringify({
       telephone: "+256761819885",
       sameAs: [
         "https://github.com/atai-group",
+        "https://www.youtube.com/@atai-agentic",
       ],
       contactPoint: {
         "@type": "ContactPoint",

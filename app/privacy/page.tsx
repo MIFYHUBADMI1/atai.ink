@@ -706,6 +706,10 @@ export default function PrivacyPage() {
                   <p className="font-medium text-sm text-foreground mb-2">GitHub</p>
                   <a href="https://github.com/atai-group" target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline break-all">github.com/atai-group</a>
                 </div>
+                <div className="rounded-xl border border-border bg-card p-5">
+                  <p className="font-medium text-sm text-foreground mb-2">YouTube</p>
+                  <a href="https://www.youtube.com/@atai-agentic" target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline break-all">youtube.com/@atai-agentic</a>
+                </div>
               </div>
               <p>We aim to respond to all privacy enquiries within 5 business days.</p>
             </div>
