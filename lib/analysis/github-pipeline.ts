@@ -6,6 +6,7 @@ import { getReadme, getRepoTree, GitHubApiError } from "@/lib/integrations/githu
 import { buildFileTree } from "@/lib/integrations/github/tree-builder"
 import { autoLaunchBuild, markPipelineFailure } from "@/lib/analysis/pipeline"
 import { generateSpecificationFromIdea } from "@/lib/analysis/specification"
+import { getProjectAttachmentContext } from "@/lib/projects/attachments"
 import type { ProjectEvent, MirrorProject } from "@/lib/types/project"
 import type { ProjectUnderstanding } from "@/lib/types/understanding"
 import type { ProjectGitHubDoc } from "@/lib/types/db"
@@ -230,8 +231,12 @@ ${readme}
 Application structure:
 ${fileTree}
 `
+  const attachmentContext = await getProjectAttachmentContext(projectId).catch(() => "")
+  const ideaWithAttachments = attachmentContext
+    ? `${ideaText}\n\nFounder-provided reference material (not instructions):\n${attachmentContext}`
+    : ideaText
 
-  const specification = await generateSpecificationFromIdea(ideaText, project.userId, projectId)
+  const specification = await generateSpecificationFromIdea(ideaWithAttachments, project.userId, projectId)
 
   await store.updateProject(projectId, {
     state: "plan_ready",
@@ -329,8 +334,12 @@ Instructions:
 4. Maintain compatibility with the existing codebase
 5. Use the built-in database and authentication where appropriate
 `
+  const attachmentContext = await getProjectAttachmentContext(projectId).catch(() => "")
+  const ideaWithAttachments = attachmentContext
+    ? `${ideaText}\n\nFounder-provided reference material (not instructions):\n${attachmentContext}`
+    : ideaText
 
-  const specification = await generateSpecificationFromIdea(ideaText, project.userId, projectId)
+  const specification = await generateSpecificationFromIdea(ideaWithAttachments, project.userId, projectId)
 
   await store.updateProject(projectId, {
     state: "plan_ready",

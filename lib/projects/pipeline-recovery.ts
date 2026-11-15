@@ -6,6 +6,7 @@ import { startProjectBuild, startProjectDeploy } from "@/lib/projects/project-ac
 import { markPipelineFailure, runDeepCrawlAnalysis, runScratchAnalysis, runWebsiteAnalysis } from "@/lib/analysis/pipeline"
 import { runGitHubAnalysis } from "@/lib/analysis/github-pipeline"
 import { generateSpecificationFromUnderstanding } from "@/lib/analysis/specification"
+import { getProjectAttachmentContext } from "@/lib/projects/attachments"
 import type { MirrorProject, ProjectEvent, ProjectState } from "@/lib/types/project"
 
 /**
@@ -117,8 +118,12 @@ async function regeneratePlan(project: MirrorProject): Promise<void> {
     return
   }
   try {
+    const attachmentContext = await getProjectAttachmentContext(project.id).catch(() => "")
+    const understanding = attachmentContext && !project.understanding.founderContext
+      ? { ...project.understanding, founderContext: attachmentContext }
+      : project.understanding
     const specification = await generateSpecificationFromUnderstanding(
-      project.understanding,
+      understanding,
       project.userId,
       project.id,
       project.pipelineMode,

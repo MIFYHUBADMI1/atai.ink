@@ -374,6 +374,7 @@ export async function generateSpecificationFromUnderstanding(
       suggestedFeatures: understanding.suggestedFeatures,
       dataEntities: understanding.dataEntities,
       designSystem: understanding.designSystem,
+      founderContext: understanding.founderContext,
     },
     null,
     2,

@@ -332,6 +332,8 @@ export async function runWebsiteAnalysis(projectId: string, pipelineMode?: "lega
     console.log("[v0] pipeline.website: step 2/3 analyzeWebsite (generateText) starting", { projectId })
     const understanding = await analyzeWebsite(evidence)
     console.log("[v0] pipeline.website: step 2/3 analyzeWebsite done", { projectId })
+    const attachmentContext = await getProjectAttachmentContext(projectId).catch(() => "")
+    if (attachmentContext) understanding.founderContext = attachmentContext
     await store.updateProject(projectId, { state: "analysis_complete", understanding })
     await captureArtifacts(projectId, [
       {
@@ -547,6 +549,7 @@ export async function runDeepCrawlAnalysis(projectId: string, pipelineMode?: "le
 
     // Convert crawled evidence into ProjectUnderstanding
     console.log("[v0] pipeline.deepCrawl: converting evidence to understanding", { projectId, mode })
+    const attachmentContext = await getProjectAttachmentContext(projectId).catch(() => "")
     const crawlAssets = [...new Set(evidence.pages.flatMap((p) => p.images))].slice(0, 80)
     const understanding: import("@/lib/types/understanding").ProjectUnderstanding = {
       sourceUrl: evidence.sourceUrl,
@@ -573,6 +576,7 @@ export async function runDeepCrawlAnalysis(projectId: string, pipelineMode?: "le
       authenticationRequirements: [],
       rawEvidenceReferences: [],
       confidenceNotes: `Deep crawl: ${evidence.pages.length} pages collected from ${evidence.sourceUrl}`,
+      founderContext: attachmentContext || undefined,
     }
 
     await store.updateProject(projectId, { understanding })
