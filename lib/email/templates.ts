@@ -343,6 +343,21 @@ export function emailChangeEmail(name: string, newEmail: string, confirmUrl: str
   return { subject: "📧 Confirm your new email address", html, text }
 }
 
+export function sessionVerificationEmail(name: string, code: string) {
+  const html = shell(
+    "Confirm your sign-in",
+    `<p style="font-size:15px;line-height:1.7;color:#d4d4d8;margin:0 0 4px 0;">Hey <strong style="color:#f4f4f5;">${escapeHtml(name)}</strong></p>
+     <p style="font-size:15px;line-height:1.7;color:#a1a1aa;margin:0 0 20px 0;">
+       You're signing in on a new device, and your account already has the maximum of 2 active sessions.
+       Enter this code to confirm it's you — your oldest session will be signed out to make room.
+     </p>
+     ${codeBlock(escapeHtml(code))}
+     ${infoBox("⏱ This code expires in <strong style=\"color:#d4d4d8;\">10 minutes</strong>. If you didn't try to sign in, someone may have your password — change it immediately.")}`,
+  )
+  const text = `Hey ${name}, your Atai sign-in code is ${code} (expires in 10 minutes). If you didn't try to sign in, change your password immediately.`
+  return { subject: "🔐 Your Atai sign-in code", html, text }
+}
+
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string)
 }

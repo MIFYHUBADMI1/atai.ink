@@ -167,7 +167,7 @@ export interface SessionDoc {
   expiresAt: Date
 }
 
-export type VerificationPurpose = "email_verify" | "password_reset" | "email_change"
+export type VerificationPurpose = "email_verify" | "password_reset" | "email_change" | "session_eviction"
 
 export interface VerificationTokenDoc {
   _id: ObjectId

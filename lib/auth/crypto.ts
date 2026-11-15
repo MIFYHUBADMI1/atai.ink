@@ -1,4 +1,4 @@
-import { randomBytes, createHash } from "node:crypto"
+import { randomBytes, randomInt, createHash } from "node:crypto"
 import bcrypt from "bcryptjs"
 
 /** Password hashing (spec section 4). Cost factor 12 balances security and
@@ -43,4 +43,10 @@ export function generateToken(): string {
 
 export function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex")
+}
+
+/** Short numeric OTP for email-confirmed flows (e.g. session eviction).
+ * Uniform via randomInt; guessing is bounded by expiry + attempt rate limits. */
+export function generateNumericCode(digits = 6): string {
+  return randomInt(0, 10 ** digits).toString().padStart(digits, "0")
 }

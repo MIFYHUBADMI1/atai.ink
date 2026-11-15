@@ -20,6 +20,7 @@ export function LoginForm() {
   }
   if (error === "account_banned") initialError = "This account has been banned. Please contact support."
   if (error === "account_suspended") initialError = "This account has been suspended. Please contact support."
+  if (error === "session_verify_email_failed") initialError = "We couldn't send the sign-in verification code. Please try again."
 
   return <AuthPageAdapter initialView="login" next={next} initialError={initialError} />
 }

@@ -4,7 +4,7 @@ import { useClientStore } from "@/lib/store/client-store"
 export const PENDING_START_KEY = "atai:pending-start"
 export const REFERRAL_KEY = "referral_code"
 
-export type AuthView = "login" | "signup" | "forgot" | "forgot-sent" | "verify"
+export type AuthView = "login" | "signup" | "forgot" | "forgot-sent" | "verify" | "session-verify"
 
 export type PendingStart = {
   prompt: string
@@ -146,9 +146,33 @@ export async function refreshSessionAfterAuth() {
   }
 }
 
-export async function loginWithPassword(email: string, password: string) {
-  await postJson("/api/auth/login", { email, password })
+export interface LoginResult {
+  sessionVerificationRequired?: boolean
+  verificationId?: string
+  email?: string
+}
+
+export async function loginWithPassword(email: string, password: string): Promise<LoginResult | undefined> {
+  const data = await postJson<LoginResult>("/api/auth/login", { email, password })
+  // Session-cap sign-ins pause for an emailed code instead of creating a
+  // session — the caller switches to the code-entry view.
+  if (data?.sessionVerificationRequired) return data
   await refreshSessionAfterAuth()
+  return data
+}
+
+/** Redeem the emailed sign-in code: evicts the oldest sessions server-side
+ * and creates the new session cookie. */
+export async function verifySessionCode(code: string) {
+  await postJson("/api/auth/session-verification", { action: "verify", code })
+  await refreshSessionAfterAuth()
+}
+
+export async function resendSessionVerificationCode(verificationId: string) {
+  return postJson<{ sent?: boolean; reason?: string }>("/api/auth/session-verification", {
+    action: "resend",
+    id: verificationId,
+  })
 }
 
 export async function registerWithPassword(payload: {

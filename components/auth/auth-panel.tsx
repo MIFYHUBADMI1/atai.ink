@@ -19,12 +19,14 @@ import {
   persistReferralCode,
   registerWithPassword,
   requestPasswordReset,
+  resendSessionVerificationCode,
   resendVerificationEmail,
+  verifySessionCode,
 } from "@/lib/auth/client-intent"
 import { cn } from "@/lib/utils"
 
 const COPY: Record<
-  Extract<AuthView, "login" | "signup" | "forgot" | "forgot-sent" | "verify">,
+  Extract<AuthView, "login" | "signup" | "forgot" | "forgot-sent" | "verify" | "session-verify">,
   { title: string; subtitle: string }
 > = {
   login: {
@@ -46,6 +48,10 @@ const COPY: Record<
   verify: {
     title: "Check your email",
     subtitle: "We've sent a verification link so you can confirm your account.",
+  },
+  "session-verify": {
+    title: "Check your email",
+    subtitle: "Your account already has 2 active sessions. Enter the 6-digit code we sent to confirm this sign-in.",
   },
 }
 
@@ -78,6 +84,8 @@ export function AuthPanel({
   const [oauthProvider, setOauthProvider] = useState<"google" | "github" | null>(null)
   const [resendState, setResendState] = useState<"idle" | "sending" | "sent" | "error">("idle")
   const [emailOpen, setEmailOpen] = useState(false)
+  const [sessionCode, setSessionCode] = useState("")
+  const [sessionVerifyCtx, setSessionVerifyCtx] = useState<{ id?: string; email: string } | null>(null)
 
   const busy = submitting || oauthProvider !== null
 
@@ -89,6 +97,7 @@ export function AuthPanel({
     setError(null)
     setOauthProvider(null)
     setResendState("idle")
+    setSessionCode("")
   }, [view])
 
   useEffect(() => {
@@ -104,11 +113,41 @@ export function AuthPanel({
     setError(null)
     setBusy(true)
     try {
-      await loginWithPassword(email, password)
+      const result = await loginWithPassword(email, password)
+      if (result?.sessionVerificationRequired) {
+        setSessionVerifyCtx({ id: result.verificationId, email: result.email || email })
+        onViewChange("session-verify")
+        setBusy(false)
+        return
+      }
       onAuthenticated(next)
     } catch (err) {
       setError(humanizeAuthError(err))
       setBusy(false)
+    }
+  }
+
+  async function onVerifySessionCode(event: React.FormEvent) {
+    event.preventDefault()
+    setError(null)
+    setBusy(true)
+    try {
+      await verifySessionCode(sessionCode.trim())
+      onAuthenticated(next)
+    } catch (err) {
+      setError(humanizeAuthError(err))
+      setBusy(false)
+    }
+  }
+
+  async function onResendSessionCode() {
+    if (!sessionVerifyCtx?.id || resendState === "sending") return
+    setResendState("sending")
+    try {
+      const result = await resendSessionVerificationCode(sessionVerifyCtx.id)
+      setResendState(result.sent ? "sent" : "error")
+    } catch {
+      setResendState("error")
     }
   }
 
@@ -174,7 +213,7 @@ export function AuthPanel({
         <div className="flex flex-col gap-1.5 text-center">
           <h2 className="text-xl font-semibold tracking-tight">{copy.title}</h2>
           <p className="text-sm leading-6 text-muted-foreground">{copy.subtitle}</p>
-          {(view === "forgot-sent" || view === "verify") && email ? (
+          {(view === "forgot-sent" || view === "verify" || view === "session-verify") && email ? (
             <p className="text-sm font-medium text-foreground">{email}</p>
           ) : null}
         </div>
@@ -333,6 +372,47 @@ export function AuthPanel({
             Back to sign in
           </button>
         </div>
+      )}
+
+      {view === "session-verify" && (
+        <form onSubmit={onVerifySessionCode} className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="session-code">Verification code</Label>
+            <Input
+              id="session-code"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              required
+              maxLength={6}
+              pattern="\d{6}"
+              placeholder="123456"
+              value={sessionCode}
+              onChange={(event) => setSessionCode(event.target.value.replace(/\D/g, ""))}
+              disabled={submitting}
+              className="h-11 text-center font-mono text-lg tracking-[0.4em]"
+            />
+          </div>
+          {error ? <AuthError message={error} /> : null}
+          {resendState === "sent" ? <p className="text-center text-sm text-muted-foreground">A new code is on its way.</p> : null}
+          {resendState === "error" ? <AuthError message="Couldn't resend the code. Please try again." /> : null}
+          <button type="submit" className={cn(buttonVariants({ size: "lg" }), "h-11 w-full")} disabled={submitting || sessionCode.length !== 6}>
+            {submitting ? "Verifying..." : "Verify and sign in"}
+          </button>
+          {sessionVerifyCtx?.id ? (
+            <button
+              type="button"
+              className={cn(buttonVariants({ variant: "outline", size: "lg" }), "h-11 w-full")}
+              disabled={resendState === "sending"}
+              onClick={onResendSessionCode}
+            >
+              {resendState === "sending" ? "Sending..." : "Resend code"}
+            </button>
+          ) : null}
+          <button type="button" className="text-center text-sm font-medium text-primary underline-offset-4 hover:underline" onClick={() => onViewChange("login")}>
+            Back to sign in
+          </button>
+        </form>
       )}
 
       {view === "verify" && (

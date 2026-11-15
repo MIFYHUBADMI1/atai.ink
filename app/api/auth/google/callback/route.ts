@@ -2,7 +2,8 @@ import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { exchangeGoogleCode } from "@/lib/auth/google"
 import { findUserByEmail, findUserByGoogleId, createGoogleUser, linkGoogleToUser, touchLastLogin } from "@/lib/auth/users"
-import { createSession, setSessionCookie } from "@/lib/auth/session"
+import { createSession, setSessionCookie, sessionLimitReached } from "@/lib/auth/session"
+import { issueSessionVerificationCode } from "@/lib/auth/session-verification"
 import { getAppUrl } from "@/lib/env"
 import { logger } from "@/lib/logging/logger"
 import { captureReferral } from "@/lib/referrals/referrals"
@@ -85,13 +86,27 @@ export async function GET(req: Request) {
       return NextResponse.redirect(`${appUrl}/login?error=account_${reason}`)
     }
 
+    const next = nextFromState.startsWith("/") && !nextFromState.startsWith("//") ? nextFromState : "/workspace"
+
+    // Session cap: confirm via emailed code before evicting old sessions.
+    // Without SMTP (local dev) we fall through to normal session creation.
+    if (await sessionLimitReached(user.id)) {
+      const verification = await issueSessionVerificationCode(user)
+      if (verification.status === "sent") {
+        const params = new URLSearchParams({ vid: verification.verificationId, next })
+        return NextResponse.redirect(`${appUrl}/verify-session?${params.toString()}`)
+      }
+      if (verification.status === "delivery_failed") {
+        return NextResponse.redirect(`${appUrl}/login?error=session_verify_email_failed`)
+      }
+    }
+
     stage = "touch-login"
     await touchLastLogin(user.id)
     stage = "create-session"
     const token = await createSession(user.id)
     await setSessionCookie(token)
 
-    const next = nextFromState.startsWith("/") && !nextFromState.startsWith("//") ? nextFromState : "/workspace"
     return NextResponse.redirect(`${appUrl}${next}`)
   } catch (e) {
     logger.error("api.auth.google.callback", "OAuth callback failed", { stage, errorName: e instanceof Error ? e.name : "UnknownError", errorMessage: e instanceof Error ? e.message : String(e) })

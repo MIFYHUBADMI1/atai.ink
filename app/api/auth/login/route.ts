@@ -1,7 +1,8 @@
 import { ok, fail, handleRouteError } from "@/lib/api/respond"
 import { findUserByEmail, normalizeEmail, toPublicUser, touchLastLogin } from "@/lib/auth/users"
 import { verifyPassword, verifyPasswordWithoutUser } from "@/lib/auth/crypto"
-import { createSession, setSessionCookie } from "@/lib/auth/session"
+import { createSession, setSessionCookie, sessionLimitReached } from "@/lib/auth/session"
+import { issueSessionVerificationCode } from "@/lib/auth/session-verification"
 import { checkRateLimit } from "@/lib/auth/rate-limit"
 import { AppError } from "@/lib/errors"
 import { checkAuthRequest } from "@/lib/auth/request-limit"
@@ -40,6 +41,23 @@ export async function POST(req: Request) {
     }
     if (user.suspended) {
       return fail("FORBIDDEN", "This account has been suspended. Please contact support.", 403)
+    }
+
+    // Session cap: a new sign-in beyond MAX_ACTIVE_SESSIONS must be confirmed
+    // by an emailed code before the oldest sessions are evicted. Without SMTP
+    // (local dev) we fall through to the normal session creation.
+    if (await sessionLimitReached(user.id)) {
+      const verification = await issueSessionVerificationCode(user)
+      if (verification.status === "sent") {
+        return ok({
+          sessionVerificationRequired: true,
+          verificationId: verification.verificationId,
+          email: user.email,
+        })
+      }
+      if (verification.status === "delivery_failed") {
+        throw new AppError("EMAIL_UNAVAILABLE", "We couldn't send the sign-in verification code. Please try again.")
+      }
     }
 
     await touchLastLogin(user.id)

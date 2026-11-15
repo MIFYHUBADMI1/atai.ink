@@ -5,7 +5,8 @@ import {
   findUserByGitHubId, findUserByEmail,
   createGitHubUser, linkGitHubToUser, updateGitHubToken, touchLastLogin,
 } from "@/lib/auth/users"
-import { createSession, setSessionCookie } from "@/lib/auth/session"
+import { createSession, setSessionCookie, sessionLimitReached } from "@/lib/auth/session"
+import { issueSessionVerificationCode } from "@/lib/auth/session-verification"
 import { getAppUrl } from "@/lib/env"
 import { logger } from "@/lib/logging/logger"
 import { captureReferral } from "@/lib/referrals/referrals"
@@ -93,12 +94,26 @@ export async function GET(req: Request) {
       jar.delete(REFERRAL_COOKIE)
     }
 
+    const safePath = next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard"
+
+    // Session cap: confirm via emailed code before evicting old sessions.
+    // Without SMTP (local dev) we fall through to normal session creation.
+    if (await sessionLimitReached(user.id)) {
+      const verification = await issueSessionVerificationCode(user)
+      if (verification.status === "sent") {
+        const params = new URLSearchParams({ vid: verification.verificationId, next: safePath })
+        return NextResponse.redirect(`${appUrl}/verify-session?${params.toString()}`)
+      }
+      if (verification.status === "delivery_failed") {
+        return NextResponse.redirect(`${appUrl}/login?error=session_verify_email_failed`)
+      }
+    }
+
     stage = "session"
     await touchLastLogin(user.id)
     const token = await createSession(user.id)
     await setSessionCookie(token)
 
-    const safePath = next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard"
     return NextResponse.redirect(`${appUrl}${safePath}`)
   } catch (e) {
     logger.error("api.auth.github.callback", "OAuth callback failed", {

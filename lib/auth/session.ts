@@ -14,6 +14,10 @@ import { AppError } from "@/lib/errors"
  */
 const COOKIE = "Atai_session"
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30 // 30 days
+/** Maximum live sessions per account. A sign-in beyond this revokes the
+ * oldest sessions automatically — credential sharing / session farming
+ * can't accumulate devices. */
+export const MAX_ACTIVE_SESSIONS = 2
 
 /**
  * Cookie scope. A cookie's `Domain` must be a suffix of the host the browser
@@ -101,7 +105,41 @@ export async function createSession(userId: string): Promise<string> {
     createdAt: now,
     expiresAt: new Date(now + SESSION_TTL_MS),
   })
+
+  // Safety net for the per-account cap: keep the newest
+  // MAX_ACTIVE_SESSIONS live sessions. Normal sign-ins go through
+  // session-verification first when the cap is already reached, so this only
+  // fires for paths that bypass that check.
+  await evictOldestSessions(userId, MAX_ACTIVE_SESSIONS)
+
   return token
+}
+
+/** Live (non-expired) session count for an account. */
+export async function countActiveSessions(userId: string): Promise<number> {
+  const col = await sessionsCol()
+  return col.countDocuments({ userId, expiresAt: { $gt: new Date() } })
+}
+
+/** True when a new sign-in would push the account past MAX_ACTIVE_SESSIONS. */
+export async function sessionLimitReached(userId: string): Promise<boolean> {
+  return (await countActiveSessions(userId)) >= MAX_ACTIVE_SESSIONS
+}
+
+/** Delete the oldest live sessions until at most `keep` remain. Ties on
+ * createdAt break by _id so ordering is deterministic; expired rows are left
+ * for the TTL index. Returns the number of sessions revoked. */
+export async function evictOldestSessions(userId: string, keep: number): Promise<number> {
+  const col = await sessionsCol()
+  const excess = await col
+    .find({ userId, expiresAt: { $gt: new Date() } })
+    .sort({ createdAt: -1, _id: -1 })
+    .skip(keep)
+    .project({ _id: 1 })
+    .toArray()
+  if (excess.length === 0) return 0
+  const result = await col.deleteMany({ _id: { $in: excess.map((s) => s._id) } })
+  return result.deletedCount ?? 0
 }
 
 export async function setSessionCookie(token: string): Promise<void> {
