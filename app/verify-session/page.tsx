@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 export default function VerifySessionPage({
   searchParams,
 }: {
-  searchParams: Promise<{ vid?: string; next?: string }>
+  searchParams: Promise<{ vid?: string; next?: string; email?: string }>
 }) {
   return (
     <AuthShell

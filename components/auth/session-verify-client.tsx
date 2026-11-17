@@ -21,15 +21,16 @@ import { cn } from "@/lib/utils"
 export function SessionVerifyClient({
   searchParams,
 }: {
-  searchParams: Promise<{ vid?: string; next?: string }>
+  searchParams: Promise<{ vid?: string; next?: string; email?: string }>
 }) {
   const router = useRouter()
-  const [params, setParams] = useState<{ vid?: string; next?: string } | null>(null)
+  const [params, setParams] = useState<{ vid?: string; next?: string; email?: string } | null>(null)
   const [code, setCode] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [resendState, setResendState] = useState<"idle" | "sending" | "sent" | "error">("idle")
-  const [resendCooldown, setResendCooldown] = useState(180)
+  const [resendError, setResendError] = useState<string | null>(null)
+  const [resendCooldown, setResendCooldown] = useState(0)
 
   useEffect(() => {
     if (resendCooldown <= 0) return
@@ -67,19 +68,35 @@ export function SessionVerifyClient({
   async function onResend() {
     if (!vid || resendState === "sending") return
     setResendState("sending")
+    setResendError(null)
     try {
-      const result = await resendSessionVerificationCode(vid)
-      setResendState(result.sent ? "sent" : "error")
-      if (result.sent) setResendCooldown(180)
-    } catch {
+      const result = await resendSessionVerificationCode(vid, params?.email)
+      if (result.sent && result.verificationId) {
+        setParams((prev) => (prev ? { ...prev, vid: result.verificationId } : prev))
+      }
+      if (result.sent) {
+        setResendState("sent")
+        setResendCooldown(result.retryAfterSeconds ?? 180)
+      } else {
+        setResendState("error")
+        setResendError(
+          result.reason === "delivery_failed"
+            ? "We couldn't send the code email. Please try again."
+            : result.reason === "invalid"
+              ? "This code request expired. Please sign in again."
+              : "Email delivery isn't available right now.",
+        )
+      }
+    } catch (err) {
       setResendState("error")
+      setResendError(humanizeAuthError(err))
     }
   }
 
   return (
     <div className="flex flex-col gap-4">
       <p className="text-sm leading-6 text-muted-foreground">
-        Your account already has 2 active sessions. Enter the 6-digit code we emailed you to confirm this sign-in — your oldest session will be signed out.
+        Your account is at its active-session limit. Enter the 6-digit code we emailed you to confirm this sign-in — your oldest session will be signed out.
       </p>
       <form onSubmit={onSubmit} className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
@@ -104,9 +121,9 @@ export function SessionVerifyClient({
           </p>
         ) : null}
         {resendState === "sent" ? <p className="text-center text-sm text-muted-foreground">A new code is on its way.</p> : null}
-        {resendState === "error" ? (
+        {resendState === "error" && resendError ? (
           <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            Couldn&apos;t resend the code. Please try again.
+            {resendError}
           </p>
         ) : null}
         <button type="submit" className={cn(buttonVariants({ size: "lg" }), "h-11 w-full")} disabled={submitting || code.length !== 6}>

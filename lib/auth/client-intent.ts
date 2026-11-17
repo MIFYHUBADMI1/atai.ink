@@ -10,7 +10,7 @@ export type PendingStart = {
   prompt: string
   /** User-confirmed project title; required before a project is created. */
   title?: string
-  href: string
+  href: string 
   source?: string
   signalType?: "url" | "idea"
   mode?: "idea" | "website" | "url" | "github"
@@ -140,10 +140,15 @@ export function humanizeAuthError(error: unknown): string {
 }
 
 export async function refreshSessionAfterAuth() {
-  await useClientStore.getState().fetchSession()
-  if (!useClientStore.getState().session?.user) {
-    throw new Error("We signed you in, but couldn't load your session. Please try again.")
+  // The session cookie is already set at this point — a slow /api/me (dev
+  // compiles, cold DB) must not strand a successful sign-in on the auth
+  // screen. Retry briefly before giving up.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    await useClientStore.getState().fetchSession()
+    if (useClientStore.getState().session?.user) return
+    await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)))
   }
+  throw new Error("We signed you in, but couldn't load your session. Please try again.")
 }
 
 export interface LoginResult {
@@ -168,11 +173,11 @@ export async function verifySessionCode(code: string) {
   await refreshSessionAfterAuth()
 }
 
-export async function resendSessionVerificationCode(verificationId: string) {
-  return postJson<{ sent?: boolean; reason?: string }>("/api/auth/session-verification", {
-    action: "resend",
-    id: verificationId,
-  })
+export async function resendSessionVerificationCode(verificationId: string, email?: string) {
+  return postJson<{ sent?: boolean; reason?: string; retryAfterSeconds?: number; verificationId?: string }>(
+    "/api/auth/session-verification",
+    { action: "resend", id: verificationId, email },
+  )
 }
 
 export async function registerWithPassword(payload: {
