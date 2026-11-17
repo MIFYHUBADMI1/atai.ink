@@ -26,12 +26,14 @@ import { AuditPanel } from "@/components/admin/blog/audit-panel"
 import { ComparisonEditor } from "@/components/admin/blog/comparison-editor"
 import { MarkdownToolbar } from "@/components/admin/blog/markdown-toolbar"
 import { SeoPanel } from "@/components/admin/blog/seo-panel"
+import { ArticlePreview } from "@/components/blog/article-preview"
 import { deleteJson, patchJson, postJson } from "@/lib/client/api"
 import type {
   BlogArticleView,
   BlogAuditReport,
-  ComparisonRow as BlogComparisonRowType,
+  BlogAuthor,
   BlogRevisionDoc,
+  ComparisonData,
 } from "@/lib/blog/types"
 
 /** The outcome of a publish, as reported by the server. */
@@ -43,6 +45,12 @@ type AnnouncementSummary = {
   reason?: string
 }
 
+/** The outcome of the indexing ping that follows a publish. */
+type IndexingSummary = {
+  status: "submitted" | "failed" | "not-configured"
+  error?: string
+}
+
 type BlogEditorValue = {
   title: string
   slug: string
@@ -51,17 +59,9 @@ type BlogEditorValue = {
   body: string
   category: string
   tags: string[]
-  author: { name: string; role?: string; bio?: string; url?: string; imageUrl?: string }
+  author: BlogAuthor
   competitor?: string
-  comparison?: {
-    competitorName: string
-    competitorUrl?: string
-    competitorDescription?: string
-    positioning?: string
-    rows: BlogComparisonRowType[]
-    lastReviewed?: string
-    limitations?: string
-  }
+  comparison?: ComparisonData
   featuredImage?: { url: string; alt: string }
   seo: {
     title?: string
@@ -122,6 +122,139 @@ function fromArticle(article: BlogArticleView): BlogEditorValue {
 
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "error"
 
+/** A publish that starts from the "new article" screen ends on the edit screen,
+ * and that navigation remounts the editor. The outcome is handed over so the
+ * admin still reads what happened. */
+const FLASH_KEY = "atai:blog-editor-flash"
+
+function stashFlash(text: string): void {
+  try {
+    window.sessionStorage.setItem(FLASH_KEY, text)
+  } catch {
+    // Private mode or a full quota: the status line in the header still tells
+    // the admin the truth, so a missing flash is not a failure.
+  }
+}
+
+function takeFlash(): string | null {
+  try {
+    const text = window.sessionStorage.getItem(FLASH_KEY)
+    if (text) window.sessionStorage.removeItem(FLASH_KEY)
+    return text
+  } catch {
+    return null
+  }
+}
+
+/** Date-only, in a pinned locale: the header renders on the server first, so a
+ * locale-free time string would print different text on the two passes. A bare
+ * YYYY-MM-DD is read as local midnight so the day never shifts. */
+function formatSaved(value: string): string {
+  const date = new Date(value.length <= 10 ? `${value}T00:00:00` : value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+}
+
+/** A reload, a crashed tab or a wrong "Leave page" click used to destroy
+ * everything typed on the New screen, because nothing is stored until the
+ * article is created — and work on a stored article is lost the same way in the
+ * seconds before autosave runs. The editor keeps a rolling snapshot in this
+ * browser and offers it back on the next load. */
+const DRAFT_KEY = "atai:blog-editor-draft"
+
+function draftKey(id: string | null): string {
+  return `${DRAFT_KEY}:${id ?? "new"}`
+}
+
+type RecoveredDraft = { atMs: number; value: BlogEditorValue; key: string }
+
+function readDraft(key: string): { atMs: number; value: BlogEditorValue } | null {
+  try {
+    const raw = window.localStorage.getItem(key)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { atMs?: number; value?: Partial<BlogEditorValue> } | null
+    if (!parsed?.value || typeof parsed.value.body !== "string" || typeof parsed.value.title !== "string") {
+      return null
+    }
+    return {
+      atMs: parsed.atMs ?? 0,
+      value: { ...EMPTY_VALUE, ...(parsed.value as BlogEditorValue), seo: parsed.value.seo ?? {} },
+    }
+  } catch {
+    return null
+  }
+}
+
+function writeDraft(key: string, value: BlogEditorValue): void {
+  try {
+    window.localStorage.setItem(key, JSON.stringify({ atMs: Date.now(), value }))
+  } catch {
+    // Quota or private mode: the debounced server autosave still protects
+    // stored articles, so a missing local snapshot is not a failure.
+  }
+}
+
+function clearDraft(key: string): void {
+  try {
+    window.localStorage.removeItem(key)
+  } catch {
+    // Nothing to clean up if storage was unreachable.
+  }
+}
+
+/** Fixed field order, so two values that hold the same writing always compare
+ * equal regardless of how each object was assembled. Publishing state
+ * (`status`, `featured`, `scheduledFor`, `publishedAt`) is deliberately absent:
+ * the server owns that, and a snapshot from before a publish must not be
+ * offered as though content were missing. */
+function draftFingerprint(value: BlogEditorValue): string {
+  return JSON.stringify([
+    value.title,
+    value.slug,
+    value.description,
+    value.excerpt,
+    value.body,
+    value.category,
+    value.tags,
+    value.seo,
+    value.relatedSlugs,
+    value.author,
+    value.competitor ?? null,
+    value.comparison ?? null,
+    value.featuredImage ?? null,
+  ])
+}
+
+/** The writing from the snapshot, on top of whatever the editor currently
+ * holds. Restoring never rolls back a publish, an archive or a schedule. */
+function recoveredContent(snapshot: BlogEditorValue, current: BlogEditorValue): BlogEditorValue {
+  return {
+    ...current,
+    title: snapshot.title,
+    slug: snapshot.slug,
+    description: snapshot.description,
+    excerpt: snapshot.excerpt,
+    body: snapshot.body,
+    category: snapshot.category,
+    tags: snapshot.tags,
+    seo: snapshot.seo,
+    relatedSlugs: snapshot.relatedSlugs,
+    author: snapshot.author,
+    competitor: snapshot.competitor,
+    comparison: snapshot.comparison,
+    featuredImage: snapshot.featuredImage,
+  }
+}
+
+/** The banner renders only after mount, so this string never reaches the
+ * server pass — but the locale is pinned anyway. */
+function formatRecovered(atMs: number): string {
+  if (!atMs) return "an earlier visit"
+  const date = new Date(atMs)
+  if (Number.isNaN(date.getTime())) return "an earlier visit"
+  return date.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+}
+
 /** `datetime-local` needs "YYYY-MM-DDTHH:mm" in the browser's own timezone. */
 function formatScheduleInput(value?: number): string {
   if (!value) return ""
@@ -148,6 +281,21 @@ function announcementMessage(announcement?: AnnouncementSummary): string | null 
   }
 }
 
+/** What actually happened to the indexing ping. A ping is not indexing. */
+function indexingMessage(indexing?: IndexingSummary): string | null {
+  if (!indexing) return null
+  switch (indexing.status) {
+    case "submitted":
+      return " The indexing ping was accepted — that is not a claim that the page is indexed."
+    case "failed":
+      return ` The indexing ping was not accepted${indexing.error ? `: ${indexing.error}` : "."} The article is live but was not submitted for indexing.`
+    case "not-configured":
+      return " No indexing ping was sent — IndexNow is not configured."
+    default:
+      return null
+  }
+}
+
 export function ArticleEditor({
   article,
   categories,
@@ -166,9 +314,75 @@ export function ArticleEditor({
   const [auditLoading, setAuditLoading] = useState(false)
   const [revisions, setRevisions] = useState<BlogRevisionDoc[]>([])
   const [scheduleAt, setScheduleAt] = useState(() => formatScheduleInput(article?.scheduledFor))
+  const [tab, setTab] = useState<string>("preview")
   const bodyRef = useRef<HTMLTextAreaElement | null>(null)
   const dirtyRef = useRef(false)
-  const articleId = article?.id ?? null
+  const [createdId, setCreatedId] = useState<string | null>(null)
+  const [savedAt, setSavedAt] = useState<string | null>(article?.updatedAt ?? null)
+  const [recovered, setRecovered] = useState<RecoveredDraft | null>(null)
+  const [localRecoveryAvailable, setLocalRecoveryAvailable] = useState(true)
+  const articleId = article?.id ?? createdId
+
+  useEffect(() => {
+    const flash = takeFlash()
+    if (flash) setMessage(flash)
+  }, [])
+
+  useEffect(() => {
+    try {
+      const probe = `${DRAFT_KEY}:probe`
+      window.localStorage.setItem(probe, "1")
+      window.localStorage.removeItem(probe)
+    } catch {
+      // Private mode or a full quota: the header must not promise recovery.
+      setLocalRecoveryAvailable(false)
+    }
+  }, [])
+
+  // A snapshot left by a previous visit is offered back, never applied silently:
+  // it may be older than what the server holds, and reverting the admin's stored
+  // article without asking is worse than asking twice. Checked once per article,
+  // because every router.refresh() hands down a new `article` object.
+  const recoveryCheckedFor = useRef<string | null | undefined>(undefined)
+  useEffect(() => {
+    const id = article?.id ?? null
+    if (recoveryCheckedFor.current === id) return
+    recoveryCheckedFor.current = id
+    const key = draftKey(id)
+    const snapshot = readDraft(key)
+    if (!snapshot) return
+    const current = article ? fromArticle(article) : EMPTY_VALUE
+    if (draftFingerprint(snapshot.value) === draftFingerprint(current)) {
+      clearDraft(key)
+      return
+    }
+    setRecovered({ atMs: snapshot.atMs, value: snapshot.value, key })
+  }, [article])
+
+  // The rolling snapshot is written whenever the editor holds content, and once
+  // the server has the same content the snapshot is dropped.
+  useEffect(() => {
+    if (draftFingerprint(value) === draftFingerprint(EMPTY_VALUE)) return
+    const key = draftKey(articleId)
+    const timer = setTimeout(() => writeDraft(key, value), 800)
+    return () => clearTimeout(timer)
+  }, [value, articleId])
+
+  function applyRecoveredDraft() {
+    if (!recovered) return
+    dirtyRef.current = true
+    setValue((current) => recoveredContent(recovered.value, current))
+    setSaveState("dirty")
+    clearDraft(recovered.key)
+    setRecovered(null)
+    setMessage("Recovered the unsaved writing from this browser. It is stored only once it saves or publishes.")
+  }
+
+  function discardRecoveredDraft() {
+    if (!recovered) return
+    clearDraft(recovered.key)
+    setRecovered(null)
+  }
 
   const set = useCallback(<K extends keyof BlogEditorValue>(key: K, next: BlogEditorValue[K]) => {
     dirtyRef.current = true
@@ -206,6 +420,8 @@ export function ArticleEditor({
       try {
         await patchJson<{ item: BlogArticleView }>(`/api/admin/blog/${articleId}`, payload)
         dirtyRef.current = false
+        clearDraft(draftKey(articleId))
+        setSavedAt(new Date().toISOString())
         setSaveState("saved")
         if (!silent) setMessage("Saved.")
         return true
@@ -247,12 +463,32 @@ export function ArticleEditor({
       .catch(() => undefined)
   }, [articleId])
 
+  /** Store the article for the first time and adopt the server's copy. Returns
+   * the id, or null when nothing was created (the reason is in `message`). */
+  async function ensureCreated(): Promise<string | null> {
+    const response = await postJson<{ item: BlogArticleView }>("/api/admin/blog", payload)
+    const id = response.item?.id
+    if (!id) {
+      setMessage("The article was created but the studio could not read it back. Open the article list and retry.")
+      return null
+    }
+    setCreatedId(id)
+    if (response.item) setValue(fromArticle(response.item))
+    dirtyRef.current = false
+    setSaveState("saved")
+    setSavedAt(response.item?.updatedAt ?? new Date().toISOString())
+    // The content is on the server now, so both the browser snapshot for the
+    // "new article" screen and any restore offer are obsolete.
+    clearDraft(draftKey(null))
+    setRecovered(null)
+    return id
+  }
+
   async function createArticle() {
     setBusy("create")
     try {
-      const response = await postJson<{ item: BlogArticleView }>("/api/admin/blog", payload)
-      const created = response.item
-      router.push(`/admin/blog/articles/${created.id}`)
+      const id = await ensureCreated()
+      if (id) router.push(`/admin/blog/articles/${id}`)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not create the article.")
       setBusy(null)
@@ -260,21 +496,46 @@ export function ArticleEditor({
   }
 
   async function runAction(action: "publish" | "schedule" | "unpublish" | "archive" | "restore" | "review") {
-    if (!articleId) return
     setBusy(action)
     try {
-      if (dirtyRef.current) {
+      // Every action needs a stored article. On the "new article" screen the
+      // first action creates the draft and then applies itself, instead of
+      // doing nothing while the control looks clickable.
+      let id = articleId
+      // Was created during this action: the URL still says /new, so the admin
+      // is moved to the article's own screen once the step succeeds.
+      const wasCreated = id === null
+      if (wasCreated) {
+        try {
+          id = await ensureCreated()
+        } catch (error) {
+          setMessage(
+            `${error instanceof Error ? error.message : "The article could not be created."} Nothing was ${action === "publish" ? "published" : "changed"}.`,
+          )
+          setBusy(null)
+          return
+        }
+        if (!id) {
+          setMessage("Nothing was published — the article could not be created.")
+          setBusy(null)
+          return
+        }
+      } else if (dirtyRef.current) {
         const saved = await save(true)
         if (!saved) {
+          // Publishing stale content is worse than not publishing: the admin
+          // is told the action did not happen.
+          setMessage((current) => `${current ? `${current} ` : ""}Nothing was published — the article could not be saved.`)
           setBusy(null)
           return
         }
       }
       const scheduledFor = action === "schedule" ? new Date(scheduleAt).getTime() : undefined
-      const response = await postJson<{ item: BlogArticleView; announcement?: AnnouncementSummary }>(
-        `/api/admin/blog/${articleId}/status`,
-        { action, scheduledFor },
-      )
+      const response = await postJson<{
+        item: BlogArticleView
+        announcement?: AnnouncementSummary
+        indexing?: IndexingSummary
+      }>(`/api/admin/blog/${id}/status`, { action, scheduledFor })
       // The server is the source of truth after an action. Without this the
       // editor kept the old status and the next autosave could undo it — a
       // scheduled article was silently turned back into a draft.
@@ -282,9 +543,11 @@ export function ArticleEditor({
         dirtyRef.current = false
         setValue(fromArticle(response.item))
         setScheduleAt(formatScheduleInput(response.item.scheduledFor))
+        setSavedAt(response.item.updatedAt ?? new Date().toISOString())
       }
       const announced = announcementMessage(response?.announcement)
-      setMessage(
+      const indexed = indexingMessage(response?.indexing)
+      const outcome =
         (action === "publish"
           ? "Published. The article is now public and eligible for indexing."
           : action === "schedule"
@@ -295,8 +558,15 @@ export function ArticleEditor({
                 ? "Archived."
                 : action === "review"
                   ? "Submitted for review."
-                  : "Restored as a draft.") + (announced ?? ""),
-      )
+                  : "Restored as a draft.") + (announced ?? "") + (indexed ?? "")
+      setMessage(outcome)
+      if (wasCreated && response?.item) {
+        // The address still says /new while the article now exists. Moving to
+        // the edit screen remounts the editor, so hand the outcome over first.
+        stashFlash(outcome)
+        router.replace(`/admin/blog/articles/${id}`)
+        return
+      }
       router.refresh()
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "That action failed.")
@@ -360,7 +630,10 @@ export function ArticleEditor({
     }
   }
 
-  const previewHref = articleId ? `/blog/${value.slug || article?.slug}` : "/blog"
+  // Only a published article has a public URL to open; a draft or an unsaved
+  // article would 404 there, so Preview renders it in the editor instead.
+  const isLive = value.status === "published" && Boolean(articleId)
+  const liveHref = `/blog/${value.slug || article?.slug}`
 
   return (
     <div className="space-y-6">
@@ -369,21 +642,41 @@ export function ArticleEditor({
           <h1 className="text-2xl font-semibold tracking-tight">
             {articleId ? "Edit article" : "New article"}
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {articleId ? (
-              <>
-                {value.status} · last saved{" "}
-                {saveState === "saving" ? "saving…" : saveState === "dirty" ? "unsaved changes" : "just now"}
-              </>
+          <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            <span className="rounded-full border border-border px-2 py-0.5 text-xs font-medium capitalize">
+              {value.status === "published" ? "Live" : value.status}
+            </span>
+            {!articleId ? (
+              <span>
+                Not stored yet — nothing is public.
+                {localRecoveryAvailable
+                  ? " The writing is kept in this browser as you type, so a reload can give it back."
+                  : " This browser cannot keep a local copy, so create the draft before closing the tab."}
+              </span>
+            ) : saveState === "saving" ? (
+              <span>Saving…</span>
+            ) : saveState === "error" ? (
+              <span className="text-destructive">Last save failed — the studio still holds your changes.</span>
+            ) : saveState === "dirty" ? (
+              <span>Unsaved changes</span>
             ) : (
-              "Drafts save to the studio. Publish when the content and SEO checks pass."
+              <span>
+                Saved{savedAt ? ` ${formatSaved(savedAt)}` : " — no changes since"}
+                {value.status !== "published" ? ". Not public yet." : "."}
+              </span>
             )}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" render={<Link href={previewHref} target="_blank" />}>
-            <Eye className="size-4" /> Preview
-          </Button>
+          {isLive ? (
+            <Button variant="outline" size="sm" render={<Link href={liveHref} target="_blank" />}>
+              <Eye className="size-4" /> View live page
+            </Button>
+          ) : (
+            <Button variant="outline" size="sm" onClick={() => setTab("preview")}>
+              <Eye className="size-4" /> Preview
+            </Button>
+          )}
           {articleId ? (
             <>
               <Button variant="outline" size="sm" onClick={() => void save()} disabled={saveState === "saving"}>
@@ -403,6 +696,29 @@ export function ArticleEditor({
           )}
         </div>
       </div>
+
+      {recovered ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-primary" />
+            <div>
+              <p className="text-sm font-medium">This browser holds writing that was never stored</p>
+              <p className="text-xs text-muted-foreground">
+                Snapshot from {formatRecovered(recovered.atMs)}. Restoring brings back the text, headings, image and SEO
+                fields only — it never changes the article&apos;s status, schedule or what is already public.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={discardRecoveredDraft}>
+              Discard
+            </Button>
+            <Button size="sm" onClick={applyRecoveredDraft}>
+              Restore it
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {message ? (
         <p className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-muted-foreground">{message}</p>
@@ -462,17 +778,58 @@ export function ArticleEditor({
               value={value.body}
               onChange={(e) => set("body", e.target.value)}
               rows={26}
-              className="min-h-[520px] rounded-none border-0 font-mono text-[13px] leading-6 focus-visible:ring-0"
+              /* `field-sizing-content` is the shared Textarea default, which
+                 grows the box to the whole article and turns the page into an
+                 endless scroll. The body keeps a fixed height and scrolls
+                 inside itself. */
+              className="min-h-[420px] max-h-[70vh] field-sizing-fixed overflow-y-auto rounded-none border-0 font-mono text-[13px] leading-6 focus-visible:ring-0"
             />
+            <p className="border-t border-border px-4 py-2 text-xs text-muted-foreground">
+              How Markdown behaves here: a blank line separates paragraphs, a single line break does not — press Enter
+              twice, or use the toolbar, which inserts complete blocks. Anything written as raw HTML (
+              <code className="rounded bg-muted px-1 font-mono">&lt;br&gt;</code>,{" "}
+              <code className="rounded bg-muted px-1 font-mono">&lt;b&gt;</code>) is stripped and will not render, so
+              use the Markdown forms. The Preview tab uses the same renderer as the live page.
+            </p>
           </section>
 
-          <Tabs defaultValue="seo">
-            <TabsList>
+          <Tabs value={tab} onValueChange={setTab}>
+            {/* Five tabs do not fit a phone in one unbreakable row: the strip
+                wraps onto more lines instead of pushing the page sideways. */}
+            <TabsList className="h-auto w-full flex-wrap justify-start gap-1 group-data-horizontal/tabs:h-auto">
+              <TabsTrigger value="preview">Preview</TabsTrigger>
               <TabsTrigger value="seo">SEO</TabsTrigger>
               <TabsTrigger value="comparison">Comparison</TabsTrigger>
               <TabsTrigger value="audit">Audit</TabsTrigger>
               <TabsTrigger value="history">History</TabsTrigger>
             </TabsList>
+            <TabsContent value="preview" className="mt-4">
+              <div className="rounded-xl border border-border bg-card p-4 sm:p-6">
+                <p className="mb-3 text-xs text-muted-foreground">
+                  Reader view. A long article scrolls inside this frame instead of stretching the studio page — the
+                  published page is one continuous scroll.
+                </p>
+                <div className="max-h-[75vh] min-h-0 overflow-y-auto pr-1">
+                  <ArticlePreview
+                    article={{
+                      title: value.title,
+                      description: value.description,
+                      excerpt: value.excerpt,
+                      body: value.body,
+                      category: value.category,
+                      tags: value.tags,
+                      competitor: value.competitor,
+                      comparison: value.comparison,
+                      featuredImage: value.featuredImage,
+                      seo: value.seo,
+                      author: value.author,
+                      publishedAt: value.publishedAt,
+                      updatedAt: value.updatedAt,
+                    }}
+                  />
+                </div>
+              </div>
+            </TabsContent>
             <TabsContent value="seo" className="mt-4">
               <div className="rounded-xl border border-border bg-card p-4">
                 <SeoPanel
@@ -488,19 +845,40 @@ export function ArticleEditor({
             <TabsContent value="comparison" className="mt-4">
               <div className="rounded-xl border border-border bg-card p-4">
                 {value.comparison ? (
-                  <ComparisonEditor comparison={value.comparison} onChange={(next) => set("comparison", next)} />
+                  <div className="space-y-4">
+                    <div className="flex justify-end">
+                      <Button type="button" variant="ghost" size="sm" onClick={() => set("comparison", undefined)}>
+                        <Trash2 className="size-4" /> Remove comparison
+                      </Button>
+                    </div>
+                    <ComparisonEditor comparison={value.comparison} onChange={(next) => set("comparison", next)} />
+                  </div>
                 ) : (
                   <div className="space-y-3">
                     <p className="text-sm text-muted-foreground">
                       No structured comparison yet. Add one to render a side-by-side table with sources and verification dates.
                     </p>
+                    <div className="max-w-sm space-y-1.5">
+                      <Label htmlFor="comparison-competitor">Competitor name</Label>
+                      <Input
+                        id="comparison-competitor"
+                        value={value.competitor ?? ""}
+                        onChange={(e) => set("competitor", e.target.value)}
+                        placeholder="Lovable"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        The comparison is titled with this name, so it needs one before it can be added. It is the same
+                        competitor tag the article carries.
+                      </p>
+                    </div>
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
+                      disabled={!value.competitor?.trim()}
                       onClick={() =>
                         set("comparison", {
-                          competitorName: value.competitor ?? "",
+                          competitorName: value.competitor?.trim() ?? "",
                           rows: [],
                         })
                       }
@@ -520,14 +898,24 @@ export function ArticleEditor({
                       Checks structure, metadata, evidence and freshness. It never publishes for you.
                     </p>
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => void runAudit()} disabled={auditLoading}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void runAudit()}
+                    disabled={auditLoading || !articleId}
+                    title={articleId ? undefined : "Create the draft first — the audit reads the stored article."}
+                  >
                     <Search className="size-4" /> {auditLoading ? "Auditing…" : "Run audit"}
                   </Button>
                 </div>
                 {audit ? (
                   <AuditPanel findings={audit.findings} score={audit.score} wordCount={audit.wordCount} />
                 ) : (
-                  <p className="text-sm text-muted-foreground">Run the audit to see specific findings and fixes.</p>
+                  <p className="text-sm text-muted-foreground">
+                    {articleId
+                      ? "Run the audit to see specific findings and fixes."
+                      : "The audit reads the stored article, so it needs the draft created first. It is a check, not a gate — publishing does not depend on it."}
+                  </p>
                 )}
               </div>
             </TabsContent>
@@ -566,6 +954,12 @@ export function ArticleEditor({
         <aside className="space-y-4">
           <section className="space-y-3 rounded-xl border border-border bg-card p-4">
             <Label>Publishing</Label>
+            {!articleId ? (
+              <p className="rounded-lg border border-dashed border-border bg-background px-3 py-2 text-xs text-muted-foreground">
+                This article is not stored yet. Choosing “Published”, scheduling it or sending it to review creates
+                the draft and applies that step in one go — you will be told what happened.
+              </p>
+            ) : null}
             <div className="space-y-1.5">
               <Label htmlFor="status" className="text-xs text-muted-foreground">
                 Status
