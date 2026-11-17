@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react"
 import Link from "next/link"
 import useSWR from "swr"
-import { ArrowLeft, Users, Loader2, Search, Shield, CheckCircle2, XCircle, CreditCard, AlertTriangle, Ban, Clock, Trash2, LogOut, Megaphone, Briefcase, Globe, X, Filter, Calendar, Download } from "lucide-react"
+import { ArrowLeft, Users, Loader2, Search, Shield, CheckCircle2, XCircle, CreditCard, AlertTriangle, Ban, Clock, KeyRound, LogOut, Megaphone, Briefcase, Globe, X, Filter, Calendar, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
@@ -98,8 +98,11 @@ export default function AdminUsersPage() {
   const [adjustBusy, setAdjustBusy] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [actionBusy, setActionBusy] = useState(false)
-  const [actionDialog, setActionDialog] = useState<"suspend" | "ban" | "delete" | null>(null)
+  const [actionDialog, setActionDialog] = useState<"suspend" | "ban" | null>(null)
   const [actionReason, setActionReason] = useState("")
+  const [resetOpen, setResetOpen] = useState(false)
+  const [resetPassword, setResetPassword] = useState("")
+  const [resetBusy, setResetBusy] = useState(false)
 
   const loadUserDetail = useCallback(async (user: AdminUser) => {
     setSelectedUser(user)
@@ -195,6 +198,31 @@ export default function AdminUsersPage() {
       setActionBusy(false)
     }
   }, [selectedUser])
+
+  const handleResetPassword = useCallback(async () => {
+    if (!selectedUser) return
+    if (resetPassword.length < 8) {
+      toast.error("New password must be at least 8 characters")
+      return
+    }
+    setResetBusy(true)
+    try {
+      const result = await patchJson<{ message: string }>(
+        `/api/admin/users/${selectedUser.id}`,
+        { action: "set_password", newPassword: resetPassword },
+      )
+      toast.success(result.message)
+      setResetOpen(false)
+      setResetPassword("")
+      setSelectedUser(null)
+      setUserDetail(null)
+      await mutate()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Password reset failed")
+    } finally {
+      setResetBusy(false)
+    }
+  }, [selectedUser, resetPassword, mutate])
 
   const handleToggleSuspend = useCallback(async () => {
     if (!selectedUser) return
@@ -752,13 +780,16 @@ export default function AdminUsersPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => setActionDialog("delete")}
+                        onClick={() => { setResetPassword(""); setResetOpen(true) }}
                         disabled={actionBusy}
-                        className="text-destructive hover:text-destructive"
+                        className="text-blue-500 hover:text-blue-600"
                       >
-                        <Trash2 className="size-3.5 mr-1" />
-                        Delete User
+                        <KeyRound className="size-3.5 mr-1" />
+                        Reset Sign-in
                       </Button>
+                      <p className="basis-full text-xs text-muted-foreground">
+                        Admins cannot delete user accounts — deletion belongs to the account owner. Use suspend/ban to revoke access, or reset the password if the sign-in needs to change.
+                      </p>
                     </div>
                   </div>
                 )}
@@ -829,15 +860,13 @@ export default function AdminUsersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Action Confirmation Dialog */}
+      {/* Action Confirmation Dialog (suspend / ban) */}
       <Dialog open={!!actionDialog} onOpenChange={(open) => { if (!open) { setActionDialog(null); setActionReason("") } }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Confirm {actionDialog === "delete" ? "Deletion" : actionDialog === "suspend" ? "Suspension" : "Ban"}</DialogTitle>
+            <DialogTitle>Confirm {actionDialog === "suspend" ? "Suspension" : "Ban"}</DialogTitle>
             <DialogDescription>
-              {actionDialog === "delete" ? (
-                <>You are about to permanently delete <strong>{selectedUser?.name}</strong>. This action cannot be undone.</>
-              ) : actionDialog === "suspend" ? (
+              {actionDialog === "suspend" ? (
                 <>You are about to suspend <strong>{selectedUser?.name}</strong>. They will be logged out and unable to sign in.</>
               ) : (
                 <>You are about to ban <strong>{selectedUser?.name}</strong>. They will be logged out and permanently blocked.</>
@@ -846,7 +875,7 @@ export default function AdminUsersPage() {
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <Label className="text-xs">Reason {actionDialog === "delete" ? "(optional)" : "(recommended)"}</Label>
+              <Label className="text-xs">Reason (recommended)</Label>
               <Textarea
                 value={actionReason}
                 onChange={(e) => setActionReason(e.target.value)}
@@ -855,11 +884,6 @@ export default function AdminUsersPage() {
                 placeholder="e.g. Violation of terms of service"
               />
             </div>
-            {actionDialog === "delete" && (
-              <p className="text-xs text-destructive">
-                This will soft-delete the user. Their projects will remain but the account will be removed.
-              </p>
-            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setActionDialog(null); setActionReason("") }} disabled={actionBusy}>
@@ -871,7 +895,45 @@ export default function AdminUsersPage() {
               disabled={actionBusy}
             >
               {actionBusy ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
-              Confirm {actionDialog === "delete" ? "Delete" : actionDialog === "suspend" ? "Suspend" : "Ban"}
+              Confirm {actionDialog === "suspend" ? "Suspend" : "Ban"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reset Sign-in Credentials Dialog */}
+      <Dialog open={resetOpen} onOpenChange={(open) => { if (!open) { setResetOpen(false); setResetPassword("") } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reset sign-in password</DialogTitle>
+            <DialogDescription>
+              Set a new password for <strong>{selectedUser?.name}</strong> ({selectedUser?.email}). They will be signed out on every device and must sign in with the new password. Share it with them through a channel you trust.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs">New password (at least 8 characters)</Label>
+              <Input
+                type="text"
+                value={resetPassword}
+                onChange={(e) => setResetPassword(e.target.value)}
+                className="mt-1"
+                autoComplete="off"
+              />
+            </div>
+            {selectedUser?.authProvider !== "password" && (
+              <p className="text-xs text-amber-500">
+                This account signs in with {selectedUser?.authProvider === "github" ? "GitHub" : "Google"} — password resets only apply to email/password accounts.
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setResetOpen(false); setResetPassword("") }} disabled={resetBusy}>
+              Cancel
+            </Button>
+            <Button onClick={handleResetPassword} disabled={resetBusy || resetPassword.length < 8}>
+              {resetBusy ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
+              Reset Password
             </Button>
           </DialogFooter>
         </DialogContent>

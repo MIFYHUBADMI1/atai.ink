@@ -1,7 +1,7 @@
 import { requireAdmin } from "@/lib/auth/session"
 import { ok, fail, handleRouteError } from "@/lib/api/respond"
 import { usersCol, sessionsCol } from "@/lib/db/collections"
-import { buildUpdate } from "@/lib/db/update"
+import { hashPassword, isPasswordStrongEnough } from "@/lib/auth/crypto"
 import { checkRateLimit } from "@/lib/auth/rate-limit"
 import { adminAdjustCredits, getCreditHistory } from "@/lib/billing/credit-service"
 import { logger } from "@/lib/logging/logger"
@@ -124,7 +124,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 }
 
-/** Admin endpoint: suspend, unsuspend, ban, unban, or delete a user. */
+/** Admin endpoint: suspend, unsuspend, ban, unban, revoke sessions, or reset
+ * the sign-in password of a user. Deleting accounts is NOT offered — that is
+ * reserved for the account owner (see /api/me/delete-account). */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const admin = await requireAdmin()
@@ -137,6 +139,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const body = (await req.json().catch(() => ({}))) as {
       action?: string
       reason?: string
+      newPassword?: string
     }
 
     if (!body.action) {
@@ -200,29 +203,29 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         logger.info("admin.user_action", "revoked sessions", { adminId: admin.id, targetUserId: id, count: result.deletedCount })
         return ok({ message: `Revoked ${result.deletedCount} session(s).` })
       }
-      case "delete": {
-        await col.updateOne(
-          { id },
-          buildUpdate({
-            deletedAt: now,
-            email: `deleted_${id}@deleted.Atai.invalid`,
-            name: "Deleted user",
-            // Removed, not blanked — a surviving hash or token would keep the
-            // account usable.
-            passwordHash: undefined,
-            googleId: undefined,
-            githubId: undefined,
-            githubAccessToken: undefined,
-            imageUrl: undefined,
-            imageFileId: undefined,
-            updatedAt: now,
-          }),
-        )
-        // Revoke all sessions
+      case "set_password": {
+        if (user.authProvider !== "password") {
+          return fail("VALIDATION", "This account signs in with Google or GitHub — it has no Atai password to reset.", 422)
+        }
+        const newPassword = typeof body.newPassword === "string" ? body.newPassword : ""
+        if (!isPasswordStrongEnough(newPassword) || newPassword.length > 1024) {
+          return fail("VALIDATION", "New password must be at least 8 characters.", 422)
+        }
+        const passwordHash = await hashPassword(newPassword)
+        await col.updateOne({ id }, { $set: { passwordHash, updatedAt: now } })
+        // Sign the account out everywhere so the new password is the only
+        // way back in — existing sessions must not outlive the reset.
         const sessCol = await sessionsCol()
         await sessCol.deleteMany({ userId: id })
-        logger.info("admin.user_action", "deleted user", { adminId: admin.id, targetUserId: id })
-        return ok({ message: "User permanently deleted." })
+        logger.info("admin.user_action", "reset sign-in password", { adminId: admin.id, targetUserId: id, reason })
+        return ok({ message: "Sign-in password reset. The user is signed out on all devices and can log in with the new password." })
+      }
+      case "delete": {
+        // Account deletion is reserved for the account owner. An admin
+        // deleting accounts "no matter what" risks irreversible data loss,
+        // so the only admin levers are suspend/ban (reversible) and a
+        // password reset.
+        return fail("FORBIDDEN", "Admins cannot delete user accounts. Use suspend or ban to revoke access, or reset the account's sign-in password. Only the account owner can delete it.", 403)
       }
       default:
         return fail("VALIDATION", `Unknown action: ${body.action}`, 422)
