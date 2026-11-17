@@ -1,5 +1,6 @@
 import { ObjectId } from "mongodb"
 import { paymentRecordsCol, subscriptionRecordsCol, creditLedgerCol } from "@/lib/db/collections"
+import { buildUpdate } from "@/lib/db/update"
 import {
   grantCredits,
   grantSubscriptionCredits,
@@ -409,14 +410,14 @@ async function handleSubscriptionRenewed(data: Record<string, unknown> | undefin
     const subCol = await subscriptionRecordsCol()
     await subCol.updateOne(
       { dodoSubscriptionId: subscriptionId },
-      { $set: {
+      buildUpdate({
         status: "active",
         currentPeriodStart: now,
         currentPeriodEnd: fullPeriodEnd,
         ...(commercialMatch ? { commercialPlanId: commercialMatch.plan.commercialPlanId, billingCycle } : {}),
         nextBillingDate: nextBillingDate ? new Date(nextBillingDate).getTime() : undefined,
         updatedAt: now,
-      } },
+      }),
     )
     logger.info("webhook.dodo", "subscription.renewed: renewal credits granted", { subscriptionId, userId, credits, planId })
   }
