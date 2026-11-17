@@ -98,10 +98,11 @@ export async function GET(req: Request) {
 
     // Session cap: confirm via emailed code before evicting old sessions.
     // Without SMTP (local dev) we fall through to normal session creation.
-    if (await sessionLimitReached(user.id)) {
+    // Admins skip the code — createSession evicts to their configured cap.
+    if (!user.isAdmin && (await sessionLimitReached(user))) {
       const verification = await issueSessionVerificationCode(user)
       if (verification.status === "sent") {
-        const params = new URLSearchParams({ vid: verification.verificationId, next: safePath })
+        const params = new URLSearchParams({ vid: verification.verificationId, next: safePath, email: user.email })
         return NextResponse.redirect(`${appUrl}/verify-session?${params.toString()}`)
       }
       if (verification.status === "delivery_failed") {

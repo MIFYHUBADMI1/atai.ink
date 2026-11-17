@@ -17,6 +17,8 @@ export interface PublicUser {
   githubUsername?: string
   /** Connection STATUS only — the access token itself never leaves the server. */
   githubConnected?: boolean
+  /** Connection STATUS only — the Google subject id never leaves the server. */
+  googleConnected?: boolean
   credits: number
   isAdmin?: boolean
   onboarding?: {
@@ -51,6 +53,7 @@ function toPublicUser(doc: UserDoc): PublicUser {
     imageUrl: doc.imageUrl,
     githubUsername: doc.githubUsername,
     githubConnected: Boolean(doc.githubAccessToken),
+    googleConnected: Boolean(doc.googleId),
     credits: doc.credits,
     isAdmin: doc.isAdmin,
     onboarding: doc.onboarding,
@@ -194,6 +197,18 @@ export async function linkGoogleToUser(userId: string, googleId: string, imageUr
   }
 }
 
+/** Bind a Google identity onto the CURRENTLY AUTHENTICATED account (explicit
+ * "Connect Google" flow). Unlike linkGoogleToUser this never touches
+ * emailVerified or grants credits — the Google profile's email may belong to
+ * a different address than the account's, so it proves nothing about it. */
+export async function linkGoogleIdentity(userId: string, googleId: string, imageUrl?: string): Promise<void> {
+  const col = await usersCol()
+  await col.updateOne(
+    { id: userId, deletedAt: { $exists: false } },
+    buildUpdate({ googleId, imageUrl, updatedAt: Date.now() }),
+  )
+}
+
 export async function markEmailVerified(userId: string): Promise<void> {
   const col = await usersCol()
   const user = await col.findOne({ id: userId, deletedAt: { $exists: false } })
@@ -259,9 +274,24 @@ export async function softDeleteUser(userId: string): Promise<void> {
       passwordHash: undefined,
       googleId: undefined,
       githubId: undefined,
+      githubUsername: undefined,
       githubAccessToken: undefined,
       imageUrl: undefined,
       imageFileId: undefined,
+      // Onboarding/consent/preferences are user-authored state and can carry
+      // personal context — remove them with the rest of the profile.
+      onboarding: undefined,
+      feedbackPrivacy: undefined,
+      featurePreferences: undefined,
+      cofounderModelTier: undefined,
+      theme: undefined,
+      isAdmin: undefined,
+      subscriptionPeriodStart: undefined,
+      subscriptionPeriodEnd: undefined,
+      creditBuckets: [],
+      credits: 0,
+      subscriptionCredits: 0,
+      permanentCredits: 0,
     }),
   )
 }

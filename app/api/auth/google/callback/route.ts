@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { exchangeGoogleCode } from "@/lib/auth/google"
-import { findUserByEmail, findUserByGoogleId, createGoogleUser, linkGoogleToUser, touchLastLogin } from "@/lib/auth/users"
-import { createSession, setSessionCookie, sessionLimitReached } from "@/lib/auth/session"
+import { findUserByEmail, findUserByGoogleId, createGoogleUser, linkGoogleToUser, linkGoogleIdentity, touchLastLogin } from "@/lib/auth/users"
+import { createSession, setSessionCookie, sessionLimitReached, getCurrentUser } from "@/lib/auth/session"
 import { issueSessionVerificationCode } from "@/lib/auth/session-verification"
 import { getAppUrl } from "@/lib/env"
 import { logger } from "@/lib/logging/logger"
@@ -31,9 +31,11 @@ export async function GET(req: Request) {
     const jar = await cookies()
     const expectedState = jar.get(STATE_COOKIE)?.value
     jar.delete(STATE_COOKIE)
-    const [stateNonce, encodedNext] = state?.split(".") ?? []
+    const [stateNonce, encodedNext, intent] = state?.split(".") ?? []
     const [expectedNonce] = expectedState?.split(".") ?? []
     const nextFromState = encodedNext ? Buffer.from(encodedNext, "base64url").toString("utf8") : "/workspace"
+    const safeNext = nextFromState.startsWith("/") && !nextFromState.startsWith("//") ? nextFromState : "/workspace"
+    const isConnect = intent === "connect"
 
     if (!code || !stateNonce || !expectedNonce || stateNonce !== expectedNonce) {
       return NextResponse.redirect(`${appUrl}/login?error=google_auth_failed`)
@@ -41,6 +43,31 @@ export async function GET(req: Request) {
 
     stage = "exchange"
     const profile = await exchangeGoogleCode(code)
+
+    // Explicit "Connect Google" flow: the visitor is already signed in and
+    // asked to link this Google identity to THEIR account. We never resolve
+    // by email or create/switch sessions here — just bind the googleId.
+    if (isConnect) {
+      stage = "connect-session"
+      const current = await getCurrentUser()
+      if (!current) {
+        return NextResponse.redirect(`${appUrl}/login?error=google_connect_login_required`)
+      }
+      if (!profile.emailVerified) {
+        return NextResponse.redirect(`${appUrl}${safeNext}?error=google_email_unverified`)
+      }
+      const alreadyLinked = await findUserByGoogleId(profile.googleId)
+      if (alreadyLinked && alreadyLinked.id !== current.id) {
+        return NextResponse.redirect(`${appUrl}${safeNext}?error=google_already_linked`)
+      }
+      if (current.googleId && current.googleId !== profile.googleId) {
+        return NextResponse.redirect(`${appUrl}${safeNext}?error=google_already_linked`)
+      }
+      if (!alreadyLinked) {
+        await linkGoogleIdentity(current.id, profile.googleId, profile.imageUrl)
+      }
+      return NextResponse.redirect(`${appUrl}${safeNext}?google=connected`)
+    }
 
     stage = "find-google-user"
     let user = await findUserByGoogleId(profile.googleId)
@@ -90,10 +117,11 @@ export async function GET(req: Request) {
 
     // Session cap: confirm via emailed code before evicting old sessions.
     // Without SMTP (local dev) we fall through to normal session creation.
-    if (await sessionLimitReached(user.id)) {
+    // Admins skip the code — createSession evicts to their configured cap.
+    if (!user.isAdmin && (await sessionLimitReached(user))) {
       const verification = await issueSessionVerificationCode(user)
       if (verification.status === "sent") {
-        const params = new URLSearchParams({ vid: verification.verificationId, next })
+        const params = new URLSearchParams({ vid: verification.verificationId, next, email: user.email })
         return NextResponse.redirect(`${appUrl}/verify-session?${params.toString()}`)
       }
       if (verification.status === "delivery_failed") {

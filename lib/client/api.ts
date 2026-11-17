@@ -9,13 +9,15 @@ export interface SessionUser {
   id: string
   email: string
   name: string
-  authProvider: "password" | "google"
+  authProvider: "password" | "google" | "github"
   emailVerified: boolean
   imageUrl?: string
   /** Connection STATUS only — the GitHub access token never leaves the server. */
   githubConnected?: boolean
   /** Non-secret GitHub login name, for display when githubConnected. */
   githubUsername?: string
+  /** Connection STATUS only — set when a Google identity is linked. */
+  googleConnected?: boolean
   credits: number
   isAdmin?: boolean
   onboarding?: {

@@ -51,7 +51,7 @@ const COPY: Record<
   },
   "session-verify": {
     title: "Check your email",
-    subtitle: "Your account already has 2 active sessions. Enter the 6-digit code we sent to confirm this sign-in.",
+    subtitle: "Your account is at its active-session limit. Enter the 6-digit code we sent to confirm this sign-in — your oldest session will be signed out.",
   },
 }
 
@@ -87,6 +87,7 @@ export function AuthPanel({
   const [sessionCode, setSessionCode] = useState("")
   const [sessionVerifyCtx, setSessionVerifyCtx] = useState<{ id?: string; email: string } | null>(null)
   const [sessionCooldown, setSessionCooldown] = useState(0)
+  const [sessionResendError, setSessionResendError] = useState<string | null>(null)
 
   const busy = submitting || oauthProvider !== null
 
@@ -99,7 +100,8 @@ export function AuthPanel({
     setOauthProvider(null)
     setResendState("idle")
     setSessionCode("")
-    setSessionCooldown(view === "session-verify" ? 180 : 0)
+    setSessionResendError(null)
+    setSessionCooldown(0)
   }, [view])
 
   useEffect(() => {
@@ -151,12 +153,28 @@ export function AuthPanel({
   async function onResendSessionCode() {
     if (!sessionVerifyCtx?.id || resendState === "sending") return
     setResendState("sending")
+    setSessionResendError(null)
     try {
-      const result = await resendSessionVerificationCode(sessionVerifyCtx.id)
-      setResendState(result.sent ? "sent" : "error")
-      if (result.sent) setSessionCooldown(180)
-    } catch {
+      const result = await resendSessionVerificationCode(sessionVerifyCtx.id, sessionVerifyCtx.email)
+      if (result.sent) {
+        setResendState("sent")
+        setSessionCooldown(result.retryAfterSeconds ?? 180)
+        if (result.verificationId) {
+          setSessionVerifyCtx((prev) => (prev ? { ...prev, id: result.verificationId } : prev))
+        }
+      } else {
+        setResendState("error")
+        setSessionResendError(
+          result.reason === "delivery_failed"
+            ? "We couldn't send the code email. Please try again."
+            : result.reason === "invalid"
+              ? "This code request expired. Please sign in again."
+              : "Email delivery isn't available right now.",
+        )
+      }
+    } catch (err) {
       setResendState("error")
+      setSessionResendError(humanizeAuthError(err))
     }
   }
 
@@ -404,7 +422,7 @@ export function AuthPanel({
           </div>
           {error ? <AuthError message={error} /> : null}
           {resendState === "sent" ? <p className="text-center text-sm text-muted-foreground">A new code is on its way.</p> : null}
-          {resendState === "error" ? <AuthError message="Couldn't resend the code. Please try again." /> : null}
+          {resendState === "error" && sessionResendError ? <AuthError message={sessionResendError} /> : null}
           <button type="submit" className={cn(buttonVariants({ size: "lg" }), "h-11 w-full")} disabled={submitting || sessionCode.length !== 6}>
             {submitting ? "Verifying..." : "Verify and sign in"}
           </button>

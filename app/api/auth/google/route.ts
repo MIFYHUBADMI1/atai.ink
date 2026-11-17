@@ -16,9 +16,14 @@ export async function GET(req: Request) {
     const requestedNext = requestUrl.searchParams.get("next")
     const next = requestedNext && requestedNext.startsWith("/") && !requestedNext.startsWith("//") ? requestedNext : "/workspace"
     const refCode = requestUrl.searchParams.get("ref")?.trim().toUpperCase()
+    // `connect=1` marks an explicit "link Google to my signed-in account"
+    // intent. The callback verifies the current session before linking — it
+    // never creates a session or switches accounts in this mode.
+    const connect = requestUrl.searchParams.get("connect") === "1"
     const state = randomBytes(16).toString("hex")
     const url = buildGoogleAuthUrl(state)
-    const stateWithNext = `${state}.${Buffer.from(next).toString("base64url")}`
+    const encodedNext = Buffer.from(next).toString("base64url")
+    const stateWithNext = connect ? `${state}.${encodedNext}.connect` : `${state}.${encodedNext}`
     const redirectUrl = new URL(url)
     redirectUrl.searchParams.set("state", stateWithNext)
     const jar = await cookies()
