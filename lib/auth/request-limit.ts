@@ -11,6 +11,7 @@ const limits = {
   confirm_email_change: { limit: 30, windowMs: 15 * 60_000 },
   change_password: { limit: 20, windowMs: 60 * 60_000 },
   change_email: { limit: 10, windowMs: 60 * 60_000 },
+  delete_account: { limit: 10, windowMs: 60 * 60_000 },
   resend_verification: { limit: 15, windowMs: 60 * 60_000 },
   session_verification: { limit: 30, windowMs: 15 * 60_000 },
 } as const
