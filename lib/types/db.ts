@@ -105,6 +105,14 @@ export interface UserDoc {
   onboarding?: UserOnboarding
   /** Founder-owned feature switches — see FeaturePreferences. */
   featurePreferences?: FeaturePreferences
+  /** Feedback/diagnostics consent, mirrored from the settings page. */
+  feedbackPrivacy?: {
+    launcherEnabled?: boolean
+    collectPage?: boolean
+    collectDevice?: boolean
+    collectErrors?: boolean
+    autoScreenshot?: boolean
+  }
   /** Picked AI co-founder engine tier id (see lib/cofounder/models.ts). */
   cofounderModelTier?: string
   suspended?: boolean
@@ -164,6 +172,7 @@ export interface SessionDoc {
   tokenHash: string
   userAgent?: string
   createdAt: number
+  lastSeenAt?: number
   expiresAt: Date
 }
 

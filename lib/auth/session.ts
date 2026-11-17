@@ -3,6 +3,8 @@ import { ObjectId, type ClientSession } from "mongodb"
 import { sessionsCol } from "@/lib/db/collections"
 import { generateToken, hashToken } from "@/lib/auth/crypto"
 import { findUserById, type UserDoc } from "@/lib/auth/users"
+import { getMaxActiveSessionsForUser, DEFAULT_USER_MAX_ACTIVE_SESSIONS } from "@/lib/auth/session-policy"
+import type { SessionDoc } from "@/lib/types/db"
 import { AppError } from "@/lib/errors"
 
 /**
@@ -14,10 +16,12 @@ import { AppError } from "@/lib/errors"
  */
 const COOKIE = "Atai_session"
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30 // 30 days
-/** Maximum live sessions per account. A sign-in beyond this revokes the
- * oldest sessions automatically — credential sharing / session farming
- * can't accumulate devices. */
-export const MAX_ACTIVE_SESSIONS = 2
+/** Default live sessions per account, kept as the historical named constant.
+ * The real caps are admin-configurable — see lib/auth/session-policy. */
+export const MAX_ACTIVE_SESSIONS = DEFAULT_USER_MAX_ACTIVE_SESSIONS
+/** How often a live session's lastSeenAt is refreshed — bounds session writes
+ * while still giving Security settings a truthful "last active" signal. */
+const SESSION_LAST_SEEN_INTERVAL_MS = 5 * 60 * 1000
 
 /**
  * Cookie scope. A cookie's `Domain` must be a suffix of the host the browser
@@ -103,14 +107,17 @@ export async function createSession(userId: string): Promise<string> {
     tokenHash,
     userAgent,
     createdAt: now,
+    lastSeenAt: now,
     expiresAt: new Date(now + SESSION_TTL_MS),
   })
 
-  // Safety net for the per-account cap: keep the newest
-  // MAX_ACTIVE_SESSIONS live sessions. Normal sign-ins go through
-  // session-verification first when the cap is already reached, so this only
-  // fires for paths that bypass that check.
-  await evictOldestSessions(userId, MAX_ACTIVE_SESSIONS)
+  // Safety net for the per-account cap: keep the newest resolved cap of
+  // live sessions. Normal sign-ins go through session-verification first
+  // when the cap is already reached, so this only fires for paths that
+  // bypass that check. `null` cap = unlimited (admin default) — no eviction.
+  const capUser = await findUserById(userId)
+  const cap = await getMaxActiveSessionsForUser({ isAdmin: !!capUser?.isAdmin })
+  if (cap !== null) await evictOldestSessions(userId, cap)
 
   return token
 }
@@ -121,9 +128,12 @@ export async function countActiveSessions(userId: string): Promise<number> {
   return col.countDocuments({ userId, expiresAt: { $gt: new Date() } })
 }
 
-/** True when a new sign-in would push the account past MAX_ACTIVE_SESSIONS. */
-export async function sessionLimitReached(userId: string): Promise<boolean> {
-  return (await countActiveSessions(userId)) >= MAX_ACTIVE_SESSIONS
+/** True when a new sign-in would push the account past its configured cap.
+ * A `null` cap (admins by default) is unlimited — never reached. */
+export async function sessionLimitReached(user: Pick<UserDoc, "id" | "isAdmin">): Promise<boolean> {
+  const cap = await getMaxActiveSessionsForUser({ isAdmin: !!user.isAdmin })
+  if (cap === null) return false
+  return (await countActiveSessions(user.id)) >= cap
 }
 
 /** Delete the oldest live sessions until at most `keep` remain. Ties on
@@ -167,7 +177,13 @@ async function getSessionToken(): Promise<string | null> {
   return jar.get(COOKIE)?.value ?? null
 }
 
-export async function getCurrentUser(): Promise<UserDoc | null> {
+interface CurrentPrincipal {
+  user: UserDoc
+  session: SessionDoc
+  tokenHash: string
+}
+
+async function resolveCurrentPrincipal(): Promise<CurrentPrincipal | null> {
   const token = await getSessionToken()
   if (!token) return null
   const tokenHash = hashToken(token)
@@ -178,7 +194,43 @@ export async function getCurrentUser(): Promise<UserDoc | null> {
   if (!session) return null
   const user = await findUserById(session.userId)
   if (!user || user.banned || user.suspended) return null
-  return user
+
+  const now = Date.now()
+  const lastSeen = typeof session.lastSeenAt === "number" ? session.lastSeenAt : 0
+  if (now - lastSeen > SESSION_LAST_SEEN_INTERVAL_MS) {
+    try {
+      await col.updateOne({ _id: session._id }, { $set: { lastSeenAt: now } })
+      session.lastSeenAt = now
+    } catch {
+      // Last-activity is advisory only; never fail an authenticated request.
+    }
+  }
+
+  return { user, session, tokenHash }
+}
+
+export async function getCurrentUser(): Promise<UserDoc | null> {
+  return (await resolveCurrentPrincipal())?.user ?? null
+}
+
+export interface CurrentSessionContext {
+  user: UserDoc
+  sessionId: string
+  tokenHash: string
+  lastSeenAt?: number
+}
+
+/** Like requireUser, but also returns the server-side session identity so
+ * routes can perform "all sessions except this one" operations safely. */
+export async function requireUserWithSession(): Promise<CurrentSessionContext> {
+  const principal = await resolveCurrentPrincipal()
+  if (!principal) throw new AppError("UNAUTHORIZED")
+  return {
+    user: principal.user,
+    sessionId: principal.session._id.toString(),
+    tokenHash: principal.tokenHash,
+    lastSeenAt: principal.session.lastSeenAt,
+  }
 }
 
 /** Returns the current user id, throwing-free — used by routes that must

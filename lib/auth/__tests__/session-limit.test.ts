@@ -90,7 +90,17 @@ vi.mock("@/lib/db/collections", () => ({
 
 vi.mock("@/lib/auth/users", () => ({ findUserById: vi.fn() }))
 
+// Admin-cap policy is a separate concern (and would hit the real DB here).
+// Default: regular accounts capped at 2, admins unlimited.
+vi.mock("@/lib/auth/session-policy", () => ({
+  DEFAULT_USER_MAX_ACTIVE_SESSIONS: 2,
+  getMaxActiveSessionsForUser: vi.fn(async (user: { isAdmin?: boolean }) =>
+    user.isAdmin ? null : 2,
+  ),
+}))
+
 import { createSession, evictOldestSessions, sessionLimitReached, MAX_ACTIVE_SESSIONS } from "../session"
+import { findUserById } from "@/lib/auth/users"
 import { hashToken } from "@/lib/auth/crypto"
 
 beforeEach(() => {
@@ -143,10 +153,21 @@ describe("createSession — per-account session cap", () => {
 
 describe("sessionLimitReached / evictOldestSessions", () => {
   it("reports the cap once MAX_ACTIVE_SESSIONS live sessions exist", async () => {
-    expect(await sessionLimitReached("u1")).toBe(false)
+    expect(await sessionLimitReached({ id: "u1" })).toBe(false)
     await createSession("u1")
     await createSession("u1")
-    expect(await sessionLimitReached("u1")).toBe(true)
+    expect(await sessionLimitReached({ id: "u1" })).toBe(true)
+  })
+
+  it("admins are unlimited by default — cap never reached, no eviction", async () => {
+    vi.mocked(findUserById).mockResolvedValue({ id: "adm", isAdmin: true } as never)
+    try {
+      for (let i = 0; i < 5; i++) await createSession("adm")
+      expect(store).toHaveLength(5)
+      expect(await sessionLimitReached({ id: "adm", isAdmin: true })).toBe(false)
+    } finally {
+      vi.mocked(findUserById).mockReset()
+    }
   })
 
   it("evicts the oldest sessions down to the requested keep count", async () => {

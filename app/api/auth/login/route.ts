@@ -43,10 +43,12 @@ export async function POST(req: Request) {
       return fail("FORBIDDEN", "This account has been suspended. Please contact support.", 403)
     }
 
-    // Session cap: a new sign-in beyond MAX_ACTIVE_SESSIONS must be confirmed
+    // Session cap: a new sign-in beyond the account's cap must be confirmed
     // by an emailed code before the oldest sessions are evicted. Without SMTP
-    // (local dev) we fall through to the normal session creation.
-    if (await sessionLimitReached(user.id)) {
+    // (local dev) we fall through to the normal session creation. Admins are
+    // exempt from the code — when they set a cap for themselves, the oldest
+    // sessions are simply evicted by createSession below.
+    if (!user.isAdmin && (await sessionLimitReached(user))) {
       const verification = await issueSessionVerificationCode(user)
       if (verification.status === "sent") {
         return ok({
