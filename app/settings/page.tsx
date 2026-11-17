@@ -1,152 +1,165 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { AppHeader } from "@/components/app-header"
-import { getCurrentUser } from "@/lib/auth/session"
+import { SettingsShell } from "@/components/settings/settings-shell"
+import { getCurrentUser, countActiveSessions } from "@/lib/auth/session"
 import { getBalance } from "@/lib/credits/credits"
+import { readCofounderModelTier } from "@/lib/cofounder/model"
+import { getCofounderTier } from "@/lib/cofounder/model-catalog"
 import { AdminSelfCredit } from "@/components/admin-self-credit"
+import { CheckCircle2, CreditCard, Shield, Sparkles, UserRound } from "lucide-react"
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return "?"
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase()
+  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase()
+}
+
+function authLabel(provider: string): string {
+  if (provider === "google") return "Google"
+  if (provider === "github") return "GitHub"
+  return "Email & password"
+}
 
 export default async function SettingsPage() {
   const user = await getCurrentUser()
   if (!user) redirect("/login?next=%2Fsettings")
-  const balance = await getBalance(user.id)
+
+  const [balance, sessionCount, storedTier] = await Promise.all([
+    getBalance(user.id),
+    countActiveSessions(user.id),
+    readCofounderModelTier(user.id),
+  ])
+  const tier = storedTier ? await getCofounderTier(storedTier) : undefined
+  const prefs = user.featurePreferences ?? {}
+  const enabledFeatures = Object.values(prefs).filter(Boolean).length
 
   return (
-    <main className="min-h-svh bg-background text-foreground">
-      <AppHeader />
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-6 py-10">
-        <div className="border-b border-border pb-6">
-          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Account</p>
-          <h1 className="mt-3 text-4xl font-semibold tracking-tight">Settings</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Manage your account, credits, and connected services.</p>
-        </div>
+    <SettingsShell title="Settings">
+      <div className="flex flex-col gap-8">
+        <header>
+          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Settings</p>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight">Account settings</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Manage your profile, security, AI co-founder, workspace preferences, and billing.
+          </p>
+        </header>
+
         <section className="grid gap-4 md:grid-cols-2">
           <div className="border border-border bg-card p-6">
-            <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Profile</p>
-            <h2 className="mt-4 text-xl font-medium">{user.name}</h2>
-            <p className="mt-2 text-sm text-muted-foreground">{user.email}</p>
-            <p className="mt-6 text-xs text-muted-foreground">Authentication: {user.authProvider === "google" ? "Google" : "Email and password"}</p><div className="mt-5 flex gap-4 font-mono text-xs"><Link href="/settings/profile" className="text-primary hover:underline">Profile →</Link><Link href="/settings/security" className="text-primary hover:underline">Security →</Link><Link href="/settings/appearance" className="text-primary hover:underline">Appearance →</Link></div>
+            <div className="flex items-start gap-4">
+              <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                {initials(user.name)}
+              </div>
+              <div className="min-w-0">
+                <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Account</p>
+                <h2 className="mt-2 truncate text-xl font-medium">{user.name}</h2>
+                <p className="mt-1 truncate text-sm text-muted-foreground">{user.email}</p>
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5">
+                    {user.emailVerified ? <CheckCircle2 className="size-3 text-success" /> : null}
+                    {user.emailVerified ? "Verified" : "Unverified"}
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5">
+                    <UserRound className="size-3" /> {authLabel(user.authProvider)}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="mt-5 flex flex-wrap gap-4 font-mono text-xs">
+              <Link href="/settings/profile" className="text-primary hover:underline">Profile →</Link>
+              <Link href="/settings/security" className="text-primary hover:underline">Security →</Link>
+              <Link href="/settings/appearance" className="text-primary hover:underline">Appearance →</Link>
+            </div>
           </div>
+
           <div className="border border-border bg-card p-6">
-            <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Credits</p>
-            <p className="mt-4 text-4xl font-semibold tabular-nums">{balance.toLocaleString()}</p>
-            <p className="mt-2 text-sm text-muted-foreground">Available build credits</p>
-            <div className="mt-4 flex gap-3">
-              <Link href="/settings/billing" className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90">+ Top Up</Link>
-              <Link href="/settings/billing" className="inline-block font-mono text-xs text-primary hover:underline">View history →</Link>
+            <div className="flex items-start gap-4">
+              <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <CreditCard className="size-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Credits</p>
+                <p className="mt-2 text-3xl font-semibold tabular-nums">{balance.toLocaleString()}</p>
+                <p className="mt-1 text-sm text-muted-foreground">Available build credits</p>
+              </div>
+            </div>
+            <div className="mt-5 flex flex-wrap gap-4 font-mono text-xs">
+              <Link href="/settings/billing" className="text-primary hover:underline">Billing →</Link>
+              <Link href="/settings/billing#history" className="text-primary hover:underline">History →</Link>
             </div>
           </div>
-          <Link
-            href="/settings/ai"
-            className="group flex items-center justify-between gap-4 border border-border bg-card p-6 transition-colors hover:border-primary/30 hover:bg-accent/40 md:col-span-2"
-          >
-            <div className="min-w-0">
-              <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">AI co-founder</p>
-              <h2 className="mt-3 text-lg font-medium">Choose your engine</h2>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                Pick the model behind your co-founder — four free engines, six paid ones billed per message in
-                credits. Switch any time.
-              </p>
+
+          <div className="border border-border bg-card p-6">
+            <div className="flex items-start gap-4">
+              <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <Shield className="size-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Security</p>
+                <h2 className="mt-2 text-lg font-medium">{sessionCount} active session{sessionCount === 1 ? "" : "s"}</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {user.emailVerified ? "Email verified" : "Email not verified yet"}
+                </p>
+              </div>
             </div>
-            <span className="font-mono text-xs text-primary transition-all group-hover:translate-x-0.5">→</span>
+            <div className="mt-5">
+              <Link href="/settings/security" className="font-mono text-xs text-primary hover:underline">Manage security →</Link>
+            </div>
+          </div>
+
+          <div className="border border-border bg-card p-6">
+            <div className="flex items-start gap-4">
+              <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <Sparkles className="size-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">AI co-founder</p>
+                <h2 className="mt-2 text-lg font-medium">{tier?.name ?? "Default engine"}</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {tier ? `${tier.creditsPerMessage === 0 ? "Free" : `${tier.creditsPerMessage} credits/message`} · ${tier.modelId}` : "Catalog unavailable"}
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 flex flex-wrap gap-4 font-mono text-xs">
+              <Link href="/settings/ai" className="text-primary hover:underline">AI settings →</Link>
+              <Link href="/settings/features" className="text-primary hover:underline">
+                {enabledFeatures} feature{enabledFeatures === 1 ? "" : "s"} on
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        <section className="grid gap-4 md:grid-cols-2">
+          <Link href="/settings/ai" className="group border border-border bg-card p-5 transition-colors hover:border-primary/30 hover:bg-accent/40">
+            <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Atai intelligence</p>
+            <h2 className="mt-3 text-lg font-medium">AI co-founder & feature switches</h2>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Choose the engine behind your co-founder and control optional Market & Grow capabilities.
+            </p>
           </Link>
-          <Link
-            href="/settings/features"
-            className="group flex items-center justify-between gap-4 border border-border bg-card p-6 transition-colors hover:border-primary/30 hover:bg-accent/40 md:col-span-2"
-          >
-            <div className="min-w-0">
-              <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Market &amp; grow</p>
-              <h2 className="mt-3 text-lg font-medium">Feature switches</h2>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                SEO audits, growth tasks, and campaign planning stay off until you turn them on. Decide which ones
-                live in your workspace — flips apply immediately.
-              </p>
-            </div>
-            <span className="font-mono text-xs text-primary transition-all group-hover:translate-x-0.5">→</span>
+          <Link href="/settings/feedback" className="group border border-border bg-card p-5 transition-colors hover:border-primary/30 hover:bg-accent/40">
+            <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Support</p>
+            <h2 className="mt-3 text-lg font-medium">Feedback & privacy</h2>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Report issues and control exactly what diagnostic information is attached.
+            </p>
           </Link>
         </section>
+
         {user.isAdmin ? (
           <section className="border border-border bg-card p-6">
             <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Admin</p>
-            <div className="mt-5 flex flex-col divide-y divide-border">
-              <Link href="/admin" className="flex items-center justify-between gap-4 py-4 text-sm transition-colors hover:text-primary">
-                <span className="font-medium">Dashboard</span>
-                <span className="font-mono text-xs text-primary">→</span>
-              </Link>
-              <Link href="/admin/payments" className="flex items-center justify-between gap-4 py-4 text-sm transition-colors hover:text-primary">
-                <span>Payment Verifications</span>
-                <span className="font-mono text-xs text-primary">→</span>
-              </Link>
-              <Link href="/admin/users" className="flex items-center justify-between gap-4 py-4 text-sm transition-colors hover:text-primary">
-                <span>User Management</span>
-                <span className="font-mono text-xs text-primary">→</span>
-              </Link>
-              <Link href="/admin/transactions" className="flex items-center justify-between gap-4 py-4 text-sm transition-colors hover:text-primary">
-                <span>Credit Transactions</span>
-                <span className="font-mono text-xs text-primary">→</span>
-              </Link>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <Link href="/admin" className="rounded-lg border border-border p-4 text-sm font-medium transition-colors hover:bg-accent">Admin dashboard →</Link>
+              <Link href="/admin/users" className="rounded-lg border border-border p-4 text-sm font-medium transition-colors hover:bg-accent">User management →</Link>
+              <Link href="/admin/billing" className="rounded-lg border border-border p-4 text-sm font-medium transition-colors hover:bg-accent">Billing admin →</Link>
+              <Link href="/admin/transactions" className="rounded-lg border border-border p-4 text-sm font-medium transition-colors hover:bg-accent">Credit transactions →</Link>
             </div>
             <AdminSelfCredit />
-            <div className="mt-5 border-t border-border pt-5">
-              <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-3">Account</p>
-              <div className="flex flex-col divide-y divide-border">
-                <Link href="/settings/profile" className="flex items-center justify-between gap-4 py-4 text-sm transition-colors hover:text-primary">
-                  <span>Edit profile &amp; avatar</span>
-                  <span className="font-mono text-xs text-primary">→</span>
-                </Link>
-                <Link href="/settings/security" className="flex items-center justify-between gap-4 py-4 text-sm transition-colors hover:text-primary">
-                  <span>Change password &amp; security</span>
-                  <span className="font-mono text-xs text-primary">→</span>
-                </Link>
-                <Link href="/settings/appearance" className="flex items-center justify-between gap-4 py-4 text-sm transition-colors hover:text-primary">
-                  <span>Appearance &amp; theme</span>
-                  <span className="font-mono text-xs text-primary">→</span>
-                </Link>
-              </div>
-            </div>
           </section>
         ) : null}
-        {/* ── WhatsApp Channel Banner ── */}
-        <a
-          href="https://whatsapp.com/channel/0029Vb9sizc2Jl8CaYWJhZ1N"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="group relative block overflow-hidden rounded-xl border border-[#25D366]/40 bg-gradient-to-br from-[#25D366]/10 via-[#128C7E]/5 to-[#075E54]/10 p-6 transition-all duration-200 hover:border-[#25D366]/70 hover:shadow-lg hover:shadow-[#25D366]/10"
-        >
-          {/* New badge */}
-          <span className="absolute right-4 top-4 animate-pulse rounded-full bg-[#25D366] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-white shadow-sm">
-            New
-          </span>
-
-          <div className="flex items-start gap-4">
-            {/* WhatsApp icon */}
-            <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-[#25D366] shadow-md shadow-[#25D366]/30 transition-transform duration-200 group-hover:scale-105">
-              <svg viewBox="0 0 32 32" className="size-6 fill-white" xmlns="http://www.w3.org/2000/svg">
-                <path d="M16 2C8.268 2 2 8.268 2 16c0 2.417.638 4.683 1.754 6.65L2 30l7.555-1.73A13.934 13.934 0 0 0 16 30c7.732 0 14-6.268 14-14S23.732 2 16 2Zm0 25.5a11.44 11.44 0 0 1-5.844-1.602l-.418-.248-4.486 1.027 1.063-4.363-.274-.436A11.46 11.46 0 0 1 4.5 16C4.5 9.649 9.649 4.5 16 4.5S27.5 9.649 27.5 16 22.351 27.5 16 27.5Zm6.29-8.558c-.345-.172-2.04-1.006-2.356-1.12-.316-.115-.546-.172-.776.172-.23.345-.89 1.12-1.09 1.35-.2.23-.4.259-.745.086-.345-.172-1.456-.537-2.773-1.71-1.025-.913-1.717-2.04-1.917-2.385-.2-.345-.021-.531.15-.703.155-.154.345-.4.518-.601.172-.2.23-.345.345-.575.115-.23.057-.431-.029-.603-.086-.172-.776-1.87-1.063-2.56-.28-.673-.565-.582-.776-.593l-.66-.011c-.23 0-.603.086-.918.431s-1.206 1.178-1.206 2.872 1.235 3.33 1.407 3.56c.172.23 2.432 3.712 5.893 5.207.824.356 1.466.568 1.967.728.826.263 1.579.226 2.172.137.663-.099 2.04-.834 2.328-1.638.287-.804.287-1.493.2-1.638-.085-.144-.315-.23-.66-.4Z" />
-              </svg>
-            </div>
-
-            <div className="min-w-0 flex-1 pr-10">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="font-semibold text-foreground">Follow the Atai WhatsApp Channel</p>
-              </div>
-              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-                🎁 <strong className="text-foreground">Monthly token drops</strong> & exclusive discount codes — up to{" "}
-                <strong className="text-[#25D366]">96% off</strong> any plan. Holiday deals, building competitions (win free credits!), and insider perks before anyone else. Don't miss out — the channel is where the real rewards happen.
-              </p>
-              <p className="mt-3 inline-flex items-center gap-1.5 font-mono text-xs font-medium text-[#25D366] transition-all group-hover:gap-2.5">
-                Follow the channel
-                <svg className="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-                </svg>
-              </p>
-            </div>
-          </div>
-        </a>
-
-
       </div>
-    </main>
+    </SettingsShell>
   )
 }
-
-

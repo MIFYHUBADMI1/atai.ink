@@ -1,6 +1,5 @@
-import Link from "next/link"
 import { redirect } from "next/navigation"
-import { AppHeader } from "@/components/app-header"
+import { SettingsShell } from "@/components/settings/settings-shell"
 import { FeatureToggles, type FeatureToggleState } from "@/components/settings/feature-toggles"
 import { getCurrentUser } from "@/lib/auth/session"
 import {
@@ -100,15 +99,8 @@ export default async function SettingsFeaturesPage() {
   ]
 
   return (
-    <main className="min-h-svh bg-background text-foreground">
-      <AppHeader />
-      <div className="mx-auto flex max-w-3xl flex-col gap-8 px-6 py-10">
-        <Link
-          href="/settings"
-          className="inline-flex w-fit items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-all hover:border-primary/30 hover:bg-accent hover:text-foreground"
-        >
-          ← Settings
-        </Link>
+    <SettingsShell title="Feature switches">
+      <div className="flex flex-col gap-8">
 
         <header>
           <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Market &amp; grow</p>
@@ -121,6 +113,6 @@ export default async function SettingsFeaturesPage() {
 
         <FeatureToggles features={features} />
       </div>
-    </main>
+    </SettingsShell>
   )
 }

@@ -7,13 +7,16 @@ import {
   Bell,
   Building2,
   Compass,
+  EyeOff,
   Gift,
   Home,
+  LayoutGrid,
   Lightbulb,
   Menu,
   MessageSquare,
   PanelLeft,
   PanelLeftClose,
+  Plus,
   Search,
   Settings,
   Sparkles,
@@ -61,6 +64,7 @@ export function DashboardShell({
   const { projects } = useProjects()
   const resolvedProjectId = projectId ?? pathname.match(/^\/project\/([^/]+)/)?.[1]
   const [collapsed, setCollapsed] = useState(false)
+  const [hidden, setHidden] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const drawerId = useId()
   const workspaceProject = resolvedProjectId ? projects.find((p) => p.id === resolvedProjectId) ?? null : null
@@ -71,6 +75,26 @@ export function DashboardShell({
     setMobileOpen(false)
   }, [pathname])
 
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("atai.sidebar")
+      if (!raw) return
+      const parsed = JSON.parse(raw) as { collapsed?: boolean; hidden?: boolean }
+      if (typeof parsed.collapsed === "boolean") setCollapsed(parsed.collapsed)
+      if (typeof parsed.hidden === "boolean") setHidden(parsed.hidden)
+    } catch {
+      // ignore malformed preference
+    }
+  }, [])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("atai.sidebar", JSON.stringify({ collapsed, hidden }))
+    } catch {
+      // storage unavailable
+    }
+  }, [collapsed, hidden])
+
   const recent = [...projects].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 5)
 
   return (
@@ -78,6 +102,7 @@ export function DashboardShell({
     <div className="min-h-svh bg-background text-foreground">
       <CofounderPanel />
       <div className="flex min-h-svh">
+        {!hidden ? (
         <aside
           className={cn(
             "sticky top-0 hidden h-svh shrink-0 flex-col border-r border-border bg-card/40 md:flex",
@@ -88,20 +113,36 @@ export function DashboardShell({
             collapsed={collapsed}
             pathname={pathname}
             recent={recent}
+            projectCount={projects.length}
             active={active}
             askHref={askHref}
             projectId={resolvedProjectId}
             workspaceName={title}
           />
-          <button
-            type="button"
-            className="m-2 inline-flex items-center justify-center rounded-lg border border-border p-2 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() => setCollapsed((v) => !v)}
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            {collapsed ? <PanelLeft className="size-4" /> : <PanelLeftClose className="size-4" />}
-          </button>
+          <div className={cn("flex items-center gap-1 border-t border-border p-2", collapsed && "flex-col")}>
+            <button
+              type="button"
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-border p-2 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => setCollapsed((v) => !v)}
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {collapsed ? <PanelLeft className="size-4" /> : <PanelLeftClose className="size-4" />}
+              {!collapsed ? <span className="text-xs">Collapse</span> : null}
+            </button>
+            <button
+              type="button"
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-border p-2 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => setHidden(true)}
+              aria-label="Hide sidebar"
+              title="Hide sidebar"
+            >
+              <EyeOff className="size-4" />
+              {!collapsed ? <span className="text-xs">Hide</span> : null}
+            </button>
+          </div>
         </aside>
+        ) : null}
 
         {mobileOpen ? (
           <div className="fixed inset-0 z-40 md:hidden">
@@ -129,7 +170,7 @@ export function DashboardShell({
                   <X className="size-4" />
                 </button>
               </div>
-              <SidebarBody collapsed={false} pathname={pathname} recent={recent} active={active} askHref={askHref} projectId={resolvedProjectId} workspaceName={title} />
+              <SidebarBody collapsed={false} pathname={pathname} recent={recent} projectCount={projects.length} active={active} askHref={askHref} projectId={resolvedProjectId} workspaceName={title} />
             </aside>
           </div>
         ) : null}
@@ -138,6 +179,17 @@ export function DashboardShell({
           <header className="sticky top-0 z-30 border-b border-border bg-background/85 backdrop-blur">
             <div className="flex items-center justify-between gap-2 px-3 py-2.5 sm:gap-3 sm:px-4 sm:py-3 lg:px-6">
               <div className="flex min-w-0 items-center gap-3">
+                {hidden ? (
+                  <button
+                    type="button"
+                    className="hidden size-9 shrink-0 place-items-center rounded-lg border border-border text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:grid"
+                    onClick={() => setHidden(false)}
+                    aria-label="Show sidebar"
+                    title="Show sidebar"
+                  >
+                    <PanelLeft className="size-4" />
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="shrink-0 rounded-lg border border-border p-2 md:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -212,6 +264,7 @@ function SidebarBody({
   collapsed,
   pathname,
   recent,
+  projectCount,
   active,
   askHref,
   projectId,
@@ -220,6 +273,7 @@ function SidebarBody({
   collapsed: boolean
   pathname: string
   recent: ProjectSummary[]
+  projectCount: number
   active: ProjectSummary | null
   askHref: string
   projectId?: string
@@ -324,10 +378,20 @@ function SidebarBody({
 
       {!collapsed ? (
         <div>
-          <p className="px-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Businesses</p>
-          <ul className="mt-2 space-y-1">
+          <div className="flex items-center justify-between px-2">
+            <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Businesses</p>
+            {projectCount > 0 ? (
+              <span className="rounded-full bg-muted px-1.5 py-px font-mono text-[10px] tabular-nums text-muted-foreground">
+                {projectCount}
+              </span>
+            ) : null}
+          </div>
+          <ul className="mt-2 max-h-44 space-y-0.5 overflow-y-auto pr-1">
             {recent.length === 0 ? (
-              <li className="px-2 text-xs text-muted-foreground">No businesses yet</li>
+              <li className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground">
+                <Building2 className="size-3.5 shrink-0" />
+                No businesses yet
+              </li>
             ) : (
               recent.map((project) => {
                 const status = interpretProjectState(project.state, project.id)
@@ -335,7 +399,7 @@ function SidebarBody({
                   <li key={project.id}>
                     <Link
                       href={`/project/${project.id}`}
-                      className="block rounded-lg px-2 py-1.5 hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="block rounded-lg px-2 py-1.5 transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <span className="block truncate text-sm">{project.name}</span>
                       <span className="block truncate text-[11px] text-muted-foreground">{status.founderLabel}</span>
@@ -344,17 +408,23 @@ function SidebarBody({
                 )
               })
             )}
-            <li>
-              <Link href="/projects" className="block px-2 py-1 text-xs text-primary hover:underline">
-                View all businesses
-              </Link>
-            </li>
-            <li>
-              <Link href="/new" className="block px-2 py-1 text-xs text-primary hover:underline">
-                Create new business
-              </Link>
-            </li>
           </ul>
+          <div className="mt-1 flex flex-col gap-0.5 border-t border-border/70 pt-1.5">
+            <Link
+              href="/projects"
+              className="inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <LayoutGrid className="size-4 shrink-0" />
+              View all businesses
+            </Link>
+            <Link
+              href="/new"
+              className="inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Plus className="size-4 shrink-0" />
+              Create new business
+            </Link>
+          </div>
         </div>
       ) : null}
 

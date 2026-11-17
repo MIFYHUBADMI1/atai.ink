@@ -2,8 +2,7 @@
 
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
-import Link from "next/link"
-import { AppHeader } from "@/components/app-header"
+import { SettingsShell } from "@/components/settings/settings-shell"
 import { ArrowRight, Calendar, Check, AlertTriangle } from "lucide-react"
 import { useSession, jsonFetcher } from "@/lib/client/api"
 import { PERMANENT_CREDIT_PACKS, CREDIT_UNIT_NAME, formatUSD } from "@/lib/billing/config"
@@ -70,7 +69,7 @@ export default function BillingSettingsPage() {
   const router = useRouter()
   const { session, isLoading } = useSession()
 
-  const { data: billingData } = useSWR<BillingOverview>(
+  const { data: billingData, error: billingError, isLoading: billingLoading, mutate: refreshBilling } = useSWR<BillingOverview>(
     session ? "/api/billing/overview" : null,
     jsonFetcher,
   )
@@ -81,7 +80,7 @@ export default function BillingSettingsPage() {
 
   if (isLoading || !session) return null
 
-  const balance = billingData?.balance ?? { total: 0, subscription: 0, permanent: 0 }
+  const balance = billingData?.balance ?? null
   const creditHistory = billingData?.history ?? []
   const activeSubscription = billingData?.subscription ?? null
   const usageAlerts = billingData?.usageAlerts ?? null
@@ -99,20 +98,32 @@ export default function BillingSettingsPage() {
   const currentBusinesses = billingData?.businessCount ?? 0
 
   return (
-    <main className="min-h-svh bg-background text-foreground">
-      <AppHeader />
-      <div className="mx-auto flex max-w-7xl flex-col gap-8 px-6 py-10">
-        <Link href="/settings" className="inline-flex w-fit items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-all hover:border-primary/30 hover:bg-accent hover:text-foreground">
-          ← Settings
-        </Link>
-
+    <SettingsShell title="Billing">
+      <div className="flex flex-col gap-8">
         <header>
           <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
             Billing
           </p>
-          <h1 className="mt-3 text-4xl font-semibold tracking-tight">Atai Billing</h1>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight">Atai Billing</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Credits, subscription, purchases, and transaction history.
+          </p>
         </header>
         <BillingCheckoutReturn />
+
+        {billingError ? (
+          <section className="rounded-lg border border-destructive/30 bg-destructive/5 p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-medium text-destructive">Billing data couldn&apos;t be loaded</p>
+                <p className="mt-1 text-sm text-muted-foreground">Your balance and subscription may be temporarily unavailable. No amounts are shown rather than risking stale data.</p>
+              </div>
+              <button type="button" onClick={() => void refreshBilling()} className="w-fit rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium hover:bg-accent">
+                Retry
+              </button>
+            </div>
+          </section>
+        ) : null}
 
         {/* ── Credit Balance Card ── */}
         <section className="border border-border bg-card p-6">
@@ -122,16 +133,16 @@ export default function BillingSettingsPage() {
                 Available {CREDIT_UNIT_NAME}
               </p>
               <p className="mt-4 text-5xl font-semibold tabular-nums">
-                {balance.total.toLocaleString()}
+                {billingLoading ? "…" : billingError ? "—" : (balance?.total ?? 0).toLocaleString()}
               </p>
               <div className="mt-3 flex items-center gap-6 text-sm">
                 <div>
                   <span className="text-muted-foreground">Subscription: </span>
-                  <span className="font-mono font-medium">{balance.subscription.toLocaleString()}</span>
+                  <span className="font-mono font-medium">{billingLoading ? "…" : billingError ? "—" : (balance?.subscription ?? 0).toLocaleString()}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Permanent: </span>
-                  <span className="font-mono font-medium">{balance.permanent.toLocaleString()}</span>
+                  <span className="font-mono font-medium">{billingLoading ? "…" : billingError ? "—" : (balance?.permanent ?? 0).toLocaleString()}</span>
                 </div>
               </div>
             </div>
@@ -199,6 +210,11 @@ export default function BillingSettingsPage() {
           <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
             Current Plan
           </p>
+          {billingLoading ? (
+            <p className="mt-3 text-sm text-muted-foreground">Loading subscription…</p>
+          ) : billingError ? (
+            <p className="mt-3 text-sm text-muted-foreground">Subscription status unavailable until billing data loads.</p>
+          ) : (
           <div className="mt-3 flex items-start justify-between gap-4 flex-wrap">
             <div className="space-y-1.5">
               <div className="flex items-center gap-2">
@@ -248,6 +264,7 @@ export default function BillingSettingsPage() {
               )}
             </div>
           </div>
+          )}
         </section>
 
         {/* ── How Credits Work ── */}
@@ -285,7 +302,7 @@ export default function BillingSettingsPage() {
               <PlanCard
                 key={plan.id}
                 plan={plan}
-                activePlanId={activePlanId}
+                activePlanId={billingData ? activePlanId : null}
                 currentPeriodEnd={currentPeriodEnd}
                 isLoggedIn={true}
                 allPlans={plans}
@@ -335,10 +352,14 @@ export default function BillingSettingsPage() {
         </section>
 
         {/* ── Credit History ── */}
-        <section className="border border-border bg-card p-6">
+        <section id="history" className="border border-border bg-card p-6">
           <h2 className="text-xl font-medium">Credit History</h2>
 
-          {creditHistory.length > 0 ? (
+          {billingLoading ? (
+            <p className="mt-4 text-sm text-muted-foreground">Loading credit history…</p>
+          ) : billingError ? (
+            <p className="mt-4 text-sm text-muted-foreground">Credit history is unavailable until billing data loads.</p>
+          ) : creditHistory.length > 0 ? (
             <div className="mt-5">
               {/* Desktop table */}
               <div className="hidden sm:block">
@@ -404,6 +425,6 @@ export default function BillingSettingsPage() {
           )}
         </section>
       </div>
-    </main>
+    </SettingsShell>
   )
 }
