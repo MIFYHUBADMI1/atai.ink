@@ -15,11 +15,23 @@ vi.mock("@/lib/logging/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 
+/** The Bing status derives verification from the stored blog settings, so the
+ * store is the boundary this suite controls. */
+vi.mock("@/lib/blog/store", () => ({
+  getBlogSettings: vi.fn(async () => ({
+    id: "blog-settings" as const,
+    indexNowEnabled: false,
+    newsletterAutoAnnounce: false,
+    updatedAtMs: 0,
+  })),
+}))
+
 import {
   bingWebmasterStatus,
   fetchSearchPerformance,
   searchConsoleConfigured,
 } from "@/lib/blog/search-console"
+import { getBlogSettings } from "@/lib/blog/store"
 
 const ENV_KEYS = [
   "SEARCH_CONSOLE_CLIENT_EMAIL",
@@ -49,6 +61,12 @@ function configureCredentials() {
 afterEach(() => {
   for (const key of ENV_KEYS) delete process.env[key]
   vi.unstubAllGlobals()
+  vi.mocked(getBlogSettings).mockResolvedValue({
+    id: "blog-settings",
+    indexNowEnabled: false,
+    newsletterAutoAnnounce: false,
+    updatedAtMs: 0,
+  })
 })
 
 describe("searchConsoleConfigured", () => {
@@ -150,16 +168,37 @@ describe("fetchSearchPerformance", () => {
 })
 
 describe("bingWebmasterStatus", () => {
-  it("says metrics are unavailable when no API key is configured", () => {
-    const status = bingWebmasterStatus()
+  /** Metrics wording only applies once the property is actually claimed. */
+  function withVerifiedSite() {
+    vi.mocked(getBlogSettings).mockResolvedValue({
+      id: "blog-settings",
+      indexNowEnabled: false,
+      newsletterAutoAnnounce: false,
+      bingVerification: "bing-site-token",
+      updatedAtMs: 0,
+    })
+  }
+
+  it("says metrics are unavailable when no API key is configured", async () => {
+    withVerifiedSite()
+    const status = await bingWebmasterStatus()
+    expect(status.verified).toBe(true)
     expect(status.metricsAvailable).toBe(false)
     expect(status.message).toContain("not configured")
   })
 
-  it("reports the connection once a key is configured", () => {
+  it("reports the connection once a key is configured", async () => {
+    withVerifiedSite()
     process.env.BING_WEBMASTER_API_KEY = "bing-key"
-    const status = bingWebmasterStatus()
+    const status = await bingWebmasterStatus()
     expect(status.metricsAvailable).toBe(true)
     expect(status.message).toContain("connected")
+  })
+
+  it("does not call the site verified on the strength of an API key alone", async () => {
+    process.env.BING_WEBMASTER_API_KEY = "bing-key"
+    const status = await bingWebmasterStatus()
+    expect(status.verified).toBe(false)
+    expect(status.message).toContain("not verified")
   })
 })

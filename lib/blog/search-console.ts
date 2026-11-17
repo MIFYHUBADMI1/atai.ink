@@ -3,6 +3,7 @@ import "server-only"
 import { createSign } from "node:crypto"
 
 import { logger } from "@/lib/logging/logger"
+import { getBlogSettings } from "@/lib/blog/store"
 
 /**
  * Google Search Console integration boundary.
@@ -224,17 +225,23 @@ export async function fetchSearchPerformance(options?: {
  * query-level metrics need a Webmaster API key. Without one the admin UI says
  * "unavailable" rather than showing an empty dashboard.
  */
-export function bingWebmasterStatus(): {
+export async function bingWebmasterStatus(): Promise<{
   verified: boolean
   metricsAvailable: boolean
   message: string
-} {
+}> {
   const apiKey = process.env.BING_WEBMASTER_API_KEY?.trim()
+  const settings = await getBlogSettings()
+  // Verification is a fact about the site, not an assumption: it is true only
+  // once the token is in the settings.
+  const verified = Boolean(settings.bingVerification)
   return {
-    verified: true,
+    verified,
     metricsAvailable: Boolean(apiKey),
-    message: apiKey
-      ? "Bing Webmaster Tools is connected."
-      : "Bing Webmaster Tools is verified, but query metrics need a Bing Webmaster API key, which is not configured.",
+    message: !verified
+      ? "Bing Webmaster Tools is not verified yet — add the verification code in Content Studio settings."
+      : apiKey
+        ? "Bing Webmaster Tools is connected."
+        : "Bing Webmaster Tools is verified, but query metrics need a Bing Webmaster API key, which is not configured.",
   }
 }

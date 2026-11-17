@@ -14,11 +14,12 @@ export async function GET(req: NextRequest) {
     // First-party views and search-console metrics are independent sources.
     // Each reports its own availability — neither is ever shown as zero when
     // it is actually missing.
-    const [performance, search] = await Promise.all([
+    const [performance, search, bing] = await Promise.all([
       blogPerformance(days),
       fetchSearchPerformance({ days }),
+      bingWebmasterStatus(),
     ])
-    return ok({ ...performance, search, bing: bingWebmasterStatus() })
+    return ok({ ...performance, search, bing })
   } catch (error) {
     return handleRouteError("api.admin.blog.performance", error)
   }
