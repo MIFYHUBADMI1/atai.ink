@@ -294,13 +294,13 @@ export function PlanCard({
             ) : null
           ) : isContact ? (
             <a
-              href="mailto:sales@atai.ink?subject=Atai%20plan%20enquiry"
+              href="mailto:support@atai.ink?subject=Atai%20plan%20enquiry"
               className={cn(
                 "mt-6 block w-full text-center py-2.5 rounded-lg text-sm font-medium transition-colors",
                 "border border-border hover:bg-accent inline-flex items-center justify-center gap-2",
               )}
             >
-              <Mail className="size-4" /> Contact sales
+              <Mail className="size-4" /> Contact us
             </a>
           ) : hasOtherActivePlan && currentPlan ? (
             <button
@@ -332,10 +332,10 @@ export function PlanCard({
           ) : null
         ) : isContact ? (
           <a
-            href="mailto:sales@atai.ink?subject=Atai%20plan%20enquiry"
+            href="mailto:support@atai.ink?subject=Atai%20plan%20enquiry"
             className="mt-6 block w-full text-center py-2.5 rounded-lg text-sm font-medium transition-colors border border-border hover:bg-accent inline-flex items-center justify-center gap-2"
           >
-            <Mail className="size-4" /> Contact sales
+            <Mail className="size-4" /> Contact us
           </a>
         ) : (
           <AuthTrigger

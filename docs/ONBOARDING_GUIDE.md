@@ -429,7 +429,7 @@ Atai has five plans. You can start free and upgrade when you're ready to launch.
 | **Starter** | $89.99/mo · $989.89/yr | Launching your first real business | **1 business** (1 production app on your Atai subdomain), ~150,000 credits/mo, AI co-founder, specialist teams, SEO & content marketing, business-intelligence basics, standard support. |
 | **Growth** ⭐ | $199.99/mo · $2,199.89/yr | Running and growing several businesses | **Up to 4 businesses**, **1 custom domain**, ~400,000 credits/mo, advanced AI co-founder, expanded teams, ads & competition monitoring, full learning paths, direct support. **Most popular.** |
 | **Scale** | $499.99/mo · $5,499.89/yr | Operating at scale | **Unlimited businesses**, **up to 4 custom domains**, ~1,200,000 credits/mo, premium AI co-founder, premium specialist teams, the full business-intelligence suite, priority compute, premium support. |
-| **Enterprise** | Custom | Large or regulated operations | Everything in Scale, tailored: custom credit volume, dedicated infrastructure, SLA-backed uptime, white-glove onboarding, a dedicated account manager. Contact sales. |
+| **Enterprise** | Custom | Large or regulated operations | Everything in Scale, tailored: custom credit volume, dedicated infrastructure, SLA-backed uptime, white-glove onboarding, a dedicated account manager. Contact support@atai.ink. |
 
 > **Custom domains:** a custom domain (like `yourbusiness.com`) is included with Growth (1) and Scale (up to 4). Additional domains can be purchased separately. Every paid plan also includes a free Atai subdomain.
 

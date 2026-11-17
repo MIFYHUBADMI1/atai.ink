@@ -137,7 +137,7 @@ export async function POST(req: Request) {
         // mistaken for a free plan.
         if (plan.custom) {
           return NextResponse.json(
-            { ok: false, error: { code: "PLAN_UNAVAILABLE", message: `${plan.name} is a custom contract. Please contact sales.` } },
+            { ok: false, error: { code: "PLAN_UNAVAILABLE", message: `${plan.name} is a custom contract. Email support@atai.ink to arrange it.` } },
             { status: 400 },
           )
         }
