@@ -4,10 +4,11 @@ import type { ComparisonData } from "@/lib/blog/types"
  * claim shows its evidence and verification date — honest positioning only. */
 export function ComparisonTable({ comparison }: { comparison: ComparisonData }) {
   if (!comparison.rows.length) return null
+  const name = comparison.competitorName.trim()
   return (
-    <section className="mt-10" aria-label={`Atai vs ${comparison.competitorName} comparison`}>
+    <section className="mt-10" aria-label={name ? `Atai vs ${name} comparison` : "Comparison table"}>
       <h2 className="text-xl font-semibold tracking-tight">
-        Atai vs {comparison.competitorName}: side by side
+        {name ? `Atai vs ${name}: side by side` : "Side by side comparison"}
       </h2>
       {comparison.positioning ? (
         <p className="mt-2 text-sm leading-7 text-muted-foreground">{comparison.positioning}</p>
@@ -19,19 +20,19 @@ export function ComparisonTable({ comparison }: { comparison: ComparisonData }) 
               <th className="border-b border-border bg-muted/50 px-3 py-2 text-left font-semibold">Dimension</th>
               <th className="border-b border-border bg-muted/50 px-3 py-2 text-left font-semibold">Atai</th>
               <th className="border-b border-border bg-muted/50 px-3 py-2 text-left font-semibold">
-                {comparison.competitorUrl ? (
+                {comparison.competitorUrl && name ? (
                   <a href={comparison.competitorUrl} target="_blank" rel="noreferrer noopener" className="text-primary hover:underline">
-                    {comparison.competitorName}
+                    {name}
                   </a>
                 ) : (
-                  comparison.competitorName
+                  name || "Competitor"
                 )}
               </th>
             </tr>
           </thead>
           <tbody>
-            {comparison.rows.map((row) => (
-              <tr key={row.dimension}>
+            {comparison.rows.map((row, index) => (
+              <tr key={`${row.dimension}-${index}`}>
                 <td className="border-b border-border/60 px-3 py-2 align-top font-medium">{row.dimension}</td>
                 <td className="border-b border-border/60 px-3 py-2 align-top">{row.atai}</td>
                 <td className="border-b border-border/60 px-3 py-2 align-top">

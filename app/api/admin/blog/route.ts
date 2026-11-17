@@ -4,7 +4,7 @@ import { AppError } from "@/lib/errors"
 import { fail, handleRouteError, ok } from "@/lib/api/respond"
 import { readJsonBody } from "@/lib/api/request-body"
 import { blogArticleInputSchema } from "@/lib/blog/admin-schema"
-import { blogStats, createArticle, listAdminArticles } from "@/lib/blog/store"
+import { blogStats, createArticle, listAdminArticles, toAdminView } from "@/lib/blog/store"
 import { BLOG_STATUSES, type BlogArticleInput, type BlogStatus } from "@/lib/blog/types"
 
 export const dynamic = "force-dynamic"
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
       throw new AppError("VALIDATION", parsed.error.issues[0]?.message ?? "Check the article details.", 422)
     }
     const created = await createArticle(parsed.data as BlogArticleInput, admin.id)
-    return ok({ item: created }, { status: 201 })
+    return ok({ item: toAdminView(created) }, { status: 201 })
   } catch (error) {
     if (error instanceof AppError && error.code === "VALIDATION") return fail(error.code, error.message, error.status)
     return handleRouteError("api.admin.blog.create", error)

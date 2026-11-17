@@ -60,9 +60,28 @@ const comparisonRowSchema = z.object({
   note: optionalText(600),
 })
 
+/** A comparison that says anything at all — a row, a claim, a caveat. */
+function hasComparisonContent(value: {
+  competitorUrl?: string
+  competitorDescription?: string
+  positioning?: string
+  limitations?: string
+  rows: { dimension: string }[]
+}): boolean {
+  return (
+    value.rows.length > 0 ||
+    Boolean(
+      value.positioning?.trim() ||
+        value.limitations?.trim() ||
+        value.competitorDescription?.trim() ||
+        value.competitorUrl?.trim(),
+    )
+  )
+}
+
 const comparisonSchema = z
   .object({
-    competitorName: z.string().trim().min(1).max(120),
+    competitorName: z.string().trim().max(120),
     competitorUrl: optionalHttpsUrl,
     competitorDescription: optionalText(1000),
     positioning: optionalText(2000),
@@ -71,7 +90,27 @@ const comparisonSchema = z
     limitations: optionalText(2000),
   })
   .nullish()
-  .transform((value) => value ?? undefined)
+  .transform((value) => {
+    if (!value) return undefined
+    const competitorName = value.competitorName.trim()
+    // An empty shell is stored as no comparison at all — there is nothing to
+    // show and nothing to lose.
+    if (!competitorName && !hasComparisonContent(value)) return undefined
+    return { ...value, competitorName }
+  })
+  .superRefine((value, ctx) => {
+    if (!value) return
+    // A comparison the admin actually filled in is never dropped: without a
+    // competitor name it is rejected, so the rows cannot disappear silently
+    // on save.
+    if (!value.competitorName) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["competitorName"],
+        message: "Name the competitor, or clear the comparison you started.",
+      })
+    }
+  })
 
 const seoSchema = z
   .object({
@@ -153,7 +192,9 @@ export const blogPublishInputSchema = z.object({
 
 export const blogNewsletterInputSchema = z.object({
   email: z.string().trim().toLowerCase().email("Enter a valid email address.").max(200),
-  source: optionalText(80),
+  // The source names where the signup came from — `article:<slug>` is the
+  // longest form, so the cap has to fit a full slug plus its prefix.
+  source: optionalText(200),
 })
 
 export const blogAnnouncementInputSchema = z.object({

@@ -12,6 +12,7 @@ import {
   blogStatsCol,
 } from "@/lib/db/collections"
 import { AppError } from "@/lib/errors"
+import { buildUpdate } from "@/lib/db/update"
 import { logger } from "@/lib/logging/logger"
 import { cryptoId } from "@/lib/store/id"
 import { listBlogPosts } from "@/lib/blog/legacy"
@@ -217,23 +218,39 @@ export async function resolvePublicSlug(slug: string): Promise<SlugResolution> {
   return { kind: "missing" }
 }
 
-export async function publicCategories(): Promise<BlogCategoryDoc[]> {
-  const defaults: BlogCategoryDoc[] = DEFAULT_BLOG_CATEGORIES.map((category, index) => ({
-    id: `default-${category.slug}`,
+/** The pillars that ship with the blog. They live in code, not in the
+ * database — an edit materialises a stored copy that takes their place. */
+const BUILTIN_CATEGORY_PREFIX = "default-"
+
+function defaultCategories(): BlogCategoryDoc[] {
+  return DEFAULT_BLOG_CATEGORIES.map((category, index) => ({
+    id: `${BUILTIN_CATEGORY_PREFIX}${category.slug}`,
     slug: category.slug,
     name: category.name,
     description: category.description,
     order: index,
     createdAtMs: 0,
     updatedAtMs: 0,
+    builtIn: true,
   }))
+}
+
+export async function publicCategories(): Promise<BlogCategoryDoc[]> {
+  const defaults = defaultCategories()
   if (isBuildPhase()) return defaults
   try {
     const col = await blogCategoriesCol()
     const custom = (await col.find({}).sort({ order: 1 }).toArray()) as BlogCategoryDoc[]
-    const bySlug = new Map(defaults.map((category) => [category.slug, category]))
-    for (const category of custom) bySlug.set(category.slug, category)
-    return [...bySlug.values()].sort((a, b) => a.order - b.order)
+    // A stored copy of a built-in pillar replaces it — by id, so a renamed
+    // slug does not leave the original behind as a duplicate.
+    const storedIds = new Set(custom.map((category) => category.id))
+    const merged = new Map(
+      defaults.filter((category) => !storedIds.has(category.id)).map((category) => [category.slug, category]),
+    )
+    for (const category of custom) {
+      merged.set(category.slug, { ...category, builtIn: category.id.startsWith(BUILTIN_CATEGORY_PREFIX) })
+    }
+    return [...merged.values()].sort((a, b) => a.order - b.order)
   } catch {
     return defaults
   }
@@ -505,7 +522,14 @@ export async function updateArticle(id: string, input: BlogArticleInput, adminId
   const existing = (await col.findOne({ id })) as BlogArticleDoc | null
   if (!existing) throw new AppError("NOT_FOUND", "Article not found.", 404)
   const doc = inputToDoc(input, id, adminId, existing)
-  const scheduleError = validateSchedule(doc.status, doc.scheduledFor, Date.now())
+  // A schedule the admin did not touch is not re-validated: an article whose
+  // time has come is due to go live, and a content save must not be blocked
+  // by a date that was already in the past.
+  const keepsSchedule = input.status === "scheduled" && input.scheduledFor === undefined
+  const scheduleError =
+    keepsSchedule && typeof doc.scheduledFor === "number"
+      ? null
+      : validateSchedule(doc.status, doc.scheduledFor, Date.now())
   if (scheduleError) throw new AppError("VALIDATION", scheduleError, 422)
   const clash = (await col.findOne({ slug: doc.slug, id: { $ne: id } })) as BlogArticleDoc | null
   if (clash) throw new AppError("VALIDATION", `The slug "${doc.slug}" is already used by another article.`, 409)
@@ -540,7 +564,10 @@ export async function setArticleStatus(
     case "publish":
       target = "published"
       next.status = "published"
-      next.publishedAt = existing.publishedAt || todayIso()
+      // The publication date is the day the article went live — not the day
+      // the draft was written. An article that was already published keeps
+      // its original date.
+      next.publishedAt = existing.status === "published" ? existing.publishedAt || todayIso() : todayIso()
       next.scheduledFor = undefined
       break
     case "schedule": {
@@ -572,7 +599,10 @@ export async function setArticleStatus(
   // same move; every other jump has to be a legal one.
   const illegal = transitionError(existing.status, target)
   if (illegal) throw new AppError("VALIDATION", illegal, 422)
-  await col.updateOne({ id }, { $set: next, $unset: action === "publish" || action === "unpublish" ? { scheduledFor: "" } : {} })
+  // An empty `$unset` is rejected by the server, so the operator is only
+  // added when there is a field to clear.
+  const clearsSchedule = action === "publish" || action === "unpublish"
+  await col.updateOne({ id }, buildUpdate({ ...(next as Record<string, unknown>), ...(clearsSchedule ? { scheduledFor: undefined } : {}) }))
   const updated = (await col.findOne({ id })) as BlogArticleDoc
   invalidateBlogCache()
   revalidateBlogSurfaces(updated)
@@ -665,9 +695,31 @@ export async function upsertCategory(
   const now = Date.now()
   if (id) {
     const existing = (await col.findOne({ id })) as BlogCategoryDoc | null
-    if (!existing) throw new AppError("NOT_FOUND", "Category not found.", 404)
-    const updated: BlogCategoryDoc = { ...existing, ...input, slug, updatedAtMs: now }
-    await col.replaceOne({ id }, updated)
+    if (existing) {
+      const updated: BlogCategoryDoc = {
+        ...existing,
+        ...input,
+        // An omitted order keeps the current one — the sort must not break.
+        order: input.order ?? existing.order,
+        slug,
+        updatedAtMs: now,
+      }
+      await col.replaceOne({ id }, updated)
+      return updated
+    }
+    // A built-in pillar has no stored row yet. Writing one turns the edit
+    // into a stored override that takes the pillar's place.
+    const builtin = defaultCategories().find((category) => category.id === id)
+    if (!builtin) throw new AppError("NOT_FOUND", "Category not found.", 404)
+    const updated: BlogCategoryDoc = {
+      ...builtin,
+      ...input,
+      order: input.order ?? builtin.order,
+      slug,
+      createdAtMs: builtin.createdAtMs,
+      updatedAtMs: now,
+    }
+    await col.replaceOne({ id }, updated, { upsert: true })
     return updated
   }
   if (await col.findOne({ slug })) throw new AppError("VALIDATION", `Category "${slug}" already exists.`, 409)
@@ -689,7 +741,24 @@ export async function upsertCategory(
 export async function deleteCategory(id: string): Promise<void> {
   const col = await blogCategoriesCol()
   const existing = (await col.findOne({ id })) as BlogCategoryDoc | null
-  if (!existing) throw new AppError("NOT_FOUND", "Category not found.", 404)
+  const isBuiltin = id.startsWith(BUILTIN_CATEGORY_PREFIX)
+  if (!existing) {
+    if (isBuiltin) {
+      throw new AppError(
+        "VALIDATION",
+        "Built-in categories cannot be deleted — rename the category instead.",
+        409,
+      )
+    }
+    throw new AppError("NOT_FOUND", "Category not found.", 404)
+  }
+  if (isBuiltin) {
+    throw new AppError(
+      "VALIDATION",
+      "Built-in categories cannot be deleted — rename the category instead.",
+      409,
+    )
+  }
   const articles = await blogArticlesCol()
   const inUse = await articles.countDocuments({ category: existing.slug, status: { $ne: "archived" } })
   if (inUse > 0) throw new AppError("VALIDATION", `${inUse} article(s) still use this category. Move them first.`, 409)
@@ -848,7 +917,7 @@ export async function recordCampaign(doc: BlogCampaignDoc): Promise<BlogCampaign
 /** Close out a campaign once its delivery attempt finished. */
 export async function updateCampaign(id: string, patch: Partial<BlogCampaignDoc>): Promise<void> {
   const col = await blogCampaignsCol()
-  await col.updateOne({ id }, { $set: patch })
+  await col.updateOne({ id }, buildUpdate({ ...(patch as Record<string, unknown>) }))
 }
 
 /** Recent announcement attempts, newest first. */

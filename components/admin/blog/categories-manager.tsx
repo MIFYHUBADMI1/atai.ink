@@ -109,14 +109,21 @@ export function CategoriesManager() {
             {items.map((category) => (
               <tr key={category.id}>
                 <td className="border-b border-border/60 px-3 py-2">
-                  <Input
-                    defaultValue={category.name}
-                    onBlur={(event) => {
-                      if (event.target.value !== category.name) void update(category, { name: event.target.value })
-                    }}
-                    className="h-9"
-                    aria-label={`Name for ${category.name}`}
-                  />
+                  <div className="flex items-center gap-2">
+                    <Input
+                      defaultValue={category.name}
+                      onBlur={(event) => {
+                        if (event.target.value !== category.name) void update(category, { name: event.target.value })
+                      }}
+                      className="h-9"
+                      aria-label={`Name for ${category.name}`}
+                    />
+                    {category.builtIn ? (
+                      <span className="shrink-0 rounded-full border border-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                        Built-in
+                      </span>
+                    ) : null}
+                  </div>
                 </td>
                 <td className="border-b border-border/60 px-3 py-2">
                   <Input
@@ -140,7 +147,13 @@ export function CategoriesManager() {
                   />
                 </td>
                 <td className="border-b border-border/60 px-3 py-2 text-right">
-                  <Button variant="ghost" size="sm" onClick={() => void remove(category)} disabled={busy}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => void remove(category)}
+                    disabled={busy || category.builtIn}
+                    title={category.builtIn ? "Built-in categories cannot be deleted." : "Delete this category"}
+                  >
                     <Trash2 className="size-4 text-destructive" />
                   </Button>
                 </td>

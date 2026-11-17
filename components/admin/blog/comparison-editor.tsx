@@ -39,6 +39,12 @@ export function ComparisonEditor({
         <div className="space-y-1.5">
           <Label htmlFor="comparison-name">Competitor</Label>
           <Input id="comparison-name" value={comparison.competitorName} onChange={(e) => setMeta("competitorName", e.target.value)} placeholder="Lovable" />
+          {!comparison.competitorName.trim() ? (
+            <p className="text-xs text-muted-foreground">
+              The comparison needs a competitor name. Without one it is not saved, so the rows you write stay visible
+              here but never reach the article.
+            </p>
+          ) : null}
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="comparison-url">Competitor website</Label>

@@ -74,6 +74,9 @@ export function auditArticle(
     if (!comparison || comparison.rows.length === 0) {
       add("comparison-empty", "warning", "Marked as a comparison but no structured comparison table exists.", "Add evaluated dimensions with evidence, or remove the competitor tag.")
     } else {
+      if (!comparison.competitorName.trim()) {
+        add("comparison-unnamed", "error", "The comparison table has no competitor name.", "Name the competitor so the comparison has a title and a source.")
+      }
       const unsupported = comparison.rows.filter((row) => row.competitor.trim() && !row.evidence?.trim())
       if (unsupported.length) {
         add(

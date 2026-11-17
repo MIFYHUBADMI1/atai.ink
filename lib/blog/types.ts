@@ -137,6 +137,9 @@ export interface BlogCategoryDoc {
   order: number
   createdAtMs: number
   updatedAtMs: number
+  /** True for the pillars that ship with the blog. They can be renamed, but
+   * not deleted — the code needs them to keep working. */
+  builtIn?: boolean
 }
 
 /** Permanent redirect kept when a published slug changes. */
