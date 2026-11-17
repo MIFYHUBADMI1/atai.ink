@@ -38,7 +38,9 @@ export function SeoPanel({
           <p className="flex items-center gap-1 text-xs text-muted-foreground">
             <Search className="size-3" /> atai.ink
           </p>
-          <p className="mt-1 truncate text-base text-[#1a0dab] dark:text-[#8ab4f8]">{serpTitle}</p>
+          {/* Two lines, like a real result, rather than one clipped line — the
+              admin needs to see the whole title they wrote. */}
+          <p className="mt-1 line-clamp-2 break-words text-base text-[#1a0dab] dark:text-[#8ab4f8]">{serpTitle}</p>
           <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{serpDescription}</p>
         </div>
         <div className="mt-2 flex flex-wrap gap-3 text-xs">

@@ -85,6 +85,9 @@ export function StudioDashboard() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" render={<Link href="/admin/blog/articles" />}>
+            <FileText className="size-4" /> All articles
+          </Button>
           <Button variant="outline" size="sm" onClick={() => void importLegacy()} disabled={importing}>
             {importing ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} Import original posts
           </Button>
@@ -120,12 +123,17 @@ export function StudioDashboard() {
           ) : recent.length ? (
             <ul className="mt-3 space-y-2">
               {recent.map((article) => (
-                <li key={article.id} className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
+                <li key={article.id} className="flex items-start justify-between gap-3 rounded-lg border border-border px-3 py-2">
                   <div className="min-w-0">
-                    <Link href={`/admin/blog/articles/${article.id}`} className="truncate text-sm font-medium hover:text-primary">
+                    {/* A title is the admin's own words: it wraps inside the row,
+                        it never stretches the page and it is never cut off. */}
+                    <Link
+                      href={`/admin/blog/articles/${article.id}`}
+                      className="line-clamp-2 block break-words text-sm font-medium hover:text-primary"
+                    >
                       {article.title}
                     </Link>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="break-words text-xs text-muted-foreground">
                       {article.status} · {article.category}
                     </p>
                   </div>
@@ -144,8 +152,11 @@ export function StudioDashboard() {
           {top.length ? (
             <ul className="mt-3 space-y-2">
               {top.map((article) => (
-                <li key={article.id} className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
-                  <Link href={`/admin/blog/articles/${article.id}`} className="truncate text-sm hover:text-primary">
+                <li key={article.id} className="flex items-start justify-between gap-3 rounded-lg border border-border px-3 py-2">
+                  <Link
+                    href={`/admin/blog/articles/${article.id}`}
+                    className="line-clamp-2 block min-w-0 flex-1 break-words text-sm hover:text-primary"
+                  >
                     {article.title}
                   </Link>
                   <span className="shrink-0 text-xs text-muted-foreground">{article.views.toLocaleString()} views</span>
@@ -167,11 +178,14 @@ export function StudioDashboard() {
           <ul className="mt-3 space-y-2">
             {needsAttention.map((entry) => (
               <li key={entry.report.slug} className="rounded-lg border border-border px-3 py-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <Link href={`/admin/blog/articles`} className="text-sm font-medium hover:text-primary">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <Link
+                    href={`/admin/blog/articles`}
+                    className="line-clamp-2 min-w-0 flex-1 basis-40 break-words text-sm font-medium hover:text-primary"
+                  >
                     {entry.report.title}
                   </Link>
-                  <span className="flex items-center gap-2 text-xs">
+                  <span className="flex shrink-0 items-center gap-2 text-xs">
                     {entry.errors ? (
                       <span className="inline-flex items-center gap-1 text-destructive">
                         <AlertTriangle className="size-3" /> {entry.errors} error(s)
@@ -180,7 +194,7 @@ export function StudioDashboard() {
                     {entry.warnings ? <span className="text-amber-600">{entry.warnings} warning(s)</span> : null}
                   </span>
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">{entry.report.findings[0]?.message}</p>
+                <p className="mt-1 break-words text-xs text-muted-foreground">{entry.report.findings[0]?.message}</p>
               </li>
             ))}
           </ul>

@@ -296,11 +296,17 @@ export function ArticlesManager({
             <tbody>
               {filtered.map((article) => (
                 <tr key={article.id}>
-                  <td className="border-b border-border/60 px-3 py-2">
-                    <Link href={`/admin/blog/articles/${article.id}`} className="font-medium hover:text-primary">
+                  <td className="max-w-[26rem] border-b border-border/60 px-3 py-2">
+                    {/* Bounded so one long headline cannot widen the table and
+                        push the other columns off screen; the full title still
+                        fits, on two lines. */}
+                    <Link
+                      href={`/admin/blog/articles/${article.id}`}
+                      className="line-clamp-2 block break-words font-medium hover:text-primary"
+                    >
                       {article.title}
                     </Link>
-                    <p className="font-mono text-xs text-muted-foreground">/blog/{article.slug}</p>
+                    <p className="break-all font-mono text-xs text-muted-foreground">/blog/{article.slug}</p>
                   </td>
                   <td className="border-b border-border/60 px-3 py-2">
                     <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_CLASS[article.status]}`}>{article.status}</span>
@@ -355,8 +361,16 @@ export function ArticlesManager({
         </div>
       ) : (
         <div className="rounded-xl border border-dashed border-border p-8 text-center">
-          <p className="text-sm font-medium">No articles match these filters.</p>
-          <p className="mt-1 text-sm text-muted-foreground">Create the first one, or import the original Markdown posts.</p>
+          <p className="text-sm font-medium">
+            {status === "all"
+              ? "No articles yet."
+              : `Nothing is stored as ${STATUS_FILTERS.find((filter) => filter.value === status)?.label ?? "that"}.`}
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {status === "all"
+              ? "Create the first one, or import the original Markdown posts."
+              : "An article reaches this list only once it is stored. On the New article screen, publishing, scheduling or sending to review saves it and applies that step in one go."}
+          </p>
         </div>
       )}
     </div>
