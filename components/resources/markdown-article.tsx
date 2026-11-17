@@ -35,10 +35,24 @@ export function MarkdownArticle({
               </h2>
             )
           },
-          h3: ({ children }) => (
-            <h3 className="pt-2 text-lg font-semibold tracking-tight">{children}</h3>
-          ),
-          h4: ({ children }) => <h4 className="pt-1 font-semibold">{children}</h4>,
+          h3: ({ children, node }) => {
+            const line = node?.position?.start.line
+            const id = (line !== undefined ? idsByLine.get(line) : undefined) ?? headingId(textOf(children))
+            return (
+              <h3 id={id} className="scroll-mt-24 pt-2 text-lg font-semibold tracking-tight">
+                {children}
+              </h3>
+            )
+          },
+          h4: ({ children, node }) => {
+            const line = node?.position?.start.line
+            const id = (line !== undefined ? idsByLine.get(line) : undefined) ?? headingId(textOf(children))
+            return (
+              <h4 id={id} className="scroll-mt-24 pt-1 font-semibold">
+                {children}
+              </h4>
+            )
+          },
           p: ({ children }) => <p className="text-pretty">{children}</p>,
           ul: ({ children }) => <ul className="list-disc space-y-2 pl-5">{children}</ul>,
           ol: ({ children }) => <ol className="list-decimal space-y-2 pl-5">{children}</ol>,

@@ -40,6 +40,7 @@ const TOOLS: Tool[] = [
   {
     label: "Table",
     icon: Table,
+    block: true,
     prefix: "| Dimension | Atai | Other |\n|---|---|---|\n| ",
     suffix: " | | |",
     placeholder: "Dimension",
@@ -64,12 +65,19 @@ export function MarkdownToolbar({
     const start = area.selectionStart ?? value.length
     const end = area.selectionEnd ?? value.length
     const selected = value.slice(start, end) || tool.placeholder || ""
-    const inserted = `${tool.prefix}${selected}${tool.suffix ?? ""}`
+    // A block marker (heading, list item, quote, table, divider) only works at
+    // the start of a line. Inserted mid-sentence it stays literal text — a
+    // "## Title" glued to the end of a paragraph renders as a paragraph, and a
+    // table that does not start a line never becomes a table. That is how
+    // studio formatting appeared to be ignored on the public page.
+    const lead = tool.block && start > 0 && value[start - 1] !== "\n" ? "\n" : ""
+    const tail = tool.block && value[end] !== undefined && value[end] !== "\n" ? "\n" : ""
+    const inserted = `${lead}${tool.prefix}${selected}${tool.suffix ?? ""}${tail}`
     const next = `${value.slice(0, start)}${inserted}${value.slice(end)}`
     onChange(next)
     // Restore the caret after the inserted text so typing continues naturally.
     requestAnimationFrame(() => {
-      const caret = start + tool.prefix.length + selected.length
+      const caret = start + lead.length + tool.prefix.length + selected.length
       area.focus()
       area.setSelectionRange(caret, caret)
     })

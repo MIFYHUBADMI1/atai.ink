@@ -9,7 +9,7 @@ import { ComparisonTable } from "@/components/blog/comparison-table"
 import { ShareButtons } from "@/components/blog/share-buttons"
 import { NewsletterForm } from "@/components/blog/newsletter-form"
 import { ViewBeacon } from "@/components/blog/view-beacon"
-import { markdownToc, slugifyBlog } from "@/lib/blog/content"
+import { markdownToc, normalizeBlogBody, slugifyBlog, splitFaqSection } from "@/lib/blog/content"
 import { publicArticles, relatedArticles, resolvePublicSlug } from "@/lib/blog/store"
 import { articleMetadata, blogPostingJsonLd, breadcrumbJsonLd, faqJsonLd, jsonLdScript } from "@/lib/blog/seo"
 import { SITE_URL } from "@/lib/env"
@@ -43,10 +43,12 @@ export default async function BlogPostPage({ params }: Params) {
   const all = await publicArticles()
   const related = relatedArticles(post, all)
 
-  // The hero renders the H1; drop a leading file-style title line so the page
-  // keeps exactly one H1 and TOC anchors stay in sync with the renderer.
-  const markdown = post.body.replace(/^# [^\n]*\n+/, "")
-  const sections = markdownToc(markdown)
+  // One H1 per page (the hero owns it): a leading title line is dropped and any
+  // other in-body H1 is demoted, so the renderer and the outline agree.
+  const markdown = normalizeBlogBody(post.body)
+  // The outline is built from the body the renderer actually renders — the FAQ
+  // section is pulled out of it — so every link points at a heading on screen.
+  const sections = markdownToc(splitFaqSection(markdown).body)
   const faq = faqJsonLd(markdown)
   const canonical = `${SITE_URL}/blog/${post.slug}`
   const authorSlug = slugifyBlog(post.author.name)
@@ -88,7 +90,7 @@ export default async function BlogPostPage({ params }: Params) {
               </span>
             ) : null}
           </div>
-          <h1 className="text-balance text-4xl font-semibold tracking-tight sm:text-5xl">{post.title}</h1>
+          <h1 className="text-balance break-words text-4xl font-semibold tracking-tight sm:text-5xl">{post.title}</h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">{post.excerpt || post.description}</p>
           <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-muted-foreground">
             <Link href={`/blog/author/${authorSlug}`} className="inline-flex items-center gap-1.5 hover:text-foreground">

@@ -1,6 +1,8 @@
 /** Pure content helpers shared by the store, audits, editor and public pages.
  * No server-only imports — safe in client components and tests. */
 
+import { markdownHeadingEntries } from "@/lib/resources/media"
+
 export function slugifyBlog(value: string): string {
   return value
     .toLowerCase()
@@ -23,6 +25,44 @@ export function readingMinutes(markdown: string): number {
   return Math.max(1, Math.round(wordCount(markdown) / 200))
 }
 
+/**
+ * The article hero renders the page's only H1, so a leading `# Title` line is
+ * dropped and any other in-body H1 is demoted to a section heading. Left as it
+ * was, a stray `#` came out as a second, unstyled H1 and never appeared in the
+ * outline.
+ *
+ * Pasted syntax is repaired on the way: `##Title` and `-item` are not a heading
+ * or a list to a markdown parser, they are literal text the reader ends up
+ * seeing. A single `#` before a word is left alone because `#hashtags` and
+ * headings are indistinguishable there, and a leading `-` before a number ("-50%
+ * off") is text, not a bullet.
+ *
+ * Outline and renderer must receive this same text: demoting inside the
+ * renderer alone would give the heading an anchor that no outline link points
+ * at. Fenced code is left untouched — `# comment` inside a sample is content.
+ */
+export function normalizeBlogBody(markdown: string): string {
+  // The title line goes first, so demotion only ever touches headings the
+  // author wrote inside the body.
+  const withoutTitleLine = markdown.replace(/^# [^\n]*\n+/, "")
+  let inFence = false
+  return withoutTitleLine
+    .split("\n")
+    .map((line) => {
+      if (/^\s*(```|~~~)/.test(line)) {
+        inFence = !inFence
+        return line
+      }
+      if (inFence) return line
+      const gluedHeading = line.match(/^(#{2,6})(?=[^#\s])(.+)$/)
+      if (gluedHeading) return `${gluedHeading[1]} ${gluedHeading[2]}`
+      const gluedItem = line.match(/^([-+])(?=[A-Za-z*_![])(.+)$/)
+      if (gluedItem) return `${gluedItem[1]} ${gluedItem[2]}`
+      return /^# (?!#)/.test(line) ? `##${line.slice(1)}` : line
+    })
+    .join("\n")
+}
+
 /** Strip markdown syntax for excerpts, search indexes and meta fallbacks. */
 export function markdownToText(markdown: string): string {
   return markdown
@@ -41,13 +81,9 @@ interface TocEntry {
   level: number
 }
 
-export function headingId(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .trim()
-    .replace(/\s+/g, "-")
-}
+/** The anchor scheme is shared with the renderer, so an outline link always
+ * points at a heading that exists. */
+export { headingId } from "@/lib/resources/media"
 
 /**
  * H2/H3 outline used for the table of contents and heading-hierarchy audit.
@@ -57,31 +93,31 @@ export function headingId(text: string): string {
  * stays a scannable outline rather than a full document map.
  */
 export function markdownToc(markdown: string, maxLevel = 3): TocEntry[] {
-  const entries: TocEntry[] = []
-  const seen = new Map<string, number>()
-  let inFence = false
-  for (const line of markdown.split(/\r?\n/)) {
-    if (/^\s*(```|~~~)/.test(line)) {
-      inFence = !inFence
-      continue
-    }
-    if (inFence) continue
-    const match = /^(#{2,6})\s+(.+?)\s*#*\s*$/.exec(line)
-    if (!match) continue
-    if (match[1].length > maxLevel) continue
-    const text = match[2].replace(/[*_`]/g, "").trim()
-    if (!text) continue
-    const base = headingId(text) || "section"
-    const count = seen.get(base) ?? 0
-    seen.set(base, count + 1)
-    entries.push({ id: count === 0 ? base : `${base}-${count}`, text, level: match[1].length })
-  }
-  return entries
+  return markdownHeadingEntries(markdown)
+    .filter((heading) => heading.level <= maxLevel)
+    .map(({ id, text, level }) => ({ id, text, level }))
 }
 
 export interface FaqEntry {
   q: string
   a: string
+}
+
+/**
+ * Split a trailing FAQ section out of the markdown so it renders once as an
+ * accessible accordion (and feeds FAQPage structured data) instead of twice.
+ *
+ * The public page uses the returned body for BOTH the rendered article and
+ * the table of contents, so the outline matches the headings on the page.
+ */
+export function splitFaqSection(markdown: string): { body: string; faqMarkdown: string | null } {
+  const match = /^##\s+(?:frequently asked questions|faq)\s*$/im.exec(markdown)
+  if (!match) return { body: markdown, faqMarkdown: null }
+  const rest = markdown.slice(match.index + match[0].length)
+  const nextHeading = rest.search(/^##\s+/m)
+  const faqMarkdown = nextHeading === -1 ? rest : rest.slice(0, nextHeading)
+  const tail = nextHeading === -1 ? "" : rest.slice(nextHeading)
+  return { body: `${markdown.slice(0, match.index)}${tail}`.trim(), faqMarkdown }
 }
 
 /** Reads a "## Frequently asked questions" section with **Q:** / A: pairs or

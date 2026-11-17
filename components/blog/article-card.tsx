@@ -41,7 +41,7 @@ export function ArticleCard({ article, featured = false }: { article: BlogArticl
           </span>
         ) : null}
       </div>
-      <h2 className={`text-balance font-semibold tracking-tight ${featured ? "text-2xl" : "text-xl"}`}>
+      <h2 className={`text-balance break-words font-semibold tracking-tight ${featured ? "text-2xl" : "text-xl"}`}>
         <Link href={`/blog/${article.slug}`} className="hover:text-primary">
           {article.title}
         </Link>

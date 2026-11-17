@@ -6,6 +6,7 @@ import {
   headingId,
   markdownToText,
   markdownToc,
+  normalizeBlogBody,
   readingMinutes,
   slugifyBlog,
   todayIso,
@@ -78,7 +79,9 @@ describe("markdownToc", () => {
   it("gives duplicate headings unique anchors", () => {
     const toc = markdownToc("## Setup\n\n## Setup")
     expect(toc[0].id).toBe("setup")
-    expect(toc[1].id).toBe("setup-1")
+    // The anchor scheme is shared with the renderer, so the second heading is
+    // "setup-2" in both the outline and on the page.
+    expect(toc[1].id).toBe("setup-2")
   })
 
   it("skips H1 because the page title already renders as the H1", () => {
@@ -88,6 +91,42 @@ describe("markdownToc", () => {
   it("can include deeper levels on request", () => {
     expect(markdownToc("## Two\n\n#### Four")).toHaveLength(1)
     expect(markdownToc("## Two\n\n#### Four", 4)).toHaveLength(2)
+  })
+})
+
+describe("normalizeBlogBody", () => {
+  it("drops the leading title line because the hero renders the H1", () => {
+    expect(normalizeBlogBody("# My Title\n\n## Section")).toBe("## Section")
+  })
+
+  it("demotes a stray in-body H1 so it is styled and lands in the outline", () => {
+    const body = normalizeBlogBody("## First\n\n# Stray\n\ntext")
+    expect(body).toBe("## First\n\n## Stray\n\ntext")
+    expect(markdownToc(body).map((entry) => entry.text)).toEqual(["First", "Stray"])
+  })
+
+  it("leaves hash comments inside code fences alone", () => {
+    const markdown = "```bash\n# run the build\n## not a heading\n```\n\n## Real"
+    expect(normalizeBlogBody(markdown)).toBe(markdown)
+  })
+
+  it("repairs pasted headings and list items that Markdown would not parse", () => {
+    expect(normalizeBlogBody("##Quick start")).toBe("## Quick start")
+    expect(normalizeBlogBody("####Deep")).toBe("#### Deep")
+    expect(normalizeBlogBody("-first item")).toBe("- first item")
+  })
+
+  it("does not invent structure out of prose", () => {
+    // A single hash before a word is indistinguishable from a hashtag, and a
+    // leading dash before a number is text, not a bullet.
+    expect(normalizeBlogBody("#buildwithai is the tag")).toBe("#buildwithai is the tag")
+    expect(normalizeBlogBody("-50% off for the first month")).toBe("-50% off for the first month")
+    expect(normalizeBlogBody("---")).toBe("---")
+  })
+
+  it("keeps the outline anchor in step with the repaired heading", () => {
+    const body = normalizeBlogBody("##Pricing")
+    expect(markdownToc(body)[0].id).toBe(headingId("Pricing"))
   })
 })
 

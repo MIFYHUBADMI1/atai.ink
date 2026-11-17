@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 
 import { ArticleCard } from "@/components/blog/article-card"
 import { ArticleBody } from "@/components/blog/article-body"
+import { ArticlePreview } from "@/components/blog/article-preview"
 import { ComparisonTable } from "@/components/blog/comparison-table"
 import { FaqSection } from "@/components/blog/faq-section"
 import { BlogPagination } from "@/components/blog/pagination"
@@ -109,6 +110,54 @@ describe("ArticleBody", () => {
     expect(html).toContain("Is Atai a code generator?")
     expect(html).toContain("No. Atai runs the business lifecycle.")
     expect(html.match(/Frequently asked questions/g)?.length ?? 0).toBeLessThanOrEqual(2)
+  })
+})
+
+describe("ArticlePreview", () => {
+  const meta = {
+    title: "How to validate a business idea",
+    description: "A practical guide.",
+    category: "business-building",
+    tags: [] as string[],
+    author: { name: "Atai Team" },
+  }
+
+  it("shows the reader-facing markdown, not the literal syntax the admin typed", () => {
+    const html = renderToStaticMarkup(
+      <ArticlePreview
+        article={{
+          ...meta,
+          body: [
+            "Intro paragraph.",
+            "",
+            "##Quick start",
+            "",
+            "-first step",
+            "",
+            "# Stray heading further down",
+          ].join("\n"),
+        }}
+      />,
+    )
+    expect(html).toContain("<h2")
+    expect(html).toContain("Quick start")
+    expect(html).toContain("<li ")
+    // The repaired heading also owns the anchor the outline links to.
+    expect(html).toContain('href="#quick-start"')
+    expect(html).not.toContain("##Quick")
+    expect(html).not.toContain("# Stray")
+  })
+
+  it("keeps exactly one H1 — the article title, never a body heading", () => {
+    const html = renderToStaticMarkup(
+      <ArticlePreview article={{ ...meta, body: "# Duplicated title\n\n## Section" }} />,
+    )
+    expect(html.match(/<h1/g)?.length ?? 0).toBe(1)
+  })
+
+  it("says plainly when there is nothing to read yet", () => {
+    const html = renderToStaticMarkup(<ArticlePreview article={{ ...meta, body: "" }} />)
+    expect(html).toContain("The body is empty")
   })
 })
 

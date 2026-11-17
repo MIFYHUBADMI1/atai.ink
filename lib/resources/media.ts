@@ -111,34 +111,26 @@ export function headingId(text: string): string {
     .slice(0, 80)
 }
 
-export function markdownHeadings(markdown: string | undefined): { id: string; text: string }[] {
-  if (!markdown) return []
-  const headings: { id: string; text: string }[] = []
-  const seen = new Map<string, number>()
-  let fenced = false
-  for (const line of markdown.split(/\r?\n/)) {
-    if (/^\s*(```|~~~)/.test(line)) {
-      fenced = !fenced
-      continue
-    }
-    if (fenced) continue
-    const match = /^##\s+(.+?)\s*#*\s*$/.exec(line)
-    if (!match) continue
-    const text = match[1].replace(/[*_`~]/g, "").trim()
-    if (!text) continue
-    const base = headingId(text) || "section"
-    const count = seen.get(base) ?? 0
-    seen.set(base, count + 1)
-    headings.push({ id: count === 0 ? base : `${base}-${count + 1}`, text })
-  }
-  return headings
+export interface MarkdownHeading {
+  /** The anchor the renderer puts on the heading. */
+  id: string
+  text: string
+  /** 2 for an H2, 3 for an H3 and so on. */
+  level: number
+  /** 1-based source line, so the renderer can look the id up. */
+  line: number
 }
 
-/** Same ids as `markdownHeadings`, keyed by 1-based source line so the
- * renderer and the table of contents always point at the same anchor. */
-export function markdownHeadingIdsByLine(markdown: string | undefined): Map<number, string> {
-  const ids = new Map<number, string>()
-  if (!markdown) return ids
+/**
+ * Every heading in a document, with the anchor the renderer will use.
+ *
+ * One walker, one id scheme: the table of contents and the rendered headings
+ * are generated from this single list, so an outline link can never point at
+ * an anchor that does not exist. A repeated heading gets a `-2`, `-3` suffix.
+ */
+export function markdownHeadingEntries(markdown: string | undefined): MarkdownHeading[] {
+  if (!markdown) return []
+  const headings: MarkdownHeading[] = []
   const seen = new Map<string, number>()
   let fenced = false
   markdown.split(/\r?\n/).forEach((line, index) => {
@@ -147,15 +139,29 @@ export function markdownHeadingIdsByLine(markdown: string | undefined): Map<numb
       return
     }
     if (fenced) return
-    const match = /^##\s+(.+?)\s*#*\s*$/.exec(line)
+    const match = /^(#{2,6})\s+(.+?)\s*#*\s*$/.exec(line)
     if (!match) return
-    const text = match[1].replace(/[*_`~]/g, "").trim()
+    const text = match[2].replace(/[*_`~]/g, "").trim()
     if (!text) return
     const base = headingId(text) || "section"
     const count = seen.get(base) ?? 0
     seen.set(base, count + 1)
-    ids.set(index + 1, count === 0 ? base : `${base}-${count + 1}`)
+    headings.push({ id: count === 0 ? base : `${base}-${count + 1}`, text, level: match[1].length, line: index + 1 })
   })
+  return headings
+}
+
+export function markdownHeadings(markdown: string | undefined): { id: string; text: string }[] {
+  return markdownHeadingEntries(markdown)
+    .filter((heading) => heading.level === 2)
+    .map(({ id, text }) => ({ id, text }))
+}
+
+/** Same ids as `markdownHeadings`, keyed by 1-based source line so the
+ * renderer and the table of contents always point at the same anchor. */
+export function markdownHeadingIdsByLine(markdown: string | undefined): Map<number, string> {
+  const ids = new Map<number, string>()
+  for (const heading of markdownHeadingEntries(markdown)) ids.set(heading.line, heading.id)
   return ids
 }
 

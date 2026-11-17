@@ -95,6 +95,8 @@ export function sanitizeBlogText(value: string): string {
   if (!value) return ""
   return value
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "")
-    .replace(/<[^>]*>/g, "")
+    // Only real tags are removed. A bare "<" in prose — "pricing < $50" —
+    // is not markup and must survive.
+    .replace(/<\/?[a-z][^>]*>/gi, "")
     .trim()
 }
