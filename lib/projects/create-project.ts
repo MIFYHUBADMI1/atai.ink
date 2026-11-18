@@ -5,6 +5,8 @@ import { startProjectPipeline } from "@/lib/projects/pipeline-recovery"
 import { saveProjectAttachments } from "@/lib/projects/attachments"
 import { authorizeProjectCreation, ENTITLEMENT_ENFORCEMENT_ENABLED } from "@/lib/billing/entitlements/require"
 import { normalizeUrl } from "@/lib/integrations/firecrawl/service"
+import { buildIntakeRecord, sanitizeIntakeInput, startBusinessIntake, type IntakeInput } from "@/lib/existing-business/intake"
+import type { BusinessStartingPoint } from "@/lib/types/business-intake"
 import type { MirrorProject, ProjectPreferences, UserPipelineMode } from "@/lib/types/project"
 
 export type CreateProjectInput = {
@@ -25,6 +27,12 @@ export type CreateProjectInput = {
   idempotencyKey?: string
   skipAnalysis?: boolean
   attachments?: Array<{ name: string; content: string; size?: number }>
+  /** "existing_business" starts the intake journey. Anything else (including
+   * absent) keeps every existing creation path exactly as it was. */
+  startingPoint?: string
+  /** Answers from the existing-business form. Only read when `startingPoint`
+   * is "existing_business". */
+  intake?: IntakeInput
 }
 
 const IDEMPOTENCY_WINDOW_MS = 10 * 60 * 1000
@@ -60,6 +68,8 @@ function newProject(
     pipelineMode: partial.pipelineMode,
     idea: partial.idea,
     preferences: partial.preferences,
+    startingPoint: partial.startingPoint,
+    intake: partial.intake,
     events: [{ id: cryptoId(), at: now, level: "info", stage: "create", message: "Project created" }],
     conversation: [],
     deployment: { id: cryptoId(), status: "idle", updatedAt: now },
@@ -131,7 +141,14 @@ export async function createUserProject(userId: string, body: CreateProjectInput
     }
   }
 
-  const mode = body.mode === "scratch" ? "scratch" : body.mode === "github" ? "github" : "website"
+  const startingPoint: BusinessStartingPoint | undefined =
+    body.startingPoint === "existing_business" ? "existing_business" : undefined
+  // An existing business is read, never mirrored: regardless of what the
+  // client sent, the intake journey always uses the one mode that cannot
+  // trigger a crawl-and-rebuild pipeline.
+  const mode = startingPoint === "existing_business"
+    ? "scratch"
+    : body.mode === "scratch" ? "scratch" : body.mode === "github" ? "github" : "website"
   const crawlMode = body.crawlMode === "deep" ? "deep" : "relevant"
   const pipelineMode: UserPipelineMode = body.pipelineMode === "heavy" ? "heavy" : body.pipelineMode === "legacy" ? "legacy" : "heavy"
   const originalIntent = (body.idea ?? body.userRequest ?? "").trim() || undefined
@@ -230,22 +247,61 @@ export async function createUserProject(userId: string, body: CreateProjectInput
     return { project, reused: false }
   }
 
-  const idea = (body.idea ?? "").trim()
-  if (idea.length < 8) {
+  // ── Existing-business intake (Phase 1) ──────────────────────────────────
+  // Still `mode: "scratch"`, because that is the one mode that never makes
+  // anything assume this website should be mirrored or rebuilt. What makes it
+  // an existing business is `startingPoint` + the intake record, both additive.
+  const isExistingBusiness = startingPoint === "existing_business"
+  const intake = isExistingBusiness ? sanitizeIntakeInput((body.intake ?? {}) as Record<string, unknown>) : undefined
+  const idea = isExistingBusiness
+    ? (intake?.description ?? "").trim()
+    : (body.idea ?? "").trim()
+
+  if (isExistingBusiness) {
+    const hasAnything = Boolean(idea || intake?.websiteUrl || (intake?.githubOwner && intake?.githubRepo))
+    if (!hasAnything) {
+      return {
+        error: fail("VALIDATION", "Tell us about your business, or give us a website or repository to read.", 422),
+      }
+    }
+  } else if (idea.length < 8) {
     return { error: fail("VALIDATION", "Please describe your app idea in a bit more detail.", 422) }
   }
   const existing = await findRecentDuplicate(userId, { idea })
   if (existing) return { project: existing, reused: true }
 
   const preferences = body.preferences
-  const projectName = body.name?.trim() || preferences?.appName || titleFromIntent(idea, "New app")
-  const project = newProject(userId, { mode, idea, name: projectName, preferences, pipelineMode, workspaceId: body.workspaceId })
+  const projectName =
+    body.name?.trim() ||
+    intake?.displayName ||
+    preferences?.appName ||
+    titleFromIntent(idea, isExistingBusiness ? "Existing business" : "New app")
+  const project = newProject(userId, {
+    mode,
+    idea: idea || undefined,
+    name: projectName,
+    preferences,
+    pipelineMode,
+    workspaceId: body.workspaceId,
+    ...(isExistingBusiness
+      ? {
+          startingPoint: startingPoint as BusinessStartingPoint,
+          intake: buildIntakeRecord(intake ?? {}),
+        }
+      : {}),
+  })
   await store.createProject(project)
   if (idempotencyKey) {
     const { saveCreateIdempotency } = await import("@/lib/start/pending-store")
     await saveCreateIdempotency(userId, idempotencyKey, project.id)
   }
   await stageAttachments(project.id, userId, body.attachments)
+  if (isExistingBusiness) {
+    // Reading the business is not building an application: the pipeline that
+    // produces a plan and a site is deliberately never started here.
+    void startBusinessIntake(project.id)
+    return { project, reused: false }
+  }
   if (!body.skipAnalysis) void startProjectPipeline(project.id)
   return { project, reused: false }
 }

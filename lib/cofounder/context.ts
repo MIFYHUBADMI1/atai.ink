@@ -4,10 +4,14 @@ import { getAvailableCredits, getBalance } from "@/lib/billing/credit-service"
 import { computePlanHealth, PLAN_SECTIONS, isPlaceholderValue } from "@/lib/analysis/plan-sections"
 import { buildPlanBrief } from "@/lib/analysis/cofounder"
 import { planIsLocked } from "@/lib/types/project"
+import { businessStartingPointOf } from "@/lib/types/business-intake"
+import { objectiveLabel } from "@/lib/existing-business/objectives"
+import { listProjectDomains } from "@/lib/domain/service"
 import type {
   CofounderBuildSummary,
   CofounderCreditCosts,
   CofounderEventSummary,
+  CofounderExistingBusinessBrief,
   CofounderProjectSummary,
   ToolContext,
 } from "./types"
@@ -96,6 +100,56 @@ export async function buildWorkspaceOverview(userId: string): Promise<{
   }
 }
 
+/** Bounded existing-business digest for the prompt block. Reads the same
+ * intake record the profile page shows; domain truth comes from the domain
+ * records (the intake projection is only written at registration). */
+async function buildExistingBusinessBrief(project: {
+  id: string
+  startingPoint?: string
+  intake?: import("@/lib/types/business-intake").BusinessIntake
+}): Promise<CofounderExistingBusinessBrief> {
+  const intake = project.intake
+  const domains = await listProjectDomains(project.id).catch(() => [])
+  const result = intake?.assessment?.result
+  const websiteError =
+    intake?.website &&
+    (intake.website.status === "failed" || intake.website.status === "partially_completed") &&
+    intake.website.errorMessage
+      ? intake.website.errorMessage.slice(0, 160)
+      : undefined
+  return {
+    ...(intake?.displayName ? { displayName: intake.displayName } : {}),
+    ...(intake?.description ? { description: intake.description.slice(0, 500) } : {}),
+    ...(intake?.targetCustomers ? { targetCustomers: intake.targetCustomers.slice(0, 300) } : {}),
+    objectives: (intake?.objectives ?? []).map((id) => objectiveLabel(id)),
+    website: {
+      submitted: Boolean(intake?.website?.url),
+      analyzed: intake?.website?.status === "completed",
+      ...(intake?.website?.url ? { url: intake.website.url } : {}),
+      status: intake?.website?.status ?? "skipped",
+      ...(websiteError ? { error: websiteError } : {}),
+    },
+    repository: {
+      connected: Boolean(intake?.repo?.owner && intake?.repo?.repo),
+      read: intake?.repo?.status === "completed",
+      ...(intake?.repo?.owner ? { label: `${intake.repo.owner}/${intake.repo.repo ?? ""}` } : {}),
+      status: intake?.repo?.status ?? "skipped",
+    },
+    domainVerified: domains.some((d) => d.status === "verified" && !d.releasedAt),
+    assessment: {
+      status: intake?.assessment?.status ?? "pending",
+      ...(result?.understanding ? { understanding: result.understanding.slice(0, 700) } : {}),
+      ...(result?.currentPosition ? { currentPosition: result.currentPosition.slice(0, 700) } : {}),
+      priorities: (result?.priorities ?? []).slice(0, 6).map((p) => ({
+        title: p.title,
+        priority: p.priority,
+        ...(p.route ? { route: p.route } : {}),
+      })),
+      openQuestions: (result?.openQuestions ?? []).slice(0, 5),
+    },
+  }
+}
+
 /** Compact active-project brief for the system prompt block. */
 export async function buildActiveProjectBrief(
   projectId: string,
@@ -118,10 +172,16 @@ export async function buildActiveProjectBrief(
   /** Founder's per-project permission for the co-founder to read product
    * analytics (default false). Lets the model know before it calls the tool. */
   analyticsConsentEnabled?: boolean
+  /** Present only for businesses that joined with an existing business. */
+  existingBusiness?: CofounderExistingBusinessBrief
 } | null> {
   const project = await store.getProject(projectId)
   if (!project || project.userId !== userId) return null
   const spec = project.specification
+  const existingBusiness =
+    businessStartingPointOf(project) === "existing_business"
+      ? await buildExistingBusinessBrief(project)
+      : undefined
   return {
     id: project.id,
     name: project.name,
@@ -134,6 +194,7 @@ export async function buildActiveProjectBrief(
     ...(project.state === "building" || project.state === "deploying" ? { buildState: project.state } : {}),
     ...(project.deployment?.productionUrl ? { deployedUrl: project.deployment.productionUrl } : {}),
     analyticsConsentEnabled: project.analyticsConsent?.enabled === true,
+    ...(existingBusiness ? { existingBusiness } : {}),
   }
 }
 

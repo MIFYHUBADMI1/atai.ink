@@ -29,6 +29,7 @@ export type ProjectTarget =
   | "readme"
   | "runtime"
   | "intelligence"
+  | "business"
   | "market"
   | "studio"
   | "tasks"
@@ -77,6 +78,7 @@ export const PROJECT_TARGETS: readonly ProjectTarget[] = [
   "readme",
   "runtime",
   "intelligence",
+  "business",
   "market",
   "studio",
   "tasks",
@@ -118,6 +120,7 @@ export function resolveProjectTarget(target: ProjectTarget, projectId: string): 
     case "readme": return `/project/${id}/readme`
     case "runtime": return `/project/${id}/runtime`
     case "intelligence": return `/project/${id}/intelligence`
+    case "business": return `/project/${id}/business`
     case "market": return `/project/${id}/market`
     case "studio": return `/project/${id}/studio`
     case "tasks": return `/project/${id}/tasks`

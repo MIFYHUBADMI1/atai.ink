@@ -66,6 +66,7 @@ describe("tool registry — allow-list invariants", () => {
       "get_credit_costs",
       "get_growth_overview",
       "get_product_analytics",
+      "get_business_assessment",
       "stop_build",
       "propose_plan_update",
       "apply_plan_update",
@@ -146,6 +147,7 @@ describe("tool registry — risk and confirmation invariants", () => {
       "get_credit_costs",
       "get_growth_overview",
       "get_product_analytics",
+      "get_business_assessment",
       "list_growth_tasks",
       "list_campaigns",
     ]) {

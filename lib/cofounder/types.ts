@@ -50,6 +50,27 @@ export interface CofounderBuildSummary {
   developmentUrl?: string
 }
 
+/** Bounded digest of an existing-business intake for the system prompt block.
+ * Never carries verification tokens or full crawl output — the READ tool
+ * serves the full assessment on demand. */
+export interface CofounderExistingBusinessBrief {
+  displayName?: string
+  description?: string
+  targetCustomers?: string
+  objectives: string[]
+  website: { submitted: boolean; analyzed: boolean; url?: string; status: string; error?: string }
+  repository: { connected: boolean; read: boolean; label?: string; status: string }
+  /** From the authoritative domain records, not the intake projection. */
+  domainVerified: boolean
+  assessment: {
+    status: string
+    understanding?: string
+    currentPosition?: string
+    priorities: Array<{ title: string; priority: string; route?: string }>
+    openQuestions: string[]
+  }
+}
+
 export interface CofounderDeploymentSummary {
   status: string
   productionUrl?: string
@@ -99,6 +120,7 @@ export type ToolResultType =
   | "credit_costs"
   | "growth_overview"
   | "product_analytics"
+  | "business_assessment"
   | "seo_audit"
   | "marketing_content"
   | "marketing_content_list"

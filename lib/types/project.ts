@@ -3,6 +3,7 @@ import type { ApplicationSpecification } from "./specification"
 import type { PlanAnalysis } from "./plan-analysis"
 import type { AIArtifact } from "./ai-artifacts"
 import type { RuntimeProvisioningMap } from "@/lib/runtime/provisioning/types"
+import type { BusinessIntake, BusinessStartingPoint } from "./business-intake"
 
 /** Explicit Atai project lifecycle (spec section 30). State is always
  * persisted server-side and never inferred from frontend state alone. */
@@ -209,6 +210,12 @@ export interface MirrorProject {
   /** Workspace the project belongs to (ADR-7). Absent for legacy/personal projects. */
   workspaceId?: string
   mode: ProjectMode
+  /** Whether the founder arrived with a business already running. Absent on
+   * every project created before this feature and must read as "from_scratch". */
+  startingPoint?: BusinessStartingPoint
+  /** What the founder told us about an existing business, what we could read,
+   * and the assessment built from it. Only present for existing businesses. */
+  intake?: BusinessIntake
   name: string
   state: ProjectState
   sourceUrl?: string

@@ -36,6 +36,7 @@ describe("route registry — valid targets", () => {
     expect(resolveNavigationTarget({ target: "readme", projectId: "abc" })).toBe("/project/abc/readme")
     expect(resolveNavigationTarget({ target: "runtime", projectId: "abc" })).toBe("/project/abc/runtime")
     expect(resolveNavigationTarget({ target: "intelligence", projectId: "abc" })).toBe("/project/abc/intelligence")
+    expect(resolveNavigationTarget({ target: "business", projectId: "abc" })).toBe("/project/abc/business")
     expect(resolveNavigationTarget({ target: "market", projectId: "abc" })).toBe("/project/abc/market")
     expect(resolveNavigationTarget({ target: "studio", projectId: "abc" })).toBe("/project/abc/studio")
     expect(resolveNavigationTarget({ target: "tasks", projectId: "abc" })).toBe("/project/abc/tasks")
