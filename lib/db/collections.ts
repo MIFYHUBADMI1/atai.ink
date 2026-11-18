@@ -8,6 +8,7 @@ import type {
   FeatureRequestVoteDoc,
 } from "@/lib/feature-requests/types"
 import type { MirrorProject, BuildRun } from "@/lib/types/project"
+import type { BusinessDomainDoc } from "@/lib/types/business-intake"
 import type { CofounderConversationMongoDoc, PendingActionRecord } from "@/lib/cofounder/types"
 import type { CofounderModelTierDoc } from "@/lib/cofounder/models"
 import type { ProjectChatMongoDoc } from "@/lib/types/collab-chat"
@@ -239,6 +240,18 @@ export async function projectForksCol() {
 
 export async function projectGitHubCol() {
   return (await getDbCached()).collection<ProjectGitHubDoc & { _id?: unknown }>("project_github")
+}
+
+/**
+ * Domain ownership records (Phase 1.5). ONE row per claimed hostname per
+ * business, holding the current challenge (hashed token only) and a bounded
+ * status history. Its own collection because hostname uniqueness is a
+ * CROSS-BUSINESS question — it cannot be enforced from inside a project
+ * document. Link-only by projectId; the verification target is always the
+ * exact hostname, never the registrable domain.
+ */
+export async function businessDomainsCol() {
+  return (await getDbCached()).collection<BusinessDomainDoc & { _id?: import("mongodb").ObjectId }>("business_domains")
 }
 
 export async function featureRequestsCol() {
@@ -802,6 +815,20 @@ async function runEnsureIndexes(): Promise<void> {
   await batchedIndexCreation([
     projectGitHub.createIndex({ projectId: 1 }, { unique: true, name: "project_github_project_unique" }),
     projectGitHub.createIndex({ userId: 1 }),
+  ])
+
+  // Domain ownership indexes. The hostname index is UNIQUE across unreleased
+  // records, which is what makes "this domain already belongs to another
+  // business" a database guarantee rather than a check-then-insert race.
+  const businessDomains = await businessDomainsCol()
+  await batchedIndexCreation([
+    businessDomains.createIndex({ id: 1 }, { unique: true, sparse: true, name: "business_domains_id_unique" }),
+    businessDomains.createIndex(
+      { hostname: 1 },
+      { unique: true, partialFilterExpression: { releasedAt: { $exists: false } }, name: "business_domains_hostname_active_unique" },
+    ),
+    businessDomains.createIndex({ projectId: 1, createdAt: -1 }),
+    businessDomains.createIndex({ userId: 1, updatedAt: -1 }),
   ])
 
 

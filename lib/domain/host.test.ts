@@ -1,0 +1,133 @@
+import { describe, expect, it } from "vitest"
+import {
+  DomainInputError,
+  assertSiteUrl,
+  formatHostForUrl,
+  isIpLiteralHost,
+  normalizeHostname,
+  registrableDomainOf,
+  sameHost,
+} from "./host"
+
+describe("normalizeHostname", () => {
+  it("lowercases and strips scheme, path and trailing dot", () => {
+    expect(normalizeHostname("HTTPS://WWW.Example.COM/some/path?q=1")).toBe("www.example.com")
+    expect(normalizeHostname("example.com.")).toBe("example.com")
+    expect(normalizeHostname("  shop.example.com  ")).toBe("shop.example.com")
+  })
+
+  it("accepts a bare hostname by assuming https", () => {
+    expect(normalizeHostname("yourbusiness.com")).toBe("yourbusiness.com")
+  })
+
+  it("IDNA-encodes internationalized domains", () => {
+    expect(normalizeHostname("https://münchen.de")).toBe("xn--mnchen-3ya.de")
+    expect(normalizeHostname("例え.jp")).toBe("xn--r8jz45g.jp")
+  })
+
+  it("keeps distinct hostnames distinct — apex, www and subdomains never collapse", () => {
+    const apex = normalizeHostname("example.com")
+    const www = normalizeHostname("www.example.com")
+    const shop = normalizeHostname("shop.example.com")
+    expect(new Set([apex, www, shop]).size).toBe(3)
+  })
+
+  it("rejects empty, malformed and invalid-label input", () => {
+    expect(() => normalizeHostname("")).toThrow(DomainInputError)
+    expect(() => normalizeHostname("   ")).toThrow(DomainInputError)
+    expect(() => normalizeHostname("not a url")).toThrow(DomainInputError)
+    expect(() => normalizeHostname("under_score.example.com")).toThrow(DomainInputError)
+    expect(() => normalizeHostname("-bad.example.com")).toThrow(DomainInputError)
+    expect(() => normalizeHostname("bad-.example.com")).toThrow(DomainInputError)
+    expect(() => normalizeHostname("localhost")).toThrow(DomainInputError) // no dot
+    expect(() => normalizeHostname(`${"a".repeat(64)}.example.com`)).toThrow(DomainInputError)
+    expect(() => normalizeHostname(`${"ab.".repeat(130)}com`)).toThrow(DomainInputError)
+  })
+
+  it("strips credentials at the hostname level (assertSiteUrl rejects them outright)", () => {
+    expect(normalizeHostname("https://user:pass@example.com")).toBe("example.com")
+  })
+})
+
+describe("assertSiteUrl", () => {
+  it("parses https and http origins with default ports", () => {
+    const https = assertSiteUrl("https://example.com")
+    expect(https).toMatchObject({ protocol: "https:", hostname: "example.com", port: 443 })
+    expect(https.homepageUrl).toBe("https://example.com/")
+    const http = assertSiteUrl("http://www.example.com/path")
+    expect(http).toMatchObject({ protocol: "http:", hostname: "www.example.com", port: 80 })
+  })
+
+  it("accepts explicit default ports", () => {
+    expect(assertSiteUrl("https://example.com:443").port).toBe(443)
+    expect(assertSiteUrl("http://example.com:80").port).toBe(80)
+  })
+
+  it("rejects non-web schemes", () => {
+    for (const url of ["file:///etc/passwd", "ftp://example.com", "data:text/html,hi", "javascript:alert(1)", "gopher://example.com"]) {
+      expect(() => assertSiteUrl(url)).toThrow(DomainInputError)
+    }
+  })
+
+  it("rejects URL credentials", () => {
+    expect(() => assertSiteUrl("https://user:pass@example.com")).toThrow(/username or password/i)
+    expect(() => assertSiteUrl("https://user@example.com")).toThrow(DomainInputError)
+  })
+
+  it("rejects arbitrary ports", () => {
+    for (const url of ["https://example.com:8443", "http://example.com:8080", "http://example.com:22", "https://example.com:4430"]) {
+      expect(() => assertSiteUrl(url)).toThrow(/ports/i)
+    }
+    // A port that does not match its scheme is also rejected.
+    expect(() => assertSiteUrl("http://example.com:443")).toThrow(DomainInputError)
+    expect(() => assertSiteUrl("https://example.com:80")).toThrow(DomainInputError)
+  })
+
+  it("rejects malformed and empty input", () => {
+    expect(() => assertSiteUrl("")).toThrow(DomainInputError)
+    expect(() => assertSiteUrl("http://")).toThrow(DomainInputError)
+    expect(() => assertSiteUrl("https://exa mple.com")).toThrow(DomainInputError)
+  })
+
+  it("preserves the exact hostname being verified, including subdomains", () => {
+    expect(assertSiteUrl("https://shop.example.com").hostname).toBe("shop.example.com")
+    expect(assertSiteUrl("https://shop.example.com").registrableDomain).toBe("example.com")
+  })
+})
+
+describe("registrableDomainOf (display only)", () => {
+  it("groups subdomains under the registrable domain", () => {
+    expect(registrableDomainOf("example.com")).toBe("example.com")
+    expect(registrableDomainOf("www.example.com")).toBe("example.com")
+    expect(registrableDomainOf("a.b.shop.example.com")).toBe("example.com")
+  })
+
+  it("handles known second-level suffixes", () => {
+    expect(registrableDomainOf("shop.example.co.uk")).toBe("example.co.uk")
+    expect(registrableDomainOf("example.co.uk")).toBe("example.co.uk")
+    expect(registrableDomainOf("www.example.com.au")).toBe("example.com.au")
+  })
+
+  it("passes IP literals through untouched", () => {
+    expect(registrableDomainOf("93.184.216.34")).toBe("93.184.216.34")
+  })
+})
+
+describe("helpers", () => {
+  it("isIpLiteralHost recognizes v4 and v6 literals only", () => {
+    expect(isIpLiteralHost("93.184.216.34")).toBe(true)
+    expect(isIpLiteralHost("2606:2800:220:1:248:1893:25c8:1946")).toBe(true)
+    expect(isIpLiteralHost("example.com")).toBe(false)
+  })
+
+  it("formatHostForUrl re-brackets IPv6", () => {
+    expect(formatHostForUrl("::1")).toBe("[::1]")
+    expect(formatHostForUrl("example.com")).toBe("example.com")
+  })
+
+  it("sameHost is case-insensitive and rejects garbage", () => {
+    expect(sameHost("WWW.Example.com", "www.example.com")).toBe(true)
+    expect(sameHost("example.com", "shop.example.com")).toBe(false)
+    expect(sameHost("example.com", "")).toBe(false)
+  })
+})
