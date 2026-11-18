@@ -251,7 +251,7 @@ export function TeamProgressPage({ initialProject, activeBuildRuns = [] }: { ini
       </section>
 
       {/* ── Now ──────────────────────────────────────────────────────── */}
-      <section aria-label="Current work" className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+      <section data-atai-tour="team-progress" aria-label="Current work" className="rounded-2xl border border-border bg-card p-5 sm:p-6">
         <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Right now</p>
         <p className="mt-3 text-base font-medium tracking-tight">{view.now.headline}</p>
         <p className="mt-1.5 max-w-2xl text-sm leading-6 text-muted-foreground">{view.now.body}</p>

@@ -2,7 +2,7 @@
 
 import { Check, FileText, Globe, Hammer, ScanSearch } from "lucide-react"
 import { CreateProjectForm } from "@/components/create-project-form"
-import { AuthGate } from "@/components/auth/auth-gate"
+import { DashboardShell } from "@/components/dashboard/dashboard-shell"
 import { CreateWorkspaceShell } from "@/components/new-project/create-shell"
 import { cn } from "@/lib/utils"
 
@@ -15,7 +15,7 @@ const STEPS = [
 
 export default function NewWebsiteProjectPage() {
   return (
-    <AuthGate next="/new/website">
+    <DashboardShell title="New business">
       <CreateWorkspaceShell
         kicker="A reference website"
         title="Start from a website you admire."
@@ -87,6 +87,6 @@ export default function NewWebsiteProjectPage() {
           </aside>
         </div>
       </CreateWorkspaceShell>
-    </AuthGate>
+    </DashboardShell>
   )
 }

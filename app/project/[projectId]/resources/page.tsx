@@ -1,5 +1,7 @@
 import { DashboardShell } from "@/components/dashboard/dashboard-shell"
 import { requireOwnedProject } from "@/lib/workspace/require-owned-project"
+import { userHasBuiltBusiness } from "@/lib/dashboard/business-access"
+import { BusinessLockedForProject } from "@/components/workspace/business-locked"
 import { getCurrentUser } from "@/lib/auth/session"
 import { getAvailableCredits } from "@/lib/billing/credit-service"
 import { ResourcesClient } from "@/components/project-resources/resources-client"
@@ -22,6 +24,7 @@ export default async function ProjectResourcesPage({
   const { projectId } = await params
   const { section } = await searchParams
   const project = await requireOwnedProject(projectId, `/project/${projectId}/resources`)
+  if (!(await userHasBuiltBusiness(project.userId))) return <BusinessLockedForProject section="Resources" projectId={project.id} />
   const user = await getCurrentUser()
 
   const spec = project.specification

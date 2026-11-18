@@ -146,7 +146,7 @@ export function GrowthTasksPanel({ projectId, state }: { projectId: string; stat
   }
 
   return (
-    <section className="flex flex-col gap-5">
+    <section data-atai-tour="tasks-board" className="flex flex-col gap-5">
       <div>
         <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight">
           <ListChecks className="h-5 w-5 text-primary" /> Growth tasks

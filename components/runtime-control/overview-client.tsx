@@ -69,7 +69,7 @@ export function RuntimeOverviewClient({ projectId }: { projectId: string }) {
         : "text-muted-foreground"
 
   return (
-    <div className="flex flex-col gap-6">
+    <div data-atai-tour="runtime-overview" className="flex flex-col gap-6">
       <p className={`text-sm font-medium ${statusColor}`}>
         <span aria-hidden>●</span> {status.label}
       </p>

@@ -68,7 +68,7 @@ export function ResourcesClient({
   const [credits, setCredits] = useState(availableCredits)
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-6 pb-20 pt-6 lg:px-10">
+    <div data-atai-tour="resources-hub" className="mx-auto w-full max-w-5xl px-6 pb-20 pt-6 lg:px-10">
       {/* Header */}
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
@@ -89,7 +89,7 @@ export function ResourcesClient({
       </div>
 
       {/* Section nav */}
-      <nav className="mb-8 flex gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1" aria-label="Resources sections">
+      <nav data-atai-tour="resources-research" className="mb-8 flex gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1" aria-label="Resources sections">
         {SECTIONS.map(({ id, label, icon: Icon }) => (
           <button
             key={id}

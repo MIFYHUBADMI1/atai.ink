@@ -5,6 +5,8 @@ import { PublishMenu } from "@/components/publish-menu"
 import { DeploymentHistory } from "@/components/deployment-history"
 import { getCurrentUser } from "@/lib/auth/session"
 import { store } from "@/lib/store/store"
+import { userHasBuiltBusiness } from "@/lib/dashboard/business-access"
+import { BusinessLockedForProject } from "@/components/workspace/business-locked"
 
 export default async function ProjectHostingPage({ params }: { params: Promise<{ projectId: string }> }) {
   const user = await getCurrentUser()
@@ -12,6 +14,7 @@ export default async function ProjectHostingPage({ params }: { params: Promise<{
   if (!user) redirect(`/login?next=${encodeURIComponent(`/project/${projectId}/hosting`)}`)
   const project = await store.getProject(projectId)
   if (!project || project.userId !== user.id) notFound()
+  if (!(await userHasBuiltBusiness(user.id))) return <BusinessLockedForProject section="Hosting" projectId={project.id} />
 
   const live = project.deploymentHistory?.some((d) => d.status === "success")
 

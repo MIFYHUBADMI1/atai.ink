@@ -849,7 +849,7 @@ export function LandingComposer({
       </div>
       ) : null}
 
-      <div className="lp-composer-shell mt-3 rounded-[1.35rem] border border-transparent bg-card/90 backdrop-blur-md">
+      <div data-atai-tour="new-composer" className="lp-composer-shell mt-3 rounded-[1.35rem] border border-transparent bg-card/90 backdrop-blur-md">
         {!focused && !hasPrompt ? (
           <span
             aria-hidden

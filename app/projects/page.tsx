@@ -1,6 +1,5 @@
 import type { Metadata } from "next"
-import { AppHeader } from "@/components/app-header"
-import { AuthGate } from "@/components/auth/auth-gate"
+import { DashboardShell } from "@/components/dashboard/dashboard-shell"
 import { ProjectsWorkspace } from "./workspace"
 import { getCurrentUser } from "@/lib/auth/session"
 import { redirect } from "next/navigation"
@@ -91,16 +90,13 @@ export default async function ProjectsPage() {
   const portfolioTotals = platformFinances?.totals ?? null
 
   return (
-    <AuthGate next="/projects">
-      <main className="min-h-svh bg-background text-foreground">
-        <AppHeader />
-        <div className="mx-auto w-full max-w-7xl px-6 py-10 lg:px-10">
-          <ProjectsWorkspace
-            projects={enrichedProjects}
-            portfolioTotals={portfolioTotals}
-          />
-        </div>
-      </main>
-    </AuthGate>
+    <DashboardShell title="Businesses">
+      <div className="mx-auto w-full max-w-7xl px-6 py-10 lg:px-10">
+        <ProjectsWorkspace
+          projects={enrichedProjects}
+          portfolioTotals={portfolioTotals}
+        />
+      </div>
+    </DashboardShell>
   )
 }

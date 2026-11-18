@@ -215,6 +215,7 @@ function ProjectCard({ project, onLikeToggle, onFollowToggle, onFork }: {
           <button
             onClick={handleFork}
             disabled={forking}
+            data-atai-tour="explore-fork"
             className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
           >
             {forking ? (
@@ -401,7 +402,7 @@ export default function ExplorePage() {
             )}
           </div>
         ) : (
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div data-atai-tour="explore-gallery" className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {(data?.projects ?? []).map(project => (
               <ProjectCard
                 key={project.id}

@@ -70,6 +70,16 @@ export interface FeaturePreferences {
   lessons?: boolean
 }
 
+/** One guided-tour progress record as stored on the user. Mirrors TourProgress
+ * in lib/tour/types.ts; declared here so the schema stays self-contained. */
+export interface TourProgressRecord {
+  step: number
+  status: "in-progress" | "completed" | "dismissed"
+  updatedAt: number
+  paused?: boolean
+  skipped?: string[]
+}
+
 export interface UserDoc {
   _id: ObjectId
   id: string // string mirror of _id for callers that expect a string id
@@ -105,6 +115,8 @@ export interface UserDoc {
   onboarding?: UserOnboarding
   /** Founder-owned feature switches — see FeaturePreferences. */
   featurePreferences?: FeaturePreferences
+  /** Guided-tour progress, keyed by tour id. Written only by /api/settings/tours. */
+  tourProgress?: Record<string, TourProgressRecord>
   /** Feedback/diagnostics consent, mirrored from the settings page. */
   feedbackPrivacy?: {
     launcherEnabled?: boolean

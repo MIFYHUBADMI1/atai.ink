@@ -101,7 +101,7 @@ export function EnvManager({ projectId, initialRequiredKeys }: EnvManagerProps) 
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div data-atai-tour="env-manager" className="flex flex-col gap-6">
 
       {/* Required keys alert */}
       {missingRequired.length > 0 && (

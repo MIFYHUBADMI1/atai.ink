@@ -263,7 +263,7 @@ export function PublishMenu({ projectId, projectName, totalumProjectId, onDeploy
     <>
       {/* Standalone Publish button — shown when not deployed and dialog closed */}
       {!isDeployed && step === "closed" && (
-        <Button onClick={openDialog} className="gap-1.5">
+        <Button data-atai-tour="app-publish" onClick={openDialog} className="gap-1.5">
           <Globe className="size-4" />
           Publish
         </Button>
@@ -316,6 +316,7 @@ export function PublishMenu({ projectId, projectName, totalumProjectId, onDeploy
           </Button>
           {!customDomain && (
             <Button
+              data-atai-tour="app-domain"
               onClick={openDialog}
               variant="outline"
               className="gap-1.5"

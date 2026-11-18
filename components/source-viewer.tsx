@@ -775,6 +775,7 @@ export function SourceViewer({ projectId, projectName }: SourceViewerProps) {
   // ═══════════════════════════════════════════════════════════════════════════════
   return (
     <div
+      data-atai-tour="source-browser"
       className="editor-shell flex flex-col overflow-hidden rounded-xl border border-border bg-card editor-appear"
       style={{ height: "calc(100vh - 180px)", minHeight: "500px" }}
     >

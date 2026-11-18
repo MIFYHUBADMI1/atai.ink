@@ -2,6 +2,8 @@ import { DashboardShell } from "@/components/dashboard/dashboard-shell"
 import { ProjectFinancesView } from "@/components/finances/project-finances-view"
 import { getProjectFinances } from "@/lib/finances/project-finances"
 import { requireOwnedProject } from "@/lib/workspace/require-owned-project"
+import { userHasBuiltBusiness } from "@/lib/dashboard/business-access"
+import { BusinessLockedForProject } from "@/components/workspace/business-locked"
 
 /**
  * Project finances — live page.
@@ -18,6 +20,7 @@ import { requireOwnedProject } from "@/lib/workspace/require-owned-project"
 export default async function ProjectFinancesPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
   const project = await requireOwnedProject(projectId, `/project/${projectId}/finances`)
+  if (!(await userHasBuiltBusiness(project.userId))) return <BusinessLockedForProject section="Business finances" projectId={project.id} />
   const finances = await getProjectFinances(project.id)
 
   return (

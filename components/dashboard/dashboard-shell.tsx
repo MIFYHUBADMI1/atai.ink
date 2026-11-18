@@ -5,6 +5,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   Bell,
+  BookOpen,
   Building2,
   Compass,
   EyeOff,
@@ -12,6 +13,7 @@ import {
   Home,
   LayoutGrid,
   Lightbulb,
+  Lock,
   Menu,
   MessageSquare,
   PanelLeft,
@@ -30,20 +32,23 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { VerifyEmailBanner } from "@/components/verify-email-banner"
 import { DashboardNotifications } from "@/components/dashboard/dashboard-notifications"
 import { CofounderPanel, useCofounderPanel } from "@/components/cofounder/cofounder-panel"
+import { PageTourLauncher } from "@/components/tour/page-tour-launcher"
 import { workspaceGrowNav, workspaceIntelligenceNav, workspaceProjectNav, type AtaiNavItem } from "@/components/workspace/atai-nav"
 import { useProjects } from "@/lib/client/api"
 import { AuthGate } from "@/components/auth/auth-gate"
 import { interpretProjectState, selectActiveProject } from "@/lib/dashboard/view-model"
+import { projectIsBuilt } from "@/lib/dashboard/built-states"
 import type { ProjectSummary } from "@/lib/types/project"
 import { cn } from "@/lib/utils"
 
 const NAV = [
-  { href: "/dashboard", label: "Home", icon: Home },
-  { href: "/projects", label: "Businesses", icon: Building2 },
-  { href: "/finances", label: "Finances", icon: Wallet },
+  { href: "/dashboard", label: "Home", icon: Home, tour: "nav-dashboard" },
+  { href: "/projects", label: "Businesses", icon: Building2, tour: "nav-businesses" },
+  { href: "/finances", label: "Finances", icon: Wallet, requiresBuilt: true },
   { href: "/notifications", label: "Notifications", icon: Bell },
   { href: "/contributions", label: "Contributions", icon: Gift },
   { href: "/new", label: "New business", icon: Sparkles },
+  { href: "/tours", label: "Guided tours", icon: BookOpen, tour: "nav-tours" },
 ] as const
 
 const DISCOVER_NAV = [
@@ -70,6 +75,7 @@ export function DashboardShell({
   const workspaceProject = resolvedProjectId ? projects.find((p) => p.id === resolvedProjectId) ?? null : null
   const active = workspaceProject ?? selectActiveProject(projects)
   const askHref = active ? `/project/${active.id}/collaborate` : "/new"
+  const hasBuilt = projects.some((p) => projectIsBuilt(p.state))
 
   useEffect(() => {
     setMobileOpen(false)
@@ -118,6 +124,7 @@ export function DashboardShell({
             askHref={askHref}
             projectId={resolvedProjectId}
             workspaceName={title}
+            hasBuilt={hasBuilt}
           />
           <div className={cn("flex items-center gap-1 border-t border-border p-2", collapsed && "flex-col")}>
             <button
@@ -170,7 +177,7 @@ export function DashboardShell({
                   <X className="size-4" />
                 </button>
               </div>
-              <SidebarBody collapsed={false} pathname={pathname} recent={recent} projectCount={projects.length} active={active} askHref={askHref} projectId={resolvedProjectId} workspaceName={title} />
+              <SidebarBody collapsed={false} pathname={pathname} recent={recent} projectCount={projects.length} active={active} askHref={askHref} projectId={resolvedProjectId} workspaceName={title} hasBuilt={hasBuilt} />
             </aside>
           </div>
         ) : null}
@@ -208,7 +215,18 @@ export function DashboardShell({
               <div className="flex shrink-0 items-center gap-2 sm:gap-3">
                 {resolvedProjectId ? <WorkspaceAskButton /> : <ProjectSearch projects={projects} />}
                 <Link
+                  href="/tours"
+                  data-atai-tour="nav-tours"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  title="Guided tours"
+                >
+                  <Compass className="size-3.5" aria-hidden />
+                  <span className="hidden sm:inline">Tours</span>
+                  <span className="sr-only sm:hidden">Guided tours</span>
+                </Link>
+                <Link
                   href="/docs"
+                  data-atai-tour="nav-help"
                   className="hidden rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground sm:inline-flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   Help
@@ -223,6 +241,7 @@ export function DashboardShell({
             </div>
             <VerifyEmailBanner />
           </header>
+          <PageTourLauncher />
           <div className="flex-1">{children}</div>
         </div>
       </div>
@@ -235,27 +254,44 @@ function SidebarLink({
   item,
   pathname,
   collapsed,
+  locked = false,
 }: {
-  item: Pick<AtaiNavItem, "href" | "label" | "icon" | "match">
+  item: Pick<AtaiNavItem, "href" | "label" | "icon" | "match" | "requiresBuilt" | "tour">
   pathname: string
   collapsed: boolean
+  locked?: boolean
 }) {
   const activeNav = item.match
     ? item.match(pathname)
     : pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href))
   const Icon = item.icon
+  const showLock = locked && item.requiresBuilt
   return (
     <Link
       href={item.href}
-      title={item.label}
+      data-atai-tour={item.tour}
+      title={showLock ? `${item.label} — unlocks once you have a built application` : item.label}
       className={cn(
         "inline-flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         collapsed && "justify-center px-0",
+        showLock && "opacity-60",
         activeNav ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
       )}
     >
       <Icon className="size-4 shrink-0" />
-      {collapsed ? <span className="sr-only">{item.label}</span> : item.label}
+      {collapsed ? (
+        <span className="sr-only">{showLock ? `${item.label} (locked)` : item.label}</span>
+      ) : (
+        <span className="flex-1 truncate">{item.label}</span>
+      )}
+      {showLock && !collapsed ? (
+        <span className="inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+          <Lock className="size-3" aria-hidden /> Locked
+        </span>
+      ) : null}
+      {showLock && collapsed ? (
+        <Lock className="size-3 shrink-0 text-muted-foreground" aria-hidden />
+      ) : null}
     </Link>
   )
 }
@@ -269,6 +305,7 @@ function SidebarBody({
   askHref,
   projectId,
   workspaceName,
+  hasBuilt,
 }: {
   collapsed: boolean
   pathname: string
@@ -278,6 +315,7 @@ function SidebarBody({
   askHref: string
   projectId?: string
   workspaceName?: string
+  hasBuilt: boolean
 }) {
   if (projectId) {
     const tools = workspaceProjectNav(projectId)
@@ -295,15 +333,15 @@ function SidebarBody({
           </div>
         ) : null}
         <nav className="flex flex-col gap-1" aria-label="Workspace">
-          <SidebarLink item={{ href: "/dashboard", label: "Dashboard", icon: Home, match: (p) => p === "/dashboard" }} pathname={pathname} collapsed={collapsed} />
-          <SidebarLink item={{ href: "/finances", label: "All business finances", icon: Wallet, match: (p) => p === "/finances" }} pathname={pathname} collapsed={collapsed} />
+          <SidebarLink item={{ href: "/dashboard", label: "Dashboard", icon: Home, tour: "nav-dashboard", match: (p) => p === "/dashboard" }} pathname={pathname} collapsed={collapsed} />
+          <SidebarLink item={{ href: "/finances", label: "All business finances", icon: Wallet, match: (p) => p === "/finances", requiresBuilt: true }} pathname={pathname} collapsed={collapsed} locked={!hasBuilt} />
         </nav>
         <nav className="flex flex-col gap-1" aria-label="Project tools">
           {!collapsed ? (
             <p className="px-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Project tools</p>
           ) : null}
           {tools.map((item) => (
-            <SidebarLink key={item.href} item={item} pathname={pathname} collapsed={collapsed} />
+            <SidebarLink key={item.href} item={item} pathname={pathname} collapsed={collapsed} locked={!hasBuilt} />
           ))}
         </nav>
         <nav className="flex flex-col gap-1" aria-label="Application intelligence">
@@ -311,7 +349,7 @@ function SidebarBody({
             <p className="px-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Application intelligence</p>
           ) : null}
           {intelligence.map((item) => (
-            <SidebarLink key={item.href} item={item} pathname={pathname} collapsed={collapsed} />
+            <SidebarLink key={item.href} item={item} pathname={pathname} collapsed={collapsed} locked={!hasBuilt} />
           ))}
         </nav>
         <nav className="flex flex-col gap-1" aria-label="Grow your business">
@@ -321,19 +359,31 @@ function SidebarBody({
           {grow.map((item) => {
             const Icon = item.icon
             const activeNav = pathname === item.href || pathname.startsWith(`${item.href}/`)
+            const showLock = !hasBuilt && item.requiresBuilt
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                title={item.label}
+                title={showLock ? `${item.label} — unlocks once you have a built application` : item.label}
                 className={cn(
                   "inline-flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   collapsed && "justify-center px-0",
+                  showLock && "opacity-60",
                   activeNav ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
                 )}
               >
                 <Icon className="size-4 shrink-0" />
-                {collapsed ? <span className="sr-only">{item.label}</span> : <span className="flex-1 truncate">{item.label}</span>}
+                {collapsed ? (
+                  <span className="sr-only">{showLock ? `${item.label} (locked)` : item.label}</span>
+                ) : (
+                  <span className="flex-1 truncate">{item.label}</span>
+                )}
+                {!collapsed && showLock ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                    <Lock className="size-3" aria-hidden /> Locked
+                  </span>
+                ) : null}
+                {collapsed && showLock ? <Lock className="size-3 shrink-0 text-muted-foreground" aria-hidden /> : null}
                 {!collapsed && item.kind === "soon" ? (
                   <span className="rounded-full bg-muted px-1.5 py-px text-[9px] font-medium uppercase tracking-wider text-muted-foreground">Soon</span>
                 ) : null}
@@ -363,7 +413,7 @@ function SidebarBody({
 
       <nav className="flex flex-col gap-1" aria-label="Primary">
         {NAV.map((item) => (
-          <SidebarLink key={item.href} item={item} pathname={pathname} collapsed={collapsed} />
+          <SidebarLink key={item.href} item={item} pathname={pathname} collapsed={collapsed} locked={!hasBuilt} />
         ))}
       </nav>
 

@@ -425,7 +425,7 @@ export function AdsBench({
   }
 
   return (
-    <section aria-labelledby="ads-bench-heading" className="flex flex-col gap-6">
+    <section data-atai-tour="ads-bench" aria-labelledby="ads-bench-heading" className="flex flex-col gap-6">
       {/* ── Start here ─────────────────────────────────────────────── */}
       <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-4 sm:p-5">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-500/60 via-primary/60 to-emerald-500/60" aria-hidden />

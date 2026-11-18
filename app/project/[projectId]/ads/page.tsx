@@ -27,6 +27,8 @@ import { AdsAnalyticsView } from "@/components/marketing/ads-analytics-view"
 import { capabilityAvailability } from "@/lib/runtime/router/adapters/availability"
 import { getAvailableCredits } from "@/lib/billing/credit-service"
 import { requireOwnedProject } from "@/lib/workspace/require-owned-project"
+import { userHasBuiltBusiness } from "@/lib/dashboard/business-access"
+import { BusinessLockedForProject } from "@/components/workspace/business-locked"
 import { logger } from "@/lib/logging/logger"
 
 /**
@@ -63,6 +65,7 @@ export default async function ProjectAdsPage({
   const tab: AdsTab = isAdsTab(rawTab) ? rawTab : requestId ? "requests" : "overview"
 
   const project = await requireOwnedProject(projectId, `/project/${projectId}/ads`)
+  if (!(await userHasBuiltBusiness(project.userId))) return <BusinessLockedForProject section="Ads & Growth" projectId={project.id} />
   const user = await getCurrentUser()
 
   if (!user || !isMarketStudioEnabled()) {
@@ -80,7 +83,7 @@ export default async function ProjectAdsPage({
   return (
     <DashboardShell title={project.name} projectId={project.id}>
       <div className="mx-auto w-full max-w-6xl px-4 pb-12 pt-6 sm:px-6 sm:pt-8 lg:px-8 lg:pb-16">
-        <header className="mb-4 flex flex-col gap-2">
+        <header data-atai-tour="ads-overview" className="mb-4 flex flex-col gap-2">
           <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Ads &amp; growth</p>
           <h1 className="break-words text-2xl font-semibold tracking-tight text-balance sm:text-3xl lg:text-4xl">
             Growth Center for {project.name}

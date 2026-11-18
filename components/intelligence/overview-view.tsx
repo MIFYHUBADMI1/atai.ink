@@ -85,7 +85,7 @@ export function IntelligenceOverviewView({ overview }: { overview: IntelligenceO
       <div className="flex flex-col gap-3 pb-6 pt-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Application intelligence</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">What Atai knows about {overview.projectName}</h1>
+          <h1 data-atai-tour="intelligence-overview" className="mt-1 text-2xl font-semibold tracking-tight">What Atai knows about {overview.projectName}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Measured over the last {windowDays} days · generated {new Date(overview.generatedAt).toLocaleString()}
           </p>

@@ -33,6 +33,10 @@ export interface AtaiNavItem {
   icon: LucideIcon
   kind: AtaiNavKind
   match?: (pathname: string) => boolean
+  /** Guided-tour anchor id — must exist in lib/tour/targets.ts and on this link. */
+  tour?: string
+  /** Workspace section that only opens once the founder has a built/live app. */
+  requiresBuilt?: boolean
 }
 
 export interface AtaiNavGroup {
@@ -47,13 +51,13 @@ export function workspaceProjectNav(projectId: string): AtaiNavItem[] {
     { href: `${root}/progress`, label: "Team progress", icon: ListChecks, kind: "link" },
     { href: `${root}/collaborate`, label: "Collaborate", icon: Sparkles, kind: "link" },
     { href: `${root}/plan`, label: "Plan", icon: FileText, kind: "link" },
-    { href: `${root}/edit`, label: "Edit app", icon: Pencil, kind: "link" },
-    { href: `${root}/source`, label: "Source", icon: Code2, kind: "link" },
-    { href: `${root}/runtime`, label: "Runtime", icon: Server, kind: "link" },
-    { href: `${root}/database`, label: "Database", icon: Database, kind: "link" },
-    { href: `${root}/env`, label: "Environment", icon: Settings, kind: "link" },
-    { href: `${root}/hosting`, label: "Hosting", icon: Globe, kind: "link" },
-    { href: `/api/projects/${projectId}/export`, label: "Export snapshot", icon: Download, kind: "link", match: () => false },
+    { href: `${root}/edit`, label: "Edit app", icon: Pencil, kind: "link", requiresBuilt: true },
+    { href: `${root}/source`, label: "Source", icon: Code2, kind: "link", requiresBuilt: true },
+    { href: `${root}/runtime`, label: "Runtime", icon: Server, kind: "link", requiresBuilt: true },
+    { href: `${root}/database`, label: "Database", icon: Database, kind: "link", requiresBuilt: true },
+    { href: `${root}/env`, label: "Environment", icon: Settings, kind: "link", requiresBuilt: true },
+    { href: `${root}/hosting`, label: "Hosting", icon: Globe, kind: "link", requiresBuilt: true },
+    { href: `/api/projects/${projectId}/export`, label: "Export snapshot", icon: Download, kind: "link", match: () => false, requiresBuilt: true },
   ]
 }
 
@@ -66,19 +70,19 @@ export function workspaceProjectNav(projectId: string): AtaiNavItem[] {
 export function workspaceIntelligenceNav(projectId: string): AtaiNavItem[] {
   const root = `/project/${projectId}/intelligence`
   return [
-    { href: root, label: "Intelligence", icon: LineChart, kind: "link", match: (p) => p === root || p.startsWith(`${root}/`) },
+    { href: root, label: "Intelligence", icon: LineChart, kind: "link", match: (p) => p === root || p.startsWith(`${root}/`), requiresBuilt: true },
   ]
 }
 
 export function workspaceGrowNav(projectId: string): AtaiNavItem[] {
   return [
-    { href: `/project/${projectId}/market`, label: "Market & grow", icon: TrendingUp, kind: "link" },
-    { href: `/project/${projectId}/ads`, label: "Ads & Growth", icon: Megaphone, kind: "link" },
-    { href: `/project/${projectId}/campaigns`, label: "Campaigns", icon: Target, kind: "link" },
-    { href: `/project/${projectId}/finances`, label: "Business finances", icon: Wallet, kind: "link" },
-    { href: `/project/${projectId}/lessons`, label: "Business lessons", icon: GraduationCap, kind: "link" },
-    { href: `/project/${projectId}/resources`, label: "Resources", icon: BookOpen, kind: "link" },
-    { href: `/project/${projectId}/competition`, label: "Competition", icon: Swords, kind: "link" },
+    { href: `/project/${projectId}/market`, label: "Market & grow", icon: TrendingUp, kind: "link", requiresBuilt: true },
+    { href: `/project/${projectId}/ads`, label: "Ads & Growth", icon: Megaphone, kind: "link", requiresBuilt: true },
+    { href: `/project/${projectId}/campaigns`, label: "Campaigns", icon: Target, kind: "link", requiresBuilt: true },
+    { href: `/project/${projectId}/finances`, label: "Business finances", icon: Wallet, kind: "link", requiresBuilt: true },
+    { href: `/project/${projectId}/lessons`, label: "Business lessons", icon: GraduationCap, kind: "link", requiresBuilt: true },
+    { href: `/project/${projectId}/resources`, label: "Resources", icon: BookOpen, kind: "link", requiresBuilt: true },
+    { href: `/project/${projectId}/competition`, label: "Competition", icon: Swords, kind: "link", requiresBuilt: true },
   ]
 }
 

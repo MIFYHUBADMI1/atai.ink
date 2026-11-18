@@ -230,13 +230,13 @@ export function ProjectWorkspace({ projectId, initialState }: { projectId: strin
           router.refresh()
         }}
       />
-      <nav className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
+      <nav data-atai-tour="project-overview" className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
         <Link href="/projects" className="hover:text-foreground">All Projects</Link>
         <ChevronRight className="size-3.5" />
         <span className="font-medium text-foreground">{project.name}</span>
       </nav>
 
-      <section className={cn("rounded-2xl border p-5 sm:p-6", view.brief.live ? "border-primary/30 bg-primary/5" : "border-border bg-card")}>
+      <section data-atai-tour="project-journey" className={cn("rounded-2xl border p-5 sm:p-6", view.brief.live ? "border-primary/30 bg-primary/5" : "border-border bg-card")}>
         <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Your Atai team</p>
         <h2 className="mt-2 text-xl font-semibold tracking-tight text-balance sm:text-2xl">{view.brief.headline}</h2>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{view.brief.support}</p>
@@ -460,7 +460,7 @@ export function ProjectWorkspace({ projectId, initialState }: { projectId: strin
         </div>
 
         <aside className="flex flex-col gap-4 xl:sticky xl:top-20">
-          <section className={cn(
+          <section data-atai-tour="project-next-action" className={cn(
             "rounded-2xl p-5 shadow-sm",
             next.needsYou ? "bg-primary text-primary-foreground" : "border border-border bg-card",
           )}>

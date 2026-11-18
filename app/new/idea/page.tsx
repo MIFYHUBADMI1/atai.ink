@@ -2,7 +2,7 @@
 
 import { useEffect } from "react"
 import { Check, FileText, Hammer, Lightbulb } from "lucide-react"
-import { AuthGate } from "@/components/auth/auth-gate"
+import { DashboardShell } from "@/components/dashboard/dashboard-shell"
 import { LandingComposer } from "@/components/landing/composer"
 import { CreateWorkspaceShell } from "@/components/new-project/create-shell"
 import { beginStartFlow } from "@/lib/analytics/start-funnel"
@@ -20,7 +20,7 @@ export default function NewIdeaProjectPage() {
   }, [])
 
   return (
-    <AuthGate next="/new/idea">
+    <DashboardShell title="New business">
       <CreateWorkspaceShell
         kicker="Your idea"
         title="Start from your idea."
@@ -93,6 +93,6 @@ export default function NewIdeaProjectPage() {
           </aside>
         </div>
       </CreateWorkspaceShell>
-    </AuthGate>
+    </DashboardShell>
   )
 }

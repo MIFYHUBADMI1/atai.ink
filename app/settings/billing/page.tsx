@@ -126,7 +126,7 @@ export default function BillingSettingsPage() {
         ) : null}
 
         {/* ── Credit Balance Card ── */}
-        <section className="border border-border bg-card p-6">
+        <section data-atai-tour="settings-credits" className="border border-border bg-card p-6">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
               <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
@@ -313,7 +313,7 @@ export default function BillingSettingsPage() {
         </section>
 
         {/* ── Buy Permanent Credits ── */}
-        <section className="border border-border bg-card p-6">
+        <section data-atai-tour="settings-billing-checkout" className="border border-border bg-card p-6">
           <h2 className="text-xl font-medium">Buy Permanent Credits</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Permanent credits never expire and remain available after subscription cancellation.

@@ -4,6 +4,8 @@ import { PlatformFinancesView } from "@/components/finances/platform-finances-vi
 import { getPlatformFinances } from "@/lib/finances/platform-finances"
 import { getCurrentUser } from "@/lib/auth/session"
 import { redirect } from "next/navigation"
+import { userHasBuiltBusiness } from "@/lib/dashboard/business-access"
+import { BusinessLockedPage } from "@/components/workspace/business-locked"
 
 export const metadata: Metadata = {
   title: "Business finances - Atai",
@@ -23,6 +25,7 @@ export const metadata: Metadata = {
 export default async function FinancesPage() {
   const user = await getCurrentUser()
   if (!user) redirect("/login?next=/finances")
+  if (!(await userHasBuiltBusiness(user.id))) return <BusinessLockedPage section="Business finances" />
   const finances = await getPlatformFinances(user.id)
 
   return (

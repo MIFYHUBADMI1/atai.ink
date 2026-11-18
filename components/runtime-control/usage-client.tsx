@@ -189,7 +189,7 @@ export function RuntimeUsageClient({ projectId }: { projectId: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div data-atai-tour="runtime-usage" className="flex flex-col gap-4">
       <div className="flex flex-wrap gap-2">
         <select
           aria-label="Time range"

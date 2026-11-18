@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/auth/session"
 import { store } from "@/lib/store/store"
 import { handleRouteError } from "@/lib/api/respond"
+import { userHasBuiltBusiness } from "@/lib/dashboard/business-access"
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -9,6 +10,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const project = await store.getProject(id)
   if (!project || project.userId !== user.id) {
     return Response.json({ ok: false, error: "Project not found" }, { status: 404 })
+  }
+
+  if (!(await userHasBuiltBusiness(user.id))) {
+    return Response.json(
+      { ok: false, error: "Export unlocks once you have a built or live application." },
+      { status: 403 },
+    )
   }
 
   const exportData = {

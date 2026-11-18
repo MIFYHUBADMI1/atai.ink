@@ -136,7 +136,7 @@ export function RuntimeKeysClient({
   const isDelete = pendingAction?.kind === "delete"
 
   return (
-    <div className="flex flex-col gap-6">
+    <div data-atai-tour="runtime-keys" className="flex flex-col gap-6">
       {secret ? <SecretOnceBanner secret={secret} onDismiss={() => setSecret(null)} /> : null}
 
       {developerPortalUrl ? (

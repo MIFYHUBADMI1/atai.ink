@@ -213,7 +213,7 @@ export function DatabaseTablesList({ projectId }: { projectId: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div data-atai-tour="database-manager" className="flex flex-col gap-6">
       {/* Header with stats */}
       <div className="flex items-center justify-between rounded-xl border border-border bg-gradient-to-r from-card to-muted/20 px-6 py-4 shadow-sm">
         <div className="flex items-center gap-4">

@@ -330,6 +330,7 @@ export function AtaiFeedbackLauncher() {
             click → pulse ring, open → stays raised. */}
         <button
           type="button"
+          data-atai-tour="support-report"
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}

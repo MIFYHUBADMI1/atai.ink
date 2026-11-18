@@ -53,7 +53,7 @@ export function PlatformFinancesView({ finances }: { finances: PlatformFinances 
     <div className="flex flex-col gap-6">
       <section className="rounded-xl border border-border bg-card p-4">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">Business finances</h1>
+          <h1 data-atai-tour="portfolio-finances" className="text-lg font-semibold tracking-tight">Business finances</h1>
           <p className="mt-1 text-xs text-muted-foreground">
             Last {win.days} days across all {finances.projectsCount} project{finances.projectsCount === 1 ? "" : "s"} ·
             runtime API costs and attributed payments collected through every project&apos;s API keys. Computed

@@ -3,6 +3,8 @@ import { IntelligenceOverviewView } from "@/components/intelligence/overview-vie
 import { getIntelligenceOverview } from "@/lib/intelligence/overview"
 import { getCurrentUser } from "@/lib/auth/session"
 import { requireOwnedProject } from "@/lib/workspace/require-owned-project"
+import { userHasBuiltBusiness } from "@/lib/dashboard/business-access"
+import { BusinessLockedForProject } from "@/components/workspace/business-locked"
 
 /**
  * Application Intelligence Overview route (Phase 1).
@@ -15,6 +17,7 @@ import { requireOwnedProject } from "@/lib/workspace/require-owned-project"
 export default async function ProjectIntelligencePage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
   const project = await requireOwnedProject(projectId, `/project/${projectId}/intelligence`)
+  if (!(await userHasBuiltBusiness(project.userId))) return <BusinessLockedForProject section="Intelligence" projectId={project.id} />
 
   const overview = await getIntelligenceOverview({ user: { id: (await getCurrentUser())?.id ?? "" }, project })
 

@@ -84,7 +84,7 @@ export function AdsRequestsView({ projectId, requests }: { projectId: string; re
   ]
 
   return (
-    <div className="flex flex-col gap-4">
+    <div data-atai-tour="ads-requests" className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter requests by status">
           {activeFilters.map((entry) => {

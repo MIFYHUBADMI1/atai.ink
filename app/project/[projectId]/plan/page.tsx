@@ -430,7 +430,7 @@ export default async function ProjectPlanPage({ params }: { params: Promise<{ pr
         <div className="xl:grid xl:grid-cols-[236px_minmax(0,1fr)] xl:items-start xl:gap-8">
           <PlanOutline groups={outlineGroups} />
 
-          <div className="flex min-w-0 flex-col gap-5">
+          <div data-atai-tour="plan-report" className="flex min-w-0 flex-col gap-5">
             {/* ═══ Overview ═══ */}
             {s ? (
               <SectionCard id="overview" icon={FileText} title="Overview" description="What is being built and why">

@@ -397,7 +397,10 @@ function FirstMissionInner() {
     beat === "theme" || beat === "context" || beat === "plan" || hasBeatValue(beat, { source, role, revenueTarget, targetUsers, effortScale, intent })
 
   return (
-    <div className="onboarding-shell fixed inset-0 z-50 flex h-dvh flex-col overflow-hidden bg-background text-foreground">
+    <div
+      data-onboarding-mission
+      className="onboarding-shell fixed inset-0 z-50 flex h-dvh flex-col overflow-hidden bg-background text-foreground"
+    >
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/60 px-4 py-2.5 sm:px-6">
         <BrandMark />
         <div className="flex min-w-0 items-center gap-2">

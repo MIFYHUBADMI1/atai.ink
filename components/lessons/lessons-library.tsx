@@ -86,7 +86,7 @@ export function LessonsLibrary({
   }
 
   return (
-    <div className="flex flex-col gap-12">
+    <div data-atai-tour="lessons-library" className="flex flex-col gap-12">
       <section aria-label="Search and filter lessons" className="flex flex-col gap-3">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />

@@ -45,7 +45,7 @@ export function AnalyticsConsentToggle({
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-5 sm:flex-row sm:items-center sm:justify-between">
+    <div data-atai-tour="intelligence-consent" className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-5 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex-1">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-medium">Co-founder analytics permission</h3>

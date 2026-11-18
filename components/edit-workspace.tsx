@@ -284,7 +284,7 @@ export function EditWorkspace({ projectId, projectName, initialState }: EditWork
   ]
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_420px] lg:items-start">
+    <div data-atai-tour="app-editor" className="grid gap-6 lg:grid-cols-[1fr_420px] lg:items-start">
       {/* ─── Left: Preview + Content Tabs ─── */}
       <div className="flex flex-col gap-4">
         {/* Tab bar */}

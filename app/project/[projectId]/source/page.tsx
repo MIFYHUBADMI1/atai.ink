@@ -3,6 +3,8 @@ import { AppHeader } from "@/components/app-header"
 import { getCurrentUser } from "@/lib/auth/session"
 import { store } from "@/lib/store/store"
 import { SourceViewer } from "@/components/source-viewer"
+import { userHasBuiltBusiness } from "@/lib/dashboard/business-access"
+import { BusinessLockedForProject } from "@/components/workspace/business-locked"
 import Link from "next/link"
 
 export default async function SourcePage({ params }: { params: Promise<{ projectId: string }> }) {
@@ -12,6 +14,7 @@ export default async function SourcePage({ params }: { params: Promise<{ project
   const { projectId } = await params
   const project = await store.getProject(projectId)
   if (!project || project.userId !== user.id) notFound()
+  if (!(await userHasBuiltBusiness(user.id))) return <BusinessLockedForProject section="Source" projectId={project.id} />
 
   return (
     <main className="min-h-svh bg-background text-foreground">

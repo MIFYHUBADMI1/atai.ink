@@ -1973,7 +1973,7 @@ function ChatPanel({
       </div>
 
       {/* Conversation */}
-      <div className="min-h-0 flex-1 overflow-y-auto collab-scroll px-3 py-4 sm:px-5 sm:py-6">
+      <div data-atai-tour="cofounder-chat" className="min-h-0 flex-1 overflow-y-auto collab-scroll px-3 py-4 sm:px-5 sm:py-6">
         <div className="mx-auto flex max-w-2xl flex-col gap-5">
           {/* Intro — lightweight, no AI call on load (spec section 15).
               Context-aware: when the founder is working on a section, the
@@ -2125,7 +2125,7 @@ function ChatPanel({
       </div>
 
       {/* Composer */}
-      <div className="border-t border-border bg-background px-3 py-2.5 sm:px-4 sm:py-3">
+      <div data-atai-tour="cofounder-input" className="border-t border-border bg-background px-3 py-2.5 sm:px-4 sm:py-3">
         <div className="mx-auto w-full max-w-2xl">
           {dictation.listening && (
             <div

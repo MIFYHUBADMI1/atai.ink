@@ -104,7 +104,7 @@ export default async function SettingsFeaturesPage() {
 
         <header>
           <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Market &amp; grow</p>
-          <h1 className="mt-3 text-4xl font-semibold tracking-tight">Feature switches</h1>
+          <h1 data-atai-tour="settings-features" className="mt-3 text-4xl font-semibold tracking-tight">Feature switches</h1>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
             These optional features stay out of your workspace until you turn them on. Flip them here any time — the
             change applies immediately, and nothing has ever run without you asking first.

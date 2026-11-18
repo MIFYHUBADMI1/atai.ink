@@ -95,7 +95,7 @@ const jsonLd = [
 
 export default function DocsPage() {
   return (
-    <main className="min-h-screen bg-background text-foreground">
+    <main data-atai-tour="docs-hub" className="min-h-screen bg-background text-foreground">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}

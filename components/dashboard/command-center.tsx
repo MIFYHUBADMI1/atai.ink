@@ -99,7 +99,7 @@ export function DashboardCommandCenter() {
     <>
       <FirstMission />
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-6 sm:py-8 lg:px-8">
-        <header className="flex flex-col gap-1">
+        <header data-atai-tour="dashboard-overview" className="flex flex-col gap-1">
           <p className="text-sm text-muted-foreground">
             {greeting}, {firstName}.
           </p>
@@ -209,7 +209,7 @@ function DashboardEmpty() {
 function NextActionCard({ project, askHref }: { project: ProjectSummary; askHref: string }) {
   const status = interpretProjectState(project.state, project.id)
   return (
-    <section className={cn("overflow-hidden rounded-2xl border p-0", severityClass(status.severity))}>
+    <section data-atai-tour="dashboard-actions" className={cn("overflow-hidden rounded-2xl border p-0", severityClass(status.severity))}>
       <ProjectThumbnail
         src={project.thumbnailUrl}
         alt={`Preview of ${project.name}`}
@@ -304,7 +304,7 @@ function JourneyCard({ state, name }: { state: ProjectSummary["state"]; name: st
   const current = interpretProjectState(state, "_").journeyStage
   return (
     <section className="rounded-2xl border border-border bg-card p-5">
-      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Your journey</p>
+      <p data-atai-tour="dashboard-journey" className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Your journey</p>
       <p className="mt-2 text-sm text-muted-foreground">{name}</p>
       <ol className="mt-4 flex flex-wrap items-center gap-2">
         {JOURNEY.map((stage, i) => {

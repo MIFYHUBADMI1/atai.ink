@@ -296,7 +296,7 @@ export function StudioLibrary({ projectId, initialItemId }: { projectId: string;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-      <section aria-labelledby="library-heading" className="flex min-w-0 flex-col gap-3">
+      <section aria-labelledby="library-heading" className="flex min-w-0 flex-col gap-3" data-atai-tour="studio-library">
         <h2 id="library-heading" className="text-lg font-semibold tracking-tight">
           Content library
         </h2>

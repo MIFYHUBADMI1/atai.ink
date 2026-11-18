@@ -12,6 +12,8 @@ import { getLaunchKitPanelData } from "@/lib/marketing/launch-kit-panel-data"
 import { getSeoAuditAffordability } from "@/lib/marketing/seo/credits"
 import { getLatestSeoAudit } from "@/lib/marketing/seo/service"
 import { requireOwnedProject } from "@/lib/workspace/require-owned-project"
+import { userHasBuiltBusiness } from "@/lib/dashboard/business-access"
+import { BusinessLockedForProject } from "@/components/workspace/business-locked"
 
 /**
  * Growth Overview route (Phase 2). Authorization is unchanged from every
@@ -27,6 +29,7 @@ import { requireOwnedProject } from "@/lib/workspace/require-owned-project"
 export default async function ProjectMarketPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
   const project = await requireOwnedProject(projectId, `/project/${projectId}/market`)
+  if (!(await userHasBuiltBusiness(project.userId))) return <BusinessLockedForProject section="Market & grow" projectId={project.id} />
   const user = await getCurrentUser()
 
   if (!user || !isGrowthOverviewEnabledForUser(user.id)) {
@@ -58,7 +61,7 @@ export default async function ProjectMarketPage({ params }: { params: Promise<{ 
           comfortable desktop measure, and consistent spacing between blocks. */}
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 pb-12 pt-6 sm:gap-8 sm:px-6 sm:pt-8 lg:px-8 lg:pb-16">
         <MarketGuide />
-        <div data-tour="launch-kit">
+        <div data-tour="launch-kit" data-atai-tour="market-launch-kit">
           {launchKit && (
             <LaunchKitPanel
               projectId={project.id}
@@ -68,10 +71,10 @@ export default async function ProjectMarketPage({ params }: { params: Promise<{ 
             />
           )}
         </div>
-        <div data-tour="overview">
+        <div data-tour="overview" data-atai-tour="market-overview">
           <GrowthOverviewView overview={overview} />
         </div>
-        <div data-tour="studio">
+        <div data-tour="studio" data-atai-tour="market-studio">
           <Link
             href={`/project/${project.id}/studio`}
             className="group flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:flex-row sm:items-center sm:justify-between sm:p-5"
@@ -88,7 +91,7 @@ export default async function ProjectMarketPage({ params }: { params: Promise<{ 
             </span>
           </Link>
         </div>
-        <div data-tour="seo">
+        <div data-tour="seo" data-atai-tour="market-seo">
           <SeoAuditPanel
           projectId={project.id}
           state={{

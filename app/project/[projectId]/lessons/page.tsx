@@ -20,6 +20,8 @@ import { computePathProgress, recommendedPathForStage, resolvePathLessons } from
 import { loadRecentLessonActivity } from "@/lib/lessons/activity-store"
 import { completedLessonRefs } from "@/lib/lessons/activity"
 import { requireOwnedProject } from "@/lib/workspace/require-owned-project"
+import { userHasBuiltBusiness } from "@/lib/dashboard/business-access"
+import { BusinessLockedForProject } from "@/components/workspace/business-locked"
 
 /**
  * A project's Business Lessons. Everything above the fold is deterministic
@@ -30,6 +32,7 @@ import { requireOwnedProject } from "@/lib/workspace/require-owned-project"
 export default async function ProjectLessonsPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
   const project = await requireOwnedProject(projectId, `/project/${projectId}/lessons`)
+  if (!(await userHasBuiltBusiness(project.userId))) return <BusinessLockedForProject section="Business lessons" projectId={project.id} />
   const user = await getCurrentUser()
 
   if (!user || !isLessonsEnabledForUser(user.id, user.featurePreferences)) {

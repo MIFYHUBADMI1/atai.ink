@@ -368,7 +368,7 @@ export function CompetitionDashboard({
 
   return (
     <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-4 pb-12 pt-6 sm:px-6 lg:px-8 lg:pb-16">
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <header data-atai-tour="competition-dashboard" className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex items-start gap-4">
           <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <BarChart3 className="size-6" aria-hidden />

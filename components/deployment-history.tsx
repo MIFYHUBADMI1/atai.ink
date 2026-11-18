@@ -33,11 +33,11 @@ export function DeploymentHistory({ projectId }: DeploymentHistoryProps) {
   const sorted = [...history].sort((a, b) => b.startedAt - a.startedAt)
 
   if (sorted.length === 0) {
-    return <p className="text-sm text-muted-foreground">No production publishes yet.</p>
+    return <p data-atai-tour="app-deployments" className="text-sm text-muted-foreground">No production publishes yet.</p>
   }
 
   return (
-    <div className="grid gap-2">
+    <div data-atai-tour="app-deployments" className="grid gap-2">
       {sorted.map((entry) => {
         const isDeploying = entry.status === "deploying"
         const isSuccess = entry.status === "success"

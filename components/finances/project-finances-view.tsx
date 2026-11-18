@@ -108,7 +108,7 @@ export function ProjectFinancesView({ finances }: { finances: ProjectFinances })
     <div className="flex flex-col gap-6">
       <section className="rounded-xl border border-border bg-card p-4">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">Business finances</h1>
+          <h1 data-atai-tour="finances-overview" className="text-lg font-semibold tracking-tight">Business finances</h1>
           <p className="mt-1 text-xs text-muted-foreground">
             Last {win.days} days · runtime API costs, attributed payments collected through your
             API keys, and trend estimates. Computed {when(finances.generatedAt)}.

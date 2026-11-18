@@ -3,10 +3,9 @@
 import Link from "next/link"
 import { GitBranch, FileCode, Hammer, BookOpen } from "lucide-react"
 import { CreateGitHubRepoForm } from "@/components/create-github-repo-form"
-import { useSession, jsonFetcher } from "@/lib/client/api"
-import { AuthGate } from "@/components/auth/auth-gate"
+import { useSession } from "@/lib/client/api"
+import { DashboardShell } from "@/components/dashboard/dashboard-shell"
 import { CreateWorkspaceShell } from "@/components/new-project/create-shell"
-import useSWR from "swr"
 
 const STEPS = [
   {
@@ -31,14 +30,10 @@ const EXAMPLES = ["facebook/react", "vercel/next.js", "owner/my-private-app"]
 export default function NewGitHubProjectPage() {
   const { session } = useSession()
 
-  const { data: profileData } = useSWR<{ ok: boolean; data: { githubConnected: boolean } }>(
-    session ? "/api/auth/github/status" : null,
-    jsonFetcher,
-  )
-  const hasGitHub = profileData?.data?.githubConnected ?? false
+  const hasGitHub = Boolean(session?.user?.githubConnected)
 
   return (
-    <AuthGate next="/new/github">
+    <DashboardShell title="New business">
       <CreateWorkspaceShell
         kicker="GitHub"
         title="Start from a GitHub repo."
@@ -119,6 +114,6 @@ export default function NewGitHubProjectPage() {
           </aside>
         </div>
       </CreateWorkspaceShell>
-    </AuthGate>
+    </DashboardShell>
   )
 }

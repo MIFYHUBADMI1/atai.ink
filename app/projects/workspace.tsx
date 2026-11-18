@@ -569,6 +569,7 @@ export function ProjectsWorkspace({
           </Link>
           <Link
             href="/new"
+            data-atai-tour="projects-new"
             className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
             <Plus className="size-4" /> New business
@@ -664,7 +665,7 @@ export function ProjectsWorkspace({
 
       {/* ── Content ── */}
       {displayed.length === 0 ? (
-        <div className="flex flex-col items-center gap-5 rounded-2xl border border-dashed border-border bg-card/40 py-24 text-center">
+        <div data-atai-tour="projects-empty" className="flex flex-col items-center gap-5 rounded-2xl border border-dashed border-border bg-card/40 py-24 text-center">
           <div className="flex size-16 items-center justify-center rounded-full bg-muted">
             <Rocket className="size-7 text-muted-foreground" />
           </div>
@@ -696,6 +697,13 @@ export function ProjectsWorkspace({
                   <GitBranch className="size-4" /> From GitHub
                 </Link>
               </div>
+              <p className="text-sm text-muted-foreground">
+                Not sure where to begin?{" "}
+                <Link href="/tours" className="text-primary underline-offset-4 hover:underline">
+                  take the guided tour
+                </Link>{" "}
+                — it walks the real product and never spends credits for you.
+              </p>
             </>
           ) : (
             <>
@@ -713,13 +721,13 @@ export function ProjectsWorkspace({
           )}
         </div>
       ) : view === "grid" ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div data-atai-tour="projects-list" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {displayed.map((p) => (
             <BusinessCard key={p.id} project={p} recovering={recoveringIds.includes(p.id)} onDeleteRequest={requestDelete} />
           ))}
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div data-atai-tour="projects-list" className="flex flex-col gap-2">
           <div className="hidden grid-cols-[1fr_auto_auto_auto_auto] gap-4 px-5 pb-1 text-[10px] font-mono uppercase tracking-wider text-muted-foreground sm:grid">
             <span>Business</span>
             <span>Revenue</span>

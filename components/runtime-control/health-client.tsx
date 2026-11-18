@@ -56,7 +56,7 @@ export function RuntimeHealthClient({ projectId }: { projectId: string }) {
   const h = data.health
 
   return (
-    <div className="flex flex-col gap-6">
+    <div data-atai-tour="runtime-health" className="flex flex-col gap-6">
       <section className="grid gap-3 sm:grid-cols-3">
         <Tile label="Success rate (24h)" value={formatPct(h.successRate)} />
         <Tile label="Last success" value={formatWhen(h.lastSuccessAt)} />

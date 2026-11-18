@@ -3,9 +3,8 @@
 import { useEffect } from "react"
 import Link from "next/link"
 import { ArrowLeft, ArrowRight, Globe, Lightbulb, ShieldCheck } from "lucide-react"
-import { AuthGate } from "@/components/auth/auth-gate"
+import { DashboardShell } from "@/components/dashboard/dashboard-shell"
 import { GitHubIcon } from "@/components/github-icon"
-import { AppHeader } from "@/components/app-header"
 import { LandingComposer } from "@/components/landing/composer"
 import {
   beginStartFlow,
@@ -59,11 +58,8 @@ export default function NewProjectPage() {
   }, [])
 
   return (
-    <AuthGate next="/new">
-      <main className="min-h-svh bg-background text-foreground">
-        <AppHeader />
-
-        <div className="mx-auto w-full max-w-6xl px-4 pb-16 pt-6 sm:px-6 lg:px-8">
+    <DashboardShell title="New business">
+      <div className="mx-auto w-full max-w-6xl px-4 pb-16 pt-6 sm:px-6 lg:px-8">
           <Link
             href="/dashboard"
             className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/30 hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -112,6 +108,27 @@ export default function NewProjectPage() {
             </div>
           </section>
 
+          <section aria-labelledby="existing-business-entry" className="mx-auto mt-10 w-full max-w-3xl">
+            <Link
+              href="/new/existing"
+              data-atai-tour="new-existing-business"
+              className="group flex flex-col gap-2 rounded-2xl border border-primary/25 bg-primary/5 p-5 transition-colors hover:border-primary/45 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:flex-row sm:items-center sm:justify-between"
+            >
+              <span className="min-w-0">
+                <span id="existing-business-entry" className="block text-sm font-semibold tracking-tight">
+                  Already running a business?
+                </span>
+                <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+                  Bring it to Atai as it is — your website, your code, your words. No rebuild required.
+                </span>
+              </span>
+              <span className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-primary">
+                Bring my existing business
+                <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+              </span>
+            </Link>
+          </section>
+
           <section aria-labelledby="other-starting-points" className="mx-auto mt-14 w-full max-w-5xl sm:mt-16">
             <div className="flex items-center gap-4">
               <span aria-hidden className="h-px flex-1 bg-border" />
@@ -131,6 +148,7 @@ export default function NewProjectPage() {
                   <Link
                     key={source.id}
                     href={source.href}
+                    data-atai-tour={`new-method-${source.id}`}
                     onClick={() => trackStartMethodSelected(source.id as StartMethod, "new_source_card")}
                     className={cn(
                       "group flex h-full flex-col rounded-2xl border border-border/80 bg-card p-5 transition-colors hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -191,7 +209,6 @@ export default function NewProjectPage() {
             </ol>
           </section>
         </div>
-      </main>
-    </AuthGate>
+    </DashboardShell>
   )
 }
