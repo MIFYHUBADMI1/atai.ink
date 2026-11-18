@@ -32,7 +32,7 @@ import { CATEGORY_META, RESOURCE_CATEGORIES } from "@/lib/resources"
 import { CATEGORY_ACCENT } from "@/components/resources/accents"
 
 const LIFECYCLE = [
-  { id: "idea", title: "Idea", body: "Start with your skills, an idea, or a problem you want to solve." },
+  { id: "idea", title: "Idea", body: "Start with your skills, an idea, or a problem you want to solve — or bring a business that already runs and skip ahead." },
   { id: "plan", title: "Plan", body: "Define your customers, your offer, and how the business could earn." },
   { id: "build", title: "Build", body: "Create the website or digital product your business needs." },
   { id: "launch", title: "Launch", body: "Get online with hosting, a database, and the tools to serve customers." },
@@ -60,7 +60,7 @@ const INFRA = [
 
 const AUDIENCE = [
   { icon: Lightbulb, title: "First-time owners", body: "Take your first steps toward a business, even if you have never run one." },
-  { icon: Building2, title: "Small businesses", body: "Bring your business online and make day-to-day work easier to manage." },
+  { icon: Building2, title: "Small businesses", body: "Bring your business online, or connect one that already runs and make day-to-day work easier to manage." },
   { icon: Rocket, title: "Entrepreneurs", body: "Develop a new offer, learn from customers, and find ways to grow." },
   { icon: Users, title: "Creators and freelancers", body: "Explore how your skills or knowledge could become a paid offer." },
   { icon: Brain, title: "Small teams", body: "Work with specialized AI teams while staying in charge of your business." },
@@ -83,6 +83,12 @@ const DIFFERENTIATION = [  {
     title: "Instead of putting it off",
     tradeoff: "Waiting until you can afford help or feel ready leaves the idea on hold.",
     atai: "Start with a skill, an idea, a website, or a codebase — and stay in charge as the business grows.",
+  },
+  {
+    icon: Building2,
+    title: "Instead of starting over",
+    tradeoff: "Adopting a new platform usually means abandoning the website, product, or workflows you already built.",
+    atai: "Bring what already runs. Atai reads your website or codebase, understands your business, and helps you manage and grow it — no rebuild, no forced switch.",
   },
 ]
 
@@ -199,7 +205,7 @@ export function LandingTrust() {
           A business to own. AI teams to help you run it.
         </p>
         <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
-          {["Plan your business", "Build and host", "Manage operations", "Reach customers", "Work toward sales"].map((item) => (
+          {["Plan your business", "Bring an existing business", "Build and host", "Manage operations", "Reach customers", "Work toward sales"].map((item) => (
             <span key={item} className="rounded-full border border-border bg-background px-3 py-1.5 text-sm text-muted-foreground">
               {item}
             </span>
@@ -218,11 +224,11 @@ export function LandingDifferentiation() {
           <div className="mx-auto max-w-3xl text-center">
             <h2 className="text-4xl font-black tracking-tight sm:text-5xl">Why founders choose Atai over hiring or stitching tools</h2>
             <p className="mt-4 text-lg leading-8 text-muted-foreground">
-              Starting a business means weighing real trade-offs. Atai is built so one person can run the work that usually needs a team or a stack of disconnected tools — while staying in charge of the business.
+              Starting a business means weighing real trade-offs. Atai is built so one person can run the work that usually needs a team or a stack of disconnected tools — whether you start from an idea or bring a business that is already running. You stay in charge.
             </p>
           </div>
         </FadeIn>
-        <div className="mt-14 grid gap-4 md:grid-cols-3">
+        <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {DIFFERENTIATION.map((item, index) => (
             <FadeIn key={item.title} delay={index * 70}>
               <article className="h-full rounded-2xl border border-border/70 bg-card p-6">
@@ -250,7 +256,7 @@ export function LandingLifecycle() {
           <div className="mx-auto max-w-3xl text-center">
             <h2 className="text-4xl font-black tracking-tight sm:text-5xl">A team for every stage of your business.</h2>
             <p className="mt-4 text-lg leading-8 text-muted-foreground">
-              Starting is one step. Atai’s specialized AI teams help with the work of running a business, serving customers, and finding ways to grow. You stay in charge.
+              Starting is one step. Atai’s specialized AI teams help with the work of running a business, serving customers, and finding ways to grow. Already have a website, product, or project? Connect it and Atai joins in where your business actually is. You stay in charge.
             </p>
           </div>
         </FadeIn>
@@ -281,11 +287,45 @@ export function LandingStart() {
           <div className="max-w-2xl">
             <h2 className="text-4xl font-black tracking-tight sm:text-5xl">Start with what you have.</h2>
             <p className="mt-4 text-lg leading-8 text-muted-foreground">
-              A skill, an idea, or a problem worth solving is enough to begin. If you already have a website or product, bring it along. The goal is a business you can run and grow.
+              That can be a skill, an idea, or a problem worth solving — or a business that is already running. Bring
+              your website, your product, or your codebase, and Atai works from where you actually are. The goal is a
+              business you can run and grow.
             </p>
           </div>
         </FadeIn>
-        <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+
+        <FadeIn delay={80}>
+          <div className="mt-10 overflow-hidden rounded-2xl border border-indigo-500/30 bg-gradient-to-br from-indigo-500/10 via-card to-card p-6 sm:p-8">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="max-w-xl">
+                <p className="inline-flex items-center gap-2 font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-indigo-600 dark:text-indigo-300">
+                  <Building2 className="size-3.5" aria-hidden />
+                  Already running something?
+                </p>
+                <h3 className="mt-3 text-2xl font-black tracking-tight sm:text-3xl">Do not rebuild it. Bring it to Atai.</h3>
+                <p className="mt-3 text-base leading-7 text-muted-foreground">
+                  Connect the business you already run — or a project you built with another AI app builder. Atai
+                  reads your live website or codebase, gives you an honest first assessment, and your AI teams help
+                  you manage, market, and scale it. Keep your tools; stop juggling them.
+                </p>
+              </div>
+              <div className="flex shrink-0 flex-col items-start gap-3 sm:items-end">
+                <Link href="/new/existing" className={cn(buttonVariants(), "h-10 gap-1.5 px-5 font-semibold")}>
+                  Connect your existing business
+                  <ArrowRight className="size-4" />
+                </Link>
+                <p className="text-xs text-muted-foreground">No rebuild, no second onboarding — takes about two minutes.</p>
+              </div>
+            </div>
+          </div>
+        </FadeIn>
+
+        <FadeIn delay={140}>
+          <p className="mt-12 font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            Or start fresh from one of these
+          </p>
+        </FadeIn>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {START_CARDS.map((card, index) => (
             <FadeIn key={`${card.title}-${index}`} delay={index * 80}>
               <Link
@@ -514,7 +554,8 @@ export function LandingFinalCta({
         <FadeIn>
           <h2 className="text-4xl font-black tracking-tight sm:text-6xl">Your own business. You don’t have to do it alone.</h2>
           <p className="mt-5 text-lg leading-8 text-white/70">
-            Bring your ambition. Start with a plan, and work with your AI teams to launch, manage, and grow a business of your own.
+            Bring your ambition — or a business that is already running. Start from an idea, or connect what you have,
+            and work with your AI teams to launch, manage, and grow a business of your own.
           </p>
           <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
             {session ? (
@@ -528,6 +569,13 @@ export function LandingFinalCta({
                 <ArrowRight className="size-4" />
               </AuthTrigger>
             )}
+            <Link
+              href="/new/existing"
+              className={cn(buttonVariants({ variant: "outline", size: "lg" }), "h-12 gap-1.5 border-white/20 bg-white/5 px-6 text-white hover:bg-white/10 hover:text-white")}
+            >
+              <Building2 className="size-4" aria-hidden />
+              Connect an existing business
+            </Link>
             <a
               href="#how-it-works"
               className={cn(buttonVariants({ variant: "outline", size: "lg" }), "h-12 border-white/20 bg-white/5 px-6 text-white hover:bg-white/10 hover:text-white")}
