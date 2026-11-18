@@ -55,7 +55,7 @@ export function LandingHero({
           <div
             role="tablist"
             aria-label="Choose how to start with Atai"
-            className="lp-hero-input mt-5 flex w-full flex-wrap items-center gap-1.5"
+            className="lp-hero-input mt-5 grid w-full grid-cols-2 items-stretch gap-1 rounded-full border border-transparent bg-card/90 p-1 backdrop-blur-md sm:max-w-xl"
           >
             <button
               type="button"
@@ -65,14 +65,14 @@ export function LandingHero({
               aria-controls="entry-panel-new"
               onClick={() => setEntry("new")}
               className={cn(
-                "inline-flex h-8 items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold transition-all",
+                "inline-flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-full px-2.5 text-xs font-semibold transition-all sm:px-4 sm:text-sm",
                 entry === "new"
                   ? "bg-primary text-primary-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
               <Lightbulb className="size-3.5 shrink-0" aria-hidden />
-              Start with an idea
+              <span className="truncate">Start with an idea</span>
             </button>
             <button
               type="button"
@@ -82,19 +82,19 @@ export function LandingHero({
               aria-controls="entry-panel-existing"
               onClick={() => setEntry("existing")}
               className={cn(
-                "inline-flex h-8 items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold transition-all",
+                "inline-flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-full px-2.5 text-xs font-semibold transition-all sm:px-4 sm:text-sm",
                 entry === "existing"
                   ? "bg-primary text-primary-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
               <Building2 className="size-3.5 shrink-0" aria-hidden />
-              I already have a business
+              <span className="truncate">I already have a business</span>
             </button>
           </div>
 
           {entry === "new" ? (
-            <div id="entry-panel-new" role="tabpanel" aria-labelledby="entry-tab-new" className="mt-2 w-full">
+            <div id="entry-panel-new" role="tabpanel" aria-labelledby="entry-tab-new" className="mt-1.5 w-full">
               <LandingComposer />
             </div>
           ) : (
@@ -102,7 +102,7 @@ export function LandingHero({
               id="entry-panel-existing"
               role="tabpanel"
               aria-labelledby="entry-tab-existing"
-              className="mt-2 w-full rounded-[1.35rem] border border-transparent bg-card/90 p-5 backdrop-blur-md"
+              className="mt-1.5 w-full rounded-[1.35rem] border border-transparent bg-card/90 p-4 backdrop-blur-md sm:p-5"
             >
               <p className="text-sm font-semibold">
                 Do not start over. Keep running what already works.

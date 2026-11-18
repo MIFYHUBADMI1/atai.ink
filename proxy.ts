@@ -45,6 +45,7 @@ export const PUBLIC_API_PREFIXES = [
   "/api/auth/reset-password",
   "/api/auth/verify-email",
   "/api/auth/confirm-email-change",
+  "/api/auth/session-verification",
   "/api/auth/github",
   "/api/auth/google",
   "/api/billing/webhook",

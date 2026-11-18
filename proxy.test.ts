@@ -123,6 +123,11 @@ describe("proxy — intentionally-anonymous public surfaces", () => {
     "/api/public/projects/abc",
     "/api/credit-costs",
     "/api/health",
+    // Session-cap code redemption is performed by a LOGGED-OUT browser by
+    // definition (that is why the cap flow triggered) — gating it on cookie
+    // presence made every emailed code fail with 401 and locked founders out
+    // of sign-in. The route carries its own IP + per-user attempt limits.
+    "/api/auth/session-verification",
   ])("admits cookieless %s", (pathname) => {
     const result = proxy(runtimeRequest(pathname))
     expect(result.headers.get("x-middleware-Next")).toBe("1")
