@@ -34,7 +34,7 @@ export function isResendConfigured(): boolean {
 }
 
 /**
- * The platform sender (e.g. "Atai <noreply@atai.ink>"). Required for the
+ * The platform sender (e.g. "Atai <hi@atai.ink>"). Required for the
  * email.send operation to function — a provider configuration problem when
  * missing, never a customer authentication failure.
  */

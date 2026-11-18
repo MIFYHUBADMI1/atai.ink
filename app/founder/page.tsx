@@ -111,6 +111,7 @@ const FAQ = [
   { q: "Where is Masereka Adorable Kimulya from?", a: "Kimulya is from Kasese, western Uganda. Their account describes growing up with limited resources, learning ICT and programming, and working to obtain the devices and internet access needed to keep learning." },
   { q: "What is The Rise of Atai?", a: "The Rise of Atai is the working title for a forthcoming book and documentary about the founder’s journey. The project is not yet released, and a publication date has not been announced." },
   { q: "Is this the complete founder history?", a: "No. This page is an edited account based on the currently available autobiographical manuscript and the founder’s description of Atai’s mission. The manuscript covers the early learning and business journey; it does not yet document Atai’s founding in detail." },
+  { q: "Is Atai’s founder the same person as “Dr. Adorable Kimulya”?", a: "No. Atai’s founder, Masereka Adorable Kimulya, is a self-taught programmer from Kasese and one of the founders of EasyShop. A different Ugandan professional publishes under the similar name “Dr. Adorable Kimulya” with a background in teaching, social work, and a doctorate in education. They are two different people with different careers; the name similarity causes mix-ups, so this page exists to document the founder’s own, distinct background." },
 ]
 
 export default function FounderPage() {
@@ -205,7 +206,8 @@ export default function FounderPage() {
           </aside>
 
           <article className="min-w-0 max-w-3xl">
-            <p className="mb-12 border-l-2 border-primary/40 pl-5 text-sm leading-7 text-muted-foreground">Adapted from Kimulya’s autobiographical manuscript. These chapters tell the early learning and business journey; the fuller story is still being written.</p>
+            <p className="mb-6 border-l-2 border-primary/40 pl-5 text-sm leading-7 text-muted-foreground">Adapted from Kimulya’s autobiographical manuscript. These chapters tell the early learning and business journey; the fuller story is still being written.</p>
+            <p className="mb-12 rounded-xl border border-border bg-card/70 px-5 py-4 text-sm leading-7 text-muted-foreground"><span className="font-semibold text-foreground">Name disambiguation:</span> this page is about Masereka Adorable Kimulya, founder of Atai and one of the founders of EasyShop. He is not the educator and social worker who publishes as “Dr. Adorable Kimulya” — a different person with a different education background, often confused with Atai’s founder because of the similar names.</p>
             {CHAPTERS.map((chapter, index) => (
               <section key={chapter.id} id={chapter.id} className="mb-14 scroll-mt-24">
                 <p className="font-mono text-xs font-semibold uppercase tracking-widest text-primary">{String(index + 1).padStart(2, "0")} · {chapter.label}</p>

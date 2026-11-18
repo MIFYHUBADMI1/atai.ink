@@ -47,6 +47,7 @@ export interface GitHubRepo {
   owner: { login: string }
   default_branch: string
   private: boolean
+  description?: string
   permissions?: { push: boolean; pull: boolean; admin: boolean }
 }
 
@@ -137,6 +138,39 @@ export async function getReadme(
     if (e instanceof GitHubApiError && e.status === 404) return null
     throw e
   }
+}
+
+// ─── Commit activity (read-only) ─────────────────────────────────────────────
+
+export interface GitHubCommitSummary {
+  sha: string
+  /** ISO date of the committer, when GitHub supplied one. */
+  date: string | null
+  author?: string
+}
+
+/**
+ * Most recent commits on a branch, capped by `perPage`. Read-only and used
+ * only to state how much activity we actually fetched — callers must never
+ * present it as a productivity or quality measurement.
+ */
+export async function listRecentCommits(
+  accessToken: string | null | undefined,
+  owner: string,
+  repo: string,
+  perPage = 30,
+  branch?: string,
+): Promise<GitHubCommitSummary[]> {
+  const query = new URLSearchParams({ per_page: String(Math.max(1, Math.min(100, perPage))) })
+  if (branch) query.set("sha", branch)
+  const data = await ghFetch<
+    Array<{ sha: string; commit?: { committer?: { date?: string }; author?: { name?: string } }; author?: { login?: string } | null }>
+  >("GET", `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?${query.toString()}`, accessToken)
+  return (data ?? []).map((commit) => ({
+    sha: commit.sha,
+    date: commit.commit?.committer?.date ?? null,
+    ...(commit.author?.login ? { author: commit.author.login } : {}),
+  }))
 }
 
 // ─── Push files ──────────────────────────────────────────────────────────────
