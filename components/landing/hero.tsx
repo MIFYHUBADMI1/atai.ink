@@ -55,7 +55,7 @@ export function LandingHero({
           <div
             role="tablist"
             aria-label="Choose how to start with Atai"
-            className="lp-hero-input mt-5 grid w-full grid-cols-2 gap-1 rounded-full border border-border/70 bg-card/70 p-1 backdrop-blur-md"
+            className="lp-hero-input mt-5 flex w-full flex-wrap items-center gap-1.5"
           >
             <button
               type="button"
@@ -65,7 +65,7 @@ export function LandingHero({
               aria-controls="entry-panel-new"
               onClick={() => setEntry("new")}
               className={cn(
-                "inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold transition-all sm:text-sm",
+                "inline-flex h-8 items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold transition-all",
                 entry === "new"
                   ? "bg-primary text-primary-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground",
@@ -82,7 +82,7 @@ export function LandingHero({
               aria-controls="entry-panel-existing"
               onClick={() => setEntry("existing")}
               className={cn(
-                "inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold transition-all sm:text-sm",
+                "inline-flex h-8 items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold transition-all",
                 entry === "existing"
                   ? "bg-primary text-primary-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground",
@@ -94,7 +94,7 @@ export function LandingHero({
           </div>
 
           {entry === "new" ? (
-            <div id="entry-panel-new" role="tabpanel" aria-labelledby="entry-tab-new" className="mt-3 w-full">
+            <div id="entry-panel-new" role="tabpanel" aria-labelledby="entry-tab-new" className="mt-2 w-full">
               <LandingComposer />
             </div>
           ) : (
@@ -102,7 +102,7 @@ export function LandingHero({
               id="entry-panel-existing"
               role="tabpanel"
               aria-labelledby="entry-tab-existing"
-              className="mt-3 w-full rounded-[1.35rem] border border-transparent bg-card/90 p-5 backdrop-blur-md"
+              className="mt-2 w-full rounded-[1.35rem] border border-transparent bg-card/90 p-5 backdrop-blur-md"
             >
               <p className="text-sm font-semibold">
                 Do not start over. Keep running what already works.
