@@ -98,7 +98,7 @@ export default function NewProjectPage() {
                 />
               </div>
 
-              <div className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-1.5 text-[11px] text-muted-foreground">
+              <div data-atai-tour="new-assurance" className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-1.5 text-[11px] text-muted-foreground">
                 <span className="inline-flex items-center gap-1.5">
                   <ShieldCheck className="size-3.5 text-primary" />
                   You review the plan before anything is built.

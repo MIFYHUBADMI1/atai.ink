@@ -91,7 +91,7 @@ export function DashboardNotifications() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="relative rounded-lg border border-border p-2 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <DropdownMenuTrigger data-atai-tour="header-inbox" className="relative rounded-lg border border-border p-2 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
         <Bell className="size-4" />
         <span className="sr-only">
           {unread > 0 ? `${unread} unread notifications` : "Notifications"}

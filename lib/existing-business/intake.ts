@@ -35,6 +35,7 @@ import { buildRepoDigest, collectRepoFacts, type RepoFacts } from "./repo-facts"
 import { buildWebsiteDigest, collectWebsiteFacts, type WebsiteFacts } from "./website-facts"
 import { generateBusinessAssessment, type AssessmentEvidence } from "./assessment"
 import { isBusinessObjectiveId, resolveObjectiveActions, type ResolvedAction } from "./objectives"
+import { INTAKE_SOURCE_ERROR, hasIntakeSource, parseIntakeWebsite } from "./source-rule"
 
 /** A `processing` stamp older than this belongs to a run that died quietly. */
 export const STALE_RUN_MS = 10 * 60_000
@@ -92,6 +93,7 @@ export function buildIntakeRecord(input: IntakeInput): BusinessIntake {
           status: "pending",
           owner: input.githubOwner.trim().slice(0, 100),
           repo: input.githubRepo.trim().slice(0, 100),
+          ...(input.githubBranch?.trim() ? { branch: input.githubBranch.trim().slice(0, 100) } : {}),
         }
       : { status: "skipped" },
     assessment: { status: "pending" },
@@ -148,10 +150,50 @@ export async function claimIntakeRun(projectId: string, now = Date.now()): Promi
   return Boolean(claimed)
 }
 
-async function releaseIntakeRun(projectId: string, status: "completed" | "failed"): Promise<void> {
+async function releaseIntakeRun(projectId: string, status: "completed" | "failed" | "cancelled"): Promise<void> {
   const col = await projectsCol()
   const now = Date.now()
   await col.updateOne({ id: projectId }, { $set: { "intake.run": { status, at: now }, updatedAt: now } })
+}
+
+/**
+ * The founder asked to stop. Only a live run can be stopped, and the flag is
+ * read at the next stage boundary — a call already in flight still finishes,
+ * and whatever it learned is kept.
+ */
+export async function requestIntakeStop(projectId: string): Promise<boolean> {
+  const col = await projectsCol()
+  const now = Date.now()
+  const result = await col.updateOne(
+    { id: projectId, "intake.run.status": "processing" },
+    { $set: { "intake.run.cancelRequestedAt": now, updatedAt: now } },
+  )
+  return result.modifiedCount > 0
+}
+
+async function stopRequested(projectId: string): Promise<boolean> {
+  const col = await projectsCol()
+  const doc = (await col.findOne(
+    { id: projectId },
+    { projection: { "intake.run.cancelRequestedAt": 1 } },
+  )) as { intake?: { run?: { cancelRequestedAt?: number } } } | null
+  return doc?.intake?.run?.cancelRequestedAt !== undefined
+}
+
+async function abandonIntakeRun(projectId: string): Promise<void> {
+  await releaseIntakeRun(projectId, "cancelled")
+  await store.appendEvent(
+    projectId,
+    event("intake", "You stopped the reading. What had already been collected is kept, and nothing further was read."),
+  )
+}
+
+/** Returns a finished result when the founder asked to stop, else null. */
+async function stopGate(projectId: string): Promise<IntakeRunResult | null> {
+  if (!(await stopRequested(projectId))) return null
+  await abandonIntakeRun(projectId)
+  const status = intakeProgress((await store.getProject(projectId))?.intake).status
+  return { ok: true, projectId, status, assessmentCompleted: false, stopped: true }
 }
 
 /** Dotted-path patch so concurrent stage writes cannot clobber each other. */
@@ -240,7 +282,13 @@ async function readRepo(project: MirrorProject, intake: BusinessIntake): Promise
   if (!owner || !repo || intake.repo?.status === "skipped") return null
 
   await patchIntake(project.id, stageFields("repo", intake, { status: "processing", attemptedAt: Date.now() }))
-  const result = await collectRepoFacts({ userId: project.userId, owner, repo })
+  const branch = intake.repo?.branch
+  const result = await collectRepoFacts({
+    userId: project.userId,
+    owner,
+    repo,
+    ...(branch ? { branch } : {}),
+  })
   const refreshed = await store.getProject(project.id)
   const current = refreshed?.intake ?? intake
 
@@ -357,7 +405,7 @@ async function runAssessment(
 }
 
 export type IntakeRunResult =
-  | { ok: true; projectId: string; status: IntakeStageStatus; assessmentCompleted: boolean }
+  | { ok: true; projectId: string; status: IntakeStageStatus; assessmentCompleted: boolean; stopped?: boolean }
   | { ok: false; code: string; message: string }
 
 /**
@@ -396,8 +444,18 @@ export async function runBusinessIntake(
   }
 
   try {
+    const stopBeforeWebsite = await stopGate(projectId)
+    if (stopBeforeWebsite) return stopBeforeWebsite
+
     const websiteFacts = await readWebsite(project, intake)
+
+    const stopBeforeRepo = await stopGate(projectId)
+    if (stopBeforeRepo) return stopBeforeRepo
+
     const repoResult = await readRepo(project, intake)
+
+    const stopBeforeAssessment = await stopGate(projectId)
+    if (stopBeforeAssessment) return stopBeforeAssessment
 
     // Refresh BEFORE the domain claim: the stage statuses that decide whether
     // a domain can be claimed were just written by the source reads.

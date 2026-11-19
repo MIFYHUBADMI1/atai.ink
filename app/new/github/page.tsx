@@ -49,7 +49,7 @@ export default function NewGitHubProjectPage() {
               </p>
             </div>
             <CreateGitHubRepoForm hasGitHub={hasGitHub} />
-            <div className="mt-6 flex flex-col gap-2 border-t border-border pt-5">
+            <div className="mt-6 flex flex-col gap-2 border-t border-border pt-5" data-atai-tour="github-examples">
               <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Examples</p>
               <ul className="flex flex-col gap-1.5">
                 {EXAMPLES.map((ex) => (
@@ -62,7 +62,7 @@ export default function NewGitHubProjectPage() {
           </div>
 
           <aside className="flex flex-col gap-4 lg:sticky lg:top-36">
-            <div className="rounded-2xl border border-border/80 bg-card/90 p-5">
+            <div data-atai-tour="github-path" className="rounded-2xl border border-border/80 bg-card/90 p-5">
               <p className="pb-4 font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">On this path</p>
               <ol className="flex flex-col gap-5">
                 {STEPS.map((step, i) => (
@@ -82,7 +82,7 @@ export default function NewGitHubProjectPage() {
               </ol>
             </div>
 
-            <div className="rounded-2xl border border-border/80 bg-card/90 p-5">
+            <div data-atai-tour="github-looks-at" className="rounded-2xl border border-border/80 bg-card/90 p-5">
               <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">What Atai looks at</p>
               <ul className="space-y-1.5 text-xs text-muted-foreground">
                 {[

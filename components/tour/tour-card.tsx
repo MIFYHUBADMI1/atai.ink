@@ -1,20 +1,23 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { ArrowLeft, ArrowRight, Clock, Pause, Play, X } from "lucide-react"
+import { ArrowLeft, ArrowRight, Clock, Crosshair, GripVertical, Pause, Play, X } from "lucide-react"
 import { useTourStore } from "@/lib/tour/engine/store"
 import { remainingMinutes } from "@/lib/tour/engine/resolve"
-import { layoutMode, placeTooltip, EDGE } from "@/lib/tour/engine/geometry"
+import { clampPosition, layoutMode, placeTooltip, EDGE, type Point } from "@/lib/tour/engine/geometry"
 import { getTour } from "@/lib/tour/registry"
 import type { TourRuntime } from "@/lib/tour/engine/use-tour-runtime"
 
 /**
  * The explanation card: what the thing is, what it does, why it matters, and
  * what the founder can do next — plus controls that always include a way out.
- * Positioned near the spotlight on desktop, a bottom sheet on a phone.
+ * Positioned near the spotlight on desktop, a bottom sheet on a phone, and
+ * draggable anywhere on screen: a card that covers the thing being explained is
+ * the founder's problem to solve, not a reason to give up on the highlight.
  */
 
 const CARD_SIZE = { width: 380, height: 320 }
+const NUDGE = 24
 
 const BUTTON =
   "inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -46,6 +49,17 @@ export function TourCard({ runtime }: { runtime: TourRuntime }) {
     return () => window.removeEventListener("resize", sync)
   }, [])
 
+  // Where the founder dropped the card. `null` means "let the engine place it",
+  // which is what a step's highlight relies on, so it survives steps but not
+  // tours: a new tour starts anchored again.
+  const [manual, setManual] = useState<Point | null>(null)
+  const [dragging, setDragging] = useState(false)
+  const cardRef = useRef<HTMLElement | null>(null)
+  const grab = useRef<{ dx: number; dy: number } | null>(null)
+  const size = useRef(CARD_SIZE)
+
+  useEffect(() => setManual(null), [tourId])
+
   const headingRef = useRef<HTMLDivElement | null>(null)
   const step = resolved?.steps[index] ?? null
   const total = resolved?.steps.length ?? 0
@@ -67,9 +81,67 @@ export function TourCard({ runtime }: { runtime: TourRuntime }) {
     return placeTooltip(box, viewport, CARD_SIZE)
   }, [box, viewport])
 
+  const measureCard = () => {
+    const el = cardRef.current
+    if (!el) return
+    size.current = { width: el.offsetWidth || CARD_SIZE.width, height: el.offsetHeight || CARD_SIZE.height }
+  }
+
+  const onPointerDown = (event: React.PointerEvent<HTMLElement>) => {
+    const el = cardRef.current
+    if (!el) return
+    measureCard()
+    const rect = el.getBoundingClientRect()
+    grab.current = { dx: event.clientX - rect.left, dy: event.clientY - rect.top }
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setDragging(true)
+  }
+
+  const onPointerMove = (event: React.PointerEvent<HTMLElement>) => {
+    if (!grab.current) return
+    setManual(
+      clampPosition(
+        { x: event.clientX - grab.current.dx, y: event.clientY - grab.current.dy },
+        size.current,
+        { width: window.innerWidth, height: window.innerHeight },
+      ),
+    )
+  }
+
+  const endDrag = (event: React.PointerEvent<HTMLElement>) => {
+    if (!grab.current) return
+    grab.current = null
+    event.currentTarget.releasePointerCapture?.(event.pointerId)
+    setDragging(false)
+  }
+
+  // The handle is a button, so a keyboard founder can move the card too. Arrow
+  // keys nudge it and Home gives the manual position back to the engine.
+  const onHandleKey = (event: React.KeyboardEvent<HTMLElement>) => {
+    const keys: Record<string, Point> = {
+      ArrowLeft: { x: -NUDGE, y: 0 },
+      ArrowRight: { x: NUDGE, y: 0 },
+      ArrowUp: { x: 0, y: -NUDGE },
+      ArrowDown: { x: 0, y: NUDGE },
+    }
+    if (event.key === "Home") {
+      event.preventDefault()
+      event.stopPropagation()
+      setManual(null)
+      return
+    }
+    const delta = keys[event.key]
+    if (!delta) return
+    event.preventDefault()
+    event.stopPropagation()
+    measureCard()
+    const from = manual ?? { x: placement.left, y: placement.top }
+    setManual(clampPosition({ x: from.x + delta.x, y: from.y + delta.y }, size.current, viewport))
+  }
+
   if (status === "finished" && tour) {
     return (
-      <Sheet placement={placement} tone="done">
+      <Sheet placement={placement} manual={manual} tone="done" dragging={dragging} cardRef={cardRef}>
         <FinishedCard tourId={tour.id} onExit={exit} onRestart={() => useTourStore.getState().restart()} />
       </Sheet>
     )
@@ -84,7 +156,13 @@ export function TourCard({ runtime }: { runtime: TourRuntime }) {
   const left = remainingMinutes(tour.minutes, total, index)
 
   return (
-    <Sheet placement={placement}>
+    <Sheet
+      placement={placement}
+      manual={manual}
+      dragging={dragging}
+      cardRef={cardRef}
+      caret={manual || placement.side === "overlay" || !box ? null : placement.side}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
@@ -100,14 +178,41 @@ export function TourCard({ runtime }: { runtime: TourRuntime }) {
             {step.title}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={exit}
-          aria-label="Exit the tour"
-          className={`${BUTTON_GHOST} shrink-0 !px-2 !py-1`}
-        >
-          <X className="size-4" />
-        </button>
+        <div className="flex shrink-0 items-center gap-0.5">
+          {manual ? (
+            <button
+              type="button"
+              onClick={() => setManual(null)}
+              aria-label="Move the card back to the highlighted section"
+              title="Snap back to the highlight"
+              className={`${BUTTON_GHOST} !px-2 !py-1`}
+            >
+              <Crosshair className="size-4" />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            data-tour-drag-handle=""
+            aria-label="Move the tour card. Arrow keys nudge it, Shift plus arrow moves it further, Home snaps it back."
+            title="Drag me — this card can go anywhere on the screen"
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={endDrag}
+            onPointerCancel={endDrag}
+            onKeyDown={onHandleKey}
+            className={`${BUTTON_GHOST} cursor-grab touch-none !px-2 !py-1 active:cursor-grabbing`}
+          >
+            <GripVertical className="size-4" />
+          </button>
+          <button
+            type="button"
+            onClick={exit}
+            aria-label="Exit the tour"
+            className={`${BUTTON_GHOST} !px-2 !py-1`}
+          >
+            <X className="size-4" />
+          </button>
+        </div>
       </div>
 
       {/* Progress: where you are, how many stops, and roughly how long left. */}
@@ -125,6 +230,15 @@ export function TourCard({ runtime }: { runtime: TourRuntime }) {
           <Clock className="size-3" />~{left} min
         </span>
       </div>
+
+      {/* On a phone there is no ring to read, and after a drag there is no
+          line of sight between card and highlight — so name the section. */}
+      {targetLabel && !blocked ? (
+        <p className="mt-2 flex items-center gap-1.5 rounded-lg bg-muted/60 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+          <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary motion-reduce:animate-none" aria-hidden />
+          Looking at: {targetLabel}
+        </p>
+      ) : null}
 
       <p className="mt-3 text-sm leading-6 text-foreground/90">{step.text}</p>
       {step.why ? (
@@ -207,27 +321,48 @@ export function TourCard({ runtime }: { runtime: TourRuntime }) {
 function Sheet({
   children,
   placement,
+  manual,
   tone = "normal",
+  dragging = false,
+  caret = null,
+  cardRef,
 }: {
   children: React.ReactNode
   placement: { side: "top" | "bottom" | "overlay"; left: number; top: number; maxWidth: number }
+  manual?: Point | null
   tone?: "normal" | "done"
+  dragging?: boolean
+  caret?: "top" | "bottom" | null
+  cardRef?: React.Ref<HTMLElement>
 }) {
-  const mobile = placement.side === "overlay"
-  const style: React.CSSProperties = mobile
-    ? { left: placement.left, right: placement.left, maxWidth: placement.maxWidth }
-    : { left: placement.left, top: placement.top, width: placement.maxWidth }
+  // A dragged card keeps exactly where the founder put it, on a phone too.
+  const moved = Boolean(manual)
+  const mobile = placement.side === "overlay" && !moved
+  const style: React.CSSProperties = moved
+    ? { left: manual!.x, top: manual!.y, width: placement.maxWidth }
+    : mobile
+      ? { left: placement.left, right: placement.left, maxWidth: placement.maxWidth }
+      : { left: placement.left, top: placement.top, width: placement.maxWidth }
 
   return (
     <section
+      ref={cardRef}
       aria-label="Guided tour"
       className={
-        mobile
-          ? `pointer-events-auto fixed inset-x-3 bottom-3 z-[80] rounded-2xl border ${tone === "done" ? "border-primary/40" : "border-border"} bg-card p-4 shadow-xl sm:left-auto sm:right-3 sm:w-[380px]`
-          : `pointer-events-auto fixed z-[80] rounded-2xl border ${tone === "done" ? "border-primary/40" : "border-border"} bg-card p-4 shadow-xl`
+        `pointer-events-auto fixed z-[80] rounded-2xl border ${tone === "done" ? "border-primary/40" : "border-border"} bg-card p-4 shadow-xl transition-shadow ` +
+        (mobile ? "inset-x-3 bottom-3 sm:left-auto sm:right-3 sm:w-[380px] " : "") +
+        (dragging ? "select-none shadow-2xl ring-2 ring-ring" : "")
       }
       style={mobile ? undefined : style}
     >
+      {caret ? (
+        <span
+          aria-hidden
+          className={`absolute left-1/2 size-3 -translate-x-1/2 rotate-45 border-border bg-card ${
+            caret === "top" ? "-top-1.5 border-x border-t" : "-bottom-1.5 border-b border-r"
+          }`}
+        />
+      ) : null}
       {children}
     </section>
   )

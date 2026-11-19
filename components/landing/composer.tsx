@@ -919,6 +919,7 @@ export function LandingComposer({
             <textarea
               ref={textareaRef}
               id="landing-prompt"
+              data-atai-tour="new-prompt-box"
               value={prompt}
               rows={3}
               onChange={handlePromptChange}
@@ -1014,6 +1015,7 @@ export function LandingComposer({
 
           <button
             type="button"
+            data-atai-tour="new-attach"
             className={toolbarBtn}
             aria-label="Attach file"
             onClick={() => (requireAccount() ? fileRef.current?.click() : undefined)}
@@ -1023,7 +1025,7 @@ export function LandingComposer({
           </button>
 
           <DropdownMenu>
-            <DropdownMenuTrigger className={toolbarBtn} aria-label="Advanced options">
+            <DropdownMenuTrigger className={toolbarBtn} aria-label="Advanced options" data-atai-tour="new-advanced">
               <SlidersHorizontal className="size-3.5" />
               <span className="hidden sm:inline">Advanced</span>
               {advancedCount > 0 ? (
@@ -1120,6 +1122,7 @@ export function LandingComposer({
 
           <button
             type="button"
+            data-atai-tour="new-voice"
             className={cn(
               "relative ml-auto grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:ml-0",
               listening && "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground",
@@ -1136,6 +1139,7 @@ export function LandingComposer({
 
           <button
             type="submit"
+            data-atai-tour="new-send"
             disabled={!canSend}
             aria-label={submitting ? "Preparing your business plan" : (submitLabel ?? "Plan my business")}
             className={cn(
@@ -1176,7 +1180,7 @@ export function LandingComposer({
         ) : null}
       </div>
 
-      <div className="mt-1">
+      <div data-atai-tour="new-examples" className="mt-1">
         <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
           Need some inspiration?
         </p>

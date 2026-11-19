@@ -72,6 +72,8 @@ export interface IntakeWebsiteStage extends IntakeStage {
 export interface IntakeRepoStage extends IntakeStage {
   owner?: string
   repo?: string
+  /** Branch the founder named, if any. Absent means the repository default. */
+  branch?: string
   /** Recorded from a live `getRepo` call with the user's own token — never
    * inferred from the repository being publicly reachable. */
   accessVerified?: boolean
@@ -93,7 +95,14 @@ export interface BusinessIntake {
    * conditional update so a double-click or a restart cannot crawl and charge
    * twice. A `processing` stamp older than the stale-run window may be
    * reclaimed — that is a run that died without reporting. */
-  run?: { status: "idle" | "processing" | "completed" | "failed"; at: number }
+  run?: {
+    status: "idle" | "processing" | "completed" | "failed" | "cancelled"
+    at: number
+    /** Set when the founder pressed Stop. The run reads it at its next stage
+     * boundary: a stop never claims to have interrupted a call already in
+     * flight, and releasing the claim lets the same business be read again. */
+    cancelRequestedAt?: number
+  }
   /** Founder-confirmed business name (may differ from the project title). */
   displayName?: string
   description?: string

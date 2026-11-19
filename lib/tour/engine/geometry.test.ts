@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { EDGE, STICKY_TOP, computeSpotlight, layoutMode, needsScroll, placeTooltip } from "./geometry"
+import { EDGE, STICKY_TOP, clampPosition, computeSpotlight, layoutMode, needsScroll, placeTooltip } from "./geometry"
 
 /**
  * Layout is checked at the sizes the product is actually used at, measured in
@@ -106,5 +106,61 @@ describe("scrolling before highlighting", () => {
     expect(needsScroll({ top: 30, left: 100, width: 200, height: 40 }, viewport)).toBe(true)
     expect(needsScroll({ top: 880, left: 100, width: 200, height: 200 }, viewport)).toBe(true)
     expect(needsScroll({ top: 300, left: 100, width: 200, height: 40 }, viewport)).toBe(false)
+  })
+})
+
+describe("dragging the card anywhere on screen", () => {
+  it("keeps the whole card inside every real device", () => {
+    for (const device of DEVICES) {
+      const viewport = { width: device.width, height: device.height }
+      const cases = [
+        { x: -500, y: -500 },
+        { x: 0, y: 0 },
+        { x: device.width + 400, y: device.height + 400 },
+        { x: device.width / 2, y: device.height / 2 },
+      ]
+      for (const point of cases) {
+        const moved = clampPosition(point, CARD, viewport)
+        expect(moved.x, `${device.name} ${JSON.stringify(point)}`).toBeGreaterThanOrEqual(EDGE)
+        expect(moved.y, device.name).toBeGreaterThanOrEqual(EDGE)
+        expect(moved.x + Math.min(CARD.width, viewport.width - EDGE * 2), device.name).toBeLessThanOrEqual(viewport.width)
+        expect(moved.y + CARD.height, device.name).toBeLessThanOrEqual(viewport.height)
+      }
+    }
+  })
+
+  it("lets a card drop where it was released when there is room", () => {
+    const viewport = { width: 1440, height: 900 }
+    expect(clampPosition({ x: 300, y: 200 }, CARD, viewport)).toEqual({ x: 300, y: 200 })
+  })
+
+  it("never leaves a phone card wider than the screen", () => {
+    const viewport = { width: 360, height: 640 }
+    const wide = clampPosition({ x: 999, y: 120 }, { width: 380, height: 320 }, viewport)
+    expect(wide.x).toBe(EDGE)
+    expect(wide.y).toBeLessThanOrEqual(viewport.height - 320 - EDGE)
+  })
+})
+
+describe("the card never sits on the thing it explains", () => {
+  it("leaves the spotlight box clear at every size", () => {
+    for (const device of DEVICES) {
+      const viewport = { width: device.width, height: device.height }
+      const boxes = [
+        { top: 80, left: 40, width: 320, height: 90 },
+        { top: 300, left: 60, width: 200, height: 200 },
+        { top: viewport.height - 140, left: 30, width: 260, height: 120 },
+      ]
+      for (const raw of boxes) {
+        const spotlight = computeSpotlight(raw, viewport)
+        if (!spotlight) continue
+        const placed = placeTooltip(spotlight, viewport, CARD)
+        if (placed.side === "overlay") continue
+        const cardTop = placed.top
+        const cardBottom = placed.top + CARD.height
+        const clear = cardTop >= spotlight.top + spotlight.height || cardBottom <= spotlight.top
+        expect(clear, `${device.name} ${JSON.stringify(spotlight)} -> ${JSON.stringify(placed)}`).toBe(true)
+      }
+    }
   })
 })

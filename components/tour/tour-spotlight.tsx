@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useTourStore } from "@/lib/tour/engine/store"
-import { layoutMode, type Box } from "@/lib/tour/engine/geometry"
+import { layoutMode, EDGE, type Box } from "@/lib/tour/engine/geometry"
 
 /**
  * The spotlight. It dims everything except the real element, and it is
@@ -27,6 +27,7 @@ function useViewport() {
 export function TourSpotlight() {
   const box = useTourStore((s) => s.target.box)
   const state = useTourStore((s) => s.target.state)
+  const label = useTourStore((s) => s.target.label)
   const status = useTourStore((s) => s.status)
   const viewport = useViewport()
 
@@ -63,16 +64,26 @@ export function TourSpotlight() {
     left: box.left,
     width: box.width,
     height: Math.min(box.height, viewport.height - box.top - 8),
-    // One huge shadow is the dim; the hole is the element itself.
-    boxShadow: "0 0 0 9999px rgba(0,0,0,0.55)",
+    // One huge shadow is the dim; the hole is the element itself. The glow
+    // makes the ring survive a bright card or an image behind it.
+    boxShadow: "0 0 0 9999px rgba(0,0,0,0.55), 0 0 0 4px rgba(255,255,255,0.9), 0 0 22px 4px rgba(59,130,246,0.45)",
   }
 
   return (
-    <div aria-hidden="true" className="pointer-events-none fixed z-[79]" data-tour-overlay="spotlight">
+    <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-[79]" data-tour-overlay="spotlight">
       <div
-        className={`${RING} border-2 border-primary/80 bg-transparent transition-all duration-200 motion-reduce:transition-none`}
+        className={`${RING} border-2 border-primary bg-transparent transition-all duration-200 motion-reduce:transition-none`}
         style={style}
       />
+      {label ? (
+        <span
+          className="absolute inline-flex max-w-[min(90vw,420px)] items-center gap-1 truncate rounded-full border border-primary/40 bg-card px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-foreground shadow-lg"
+          style={{ top: Math.max(EDGE, box.top - 26), left: box.left }}
+        >
+          <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary motion-reduce:animate-none" aria-hidden />
+          {label}
+        </span>
+      ) : null}
     </div>
   )
 }

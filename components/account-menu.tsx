@@ -60,6 +60,7 @@ export function AccountMenu() {
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label="Account menu"
+        data-atai-tour="header-account"
         title={user.name}
         className="flex shrink-0 items-center rounded-full outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       >

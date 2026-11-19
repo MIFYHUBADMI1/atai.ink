@@ -1,5 +1,6 @@
 import type { TourCategory, TourDefinition, TourFeatureFlags, TourStep } from "./types"
 import { createBusinessTour, welcomeTour } from "./tours/getting-started"
+import { navigationTour, projectNavigationTour } from "./tours/navigation"
 import { existingBusinessTour } from "./tours/existing-business"
 import { cofounderTour, workspaceTour } from "./tours/business"
 import { hostingTour, marketTour } from "./tours/operations"
@@ -8,9 +9,11 @@ import { PAGE_TOURS } from "./tours/pages"
 
 const MAIN_TOURS: TourDefinition[] = [
   welcomeTour,
+  navigationTour,
   createBusinessTour,
   existingBusinessTour,
   workspaceTour,
+  projectNavigationTour,
   cofounderTour,
   hostingTour,
   marketTour,

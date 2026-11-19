@@ -36,7 +36,7 @@ export const existingBusinessTour: TourDefinition = {
       id: "your-words-first",
       kind: "input",
       title: "Tell it about the business in your own words",
-      text: "Name, what you sell, who buys, and anything else that matters. Your own description is the one source that is always available — the assessment works from it even if you add no website and no repository.",
+      text: "Name, what you sell, who buys, and anything else that matters. Your description is what the assessment is written around — but it is the framing, not the proof, so it cannot be the only thing you hand over.",
       target: "existing-business-wizard",
       route: "newExistingBusiness",
       instruction: "Fill in the business name and description now. This tour waits for you rather than typing anything.",
@@ -45,11 +45,11 @@ export const existingBusinessTour: TourDefinition = {
     {
       id: "sources-are-optional",
       kind: "info",
-      title: "Website and code are optional evidence",
-      text: "Add your website URL and Atai reads its public pages; connect a GitHub repository and it reads the README and manifests read-only. Reading a website spends credits, a retry within the cache window is free, and repository code is never executed.",
+      title: "One real source is required to submit",
+      text: "Add your website URL and Atai reads its public pages; connect a GitHub repository and it reads the README and manifests read-only. You need one of the two before the intake will run — a business Atai cannot see at all is a business it would have to invent. Reading a website spends credits, a retry within the cache window is free, and repository code is never executed.",
       target: "existing-business-wizard",
       route: "newExistingBusiness",
-      why: "No website or no repository is a normal situation, not a failure — the intake says plainly what it could and could not read.",
+      why: "You do not need both: no repository is a normal situation, and a site that cannot be read never blocks the rest. The intake still says plainly what it could and could not read.",
     },
     {
       id: "pick-your-goals",

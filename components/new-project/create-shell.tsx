@@ -9,6 +9,7 @@ export function CreateWorkspaceShell({
   children,
   backHref = "/new",
   backLabel = "Choose a starting point",
+  heroTourTarget,
 }: {
   kicker: string
   title: string
@@ -16,6 +17,7 @@ export function CreateWorkspaceShell({
   children: ReactNode
   backHref?: string
   backLabel?: string
+  heroTourTarget?: string
 }) {
   return (
     <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-6 px-4 py-6 lg:px-8">
@@ -31,7 +33,10 @@ export function CreateWorkspaceShell({
           {kicker}
         </p>
       </div>
-      <div className="overflow-hidden rounded-2xl border border-border/80 bg-gradient-to-br from-primary/[0.07] via-card to-card p-5 sm:p-6">
+      <div
+        data-atai-tour={heroTourTarget}
+        className="overflow-hidden rounded-2xl border border-border/80 bg-gradient-to-br from-primary/[0.07] via-card to-card p-5 sm:p-6"
+      >
         <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{kicker}</p>
         <h1 className="mt-2 max-w-3xl text-balance text-2xl font-semibold tracking-tight sm:text-3xl">{title}</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">{description}</p>

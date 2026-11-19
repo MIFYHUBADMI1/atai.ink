@@ -34,7 +34,7 @@ export default function NewWebsiteProjectPage() {
           </div>
 
           <aside className="flex flex-col gap-4 lg:sticky lg:top-36">
-            <nav aria-label="Progress" className="rounded-2xl border border-border/80 bg-card/90 p-5">
+            <nav data-atai-tour="website-where-you-are" aria-label="Progress" className="rounded-2xl border border-border/80 bg-card/90 p-5">
               <p className="pb-4 font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                 Where you are
               </p>
@@ -76,7 +76,7 @@ export default function NewWebsiteProjectPage() {
                 Atai plans first — nothing is built until you review and approve the plan.
               </p>
             </nav>
-            <div className="rounded-2xl border border-border/80 bg-card/90 p-5">
+            <div data-atai-tour="website-study-note" className="rounded-2xl border border-border/80 bg-card/90 p-5">
               <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 Study, don&apos;t copy
               </p>

@@ -150,7 +150,7 @@ export function CreateGitHubRepoForm({ hasGitHub }: { hasGitHub: boolean }) {
     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
 
       {/* Experimental badge */}
-      <div className="flex items-center gap-2 rounded-lg border border-purple-500/30 bg-purple-500/5 px-3 py-2.5">
+      <div data-atai-tour="github-experimental" className="flex items-center gap-2 rounded-lg border border-purple-500/30 bg-purple-500/5 px-3 py-2.5">
         <span className="rounded-full bg-purple-500/20 px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-widest text-purple-600 dark:text-purple-400">
           New &amp; Experimental
         </span>
@@ -160,7 +160,7 @@ export function CreateGitHubRepoForm({ hasGitHub }: { hasGitHub: boolean }) {
       </div>
 
       {/* Sub-mode selection */}
-      <div className="flex flex-col gap-2">
+      <div data-atai-tour="github-mode" className="flex flex-col gap-2">
         <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
           Mode
         </Label>
@@ -207,6 +207,7 @@ export function CreateGitHubRepoForm({ hasGitHub }: { hasGitHub: boolean }) {
         </Label>
         <Input
           id="repo-input"
+          data-atai-tour="github-repo-field"
           value={repoInput}
           onChange={e => { setRepoInput(e.target.value); setError(null) }}
           placeholder="github.com/owner/repo  or  owner/repo"
@@ -250,6 +251,7 @@ export function CreateGitHubRepoForm({ hasGitHub }: { hasGitHub: boolean }) {
         </div>
         <Input
           id="project-name"
+          data-atai-tour="github-name-field"
           autoComplete="off"
           placeholder="Name your business — this becomes the workspace title"
           value={title}
@@ -270,7 +272,7 @@ export function CreateGitHubRepoForm({ hasGitHub }: { hasGitHub: boolean }) {
       </div>
 
       {/* Branch — optional */}
-      <div className="flex flex-col gap-2">
+      <div data-atai-tour="github-branch-field" className="flex flex-col gap-2">
         <Label htmlFor="branch-input" className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
           Branch <span className="normal-case text-muted-foreground/60">(optional, defaults to main)</span>
         </Label>
@@ -287,7 +289,7 @@ export function CreateGitHubRepoForm({ hasGitHub }: { hasGitHub: boolean }) {
 
       {/* Extend mode: user request textarea */}
       {subMode === "extend" && (
-        <div className="flex flex-col gap-2">
+        <div data-atai-tour="github-request-field" className="flex flex-col gap-2">
           <Label htmlFor="user-request" className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
             What do you want to add or change? <span className="text-destructive">*</span>
           </Label>
@@ -308,7 +310,7 @@ export function CreateGitHubRepoForm({ hasGitHub }: { hasGitHub: boolean }) {
       )}
 
       {/* Preferences button */}
-      <div className="flex items-center justify-between rounded-lg border border-border bg-card p-3">
+      <div data-atai-tour="github-preferences" className="flex items-center justify-between rounded-lg border border-border bg-card p-3">
         <div className="flex flex-col gap-1">
           <p className="text-sm font-medium">Business preferences</p>
           <p className="text-xs text-muted-foreground">
@@ -345,7 +347,7 @@ export function CreateGitHubRepoForm({ hasGitHub }: { hasGitHub: boolean }) {
       )}
 
       {/* Mode-specific info */}
-      <div className="rounded-lg border border-border bg-muted/40 p-4">
+      <div data-atai-tour="github-mode-info" className="rounded-lg border border-border bg-muted/40 p-4">
         <p className="mb-2 font-mono text-xs uppercase tracking-widest text-muted-foreground">
           {subMode === "clone" ? "Rebuild mode" : "Extend mode"}
         </p>
@@ -363,7 +365,7 @@ export function CreateGitHubRepoForm({ hasGitHub }: { hasGitHub: boolean }) {
         </div>
       )}
 
-      <Button type="submit" disabled={!canSubmit || busy} className="h-11">
+      <Button type="submit" data-atai-tour="github-submit" disabled={!canSubmit || busy} className="h-11">
         {busy ? (
           <>
             <Loader2 className="size-4 animate-spin mr-2" />

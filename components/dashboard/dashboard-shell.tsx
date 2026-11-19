@@ -12,6 +12,7 @@ import {
   Gift,
   Home,
   LayoutGrid,
+  LifeBuoy,
   Lightbulb,
   Lock,
   Menu,
@@ -44,16 +45,16 @@ import { cn } from "@/lib/utils"
 const NAV = [
   { href: "/dashboard", label: "Home", icon: Home, tour: "nav-dashboard" },
   { href: "/projects", label: "Businesses", icon: Building2, tour: "nav-businesses" },
-  { href: "/finances", label: "Finances", icon: Wallet, requiresBuilt: true },
-  { href: "/notifications", label: "Notifications", icon: Bell },
-  { href: "/contributions", label: "Contributions", icon: Gift },
-  { href: "/new", label: "New business", icon: Sparkles },
+  { href: "/finances", label: "Finances", icon: Wallet, tour: "nav-finances", requiresBuilt: true },
+  { href: "/notifications", label: "Notifications", icon: Bell, tour: "nav-notifications" },
+  { href: "/contributions", label: "Contributions", icon: Gift, tour: "nav-contributions" },
+  { href: "/new", label: "New business", icon: Sparkles, tour: "nav-new" },
   { href: "/tours", label: "Guided tours", icon: BookOpen, tour: "nav-tours" },
 ] as const
 
 const DISCOVER_NAV = [
-  { href: "/explore", label: "Explore", icon: Compass },
-  { href: "/feature-requests", label: "Feature requests", icon: Lightbulb },
+  { href: "/explore", label: "Explore", icon: Compass, tour: "nav-explore" },
+  { href: "/feature-requests", label: "Feature requests", icon: Lightbulb, tour: "nav-feature-requests" },
 ] as const
 
 export function DashboardShell({
@@ -129,6 +130,7 @@ export function DashboardShell({
           <div className={cn("flex items-center gap-1 border-t border-border p-2", collapsed && "flex-col")}>
             <button
               type="button"
+              data-atai-tour="nav-collapse"
               className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-border p-2 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onClick={() => setCollapsed((v) => !v)}
               aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -232,7 +234,7 @@ export function DashboardShell({
                   Help
                 </Link>
                 <DashboardNotifications />
-                <div className="hidden lg:block">
+                <div className="hidden lg:block" data-atai-tour="header-credits">
                   <CreditMeter />
                 </div>
                 <ThemeToggle />
@@ -364,6 +366,7 @@ function SidebarBody({
               <Link
                 key={item.href}
                 href={item.href}
+                data-atai-tour={item.tour}
                 title={showLock ? `${item.label} — unlocks once you have a built application` : item.label}
                 className={cn(
                   "inline-flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -391,6 +394,12 @@ function SidebarBody({
             )
           })}
         </nav>
+        {/* The top-bar Help link is hidden on a narrow screen, and inside a
+            business there is no bottom block — so without this, a phone founder
+            cannot reach the guides at all. */}
+        <div className="mt-auto flex flex-col gap-1">
+          <SidebarLink item={{ href: "/docs", label: "Help & support", icon: LifeBuoy, tour: "nav-help", match: (p) => p === "/docs" }} pathname={pathname} collapsed={collapsed} />
+        </div>
       </div>
     )
   }
@@ -449,6 +458,7 @@ function SidebarBody({
                   <li key={project.id}>
                     <Link
                       href={`/project/${project.id}`}
+                      data-atai-tour="nav-business-card"
                       className="block rounded-lg px-2 py-1.5 transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <span className="block truncate text-sm">{project.name}</span>
@@ -480,7 +490,19 @@ function SidebarBody({
 
       <div className="mt-auto flex flex-col gap-1">
         <Link
+          href="/docs"
+          data-atai-tour="nav-help"
+          className={cn(
+            "inline-flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            collapsed && "justify-center px-0",
+          )}
+        >
+          <LifeBuoy className="size-4" />
+          {collapsed ? <span className="sr-only">Help & support</span> : "Help & support"}
+        </Link>
+        <Link
           href="/settings"
+          data-atai-tour="nav-settings"
           className={cn(
             "inline-flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             collapsed && "justify-center px-0",
@@ -491,6 +513,7 @@ function SidebarBody({
         </Link>
         <Link
           href={askHref}
+          data-atai-tour="nav-ask"
           className={cn(
             "inline-flex items-center gap-2 rounded-lg bg-primary px-2.5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             collapsed && "justify-center px-0",

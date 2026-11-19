@@ -62,28 +62,38 @@ export interface TooltipPlacement {
 /**
  * Places the explanation card. On phones it is always a bottom sheet: a card
  * anchored to a small target on a 360px screen overlaps the very control it is
- * describing. On larger screens it prefers the side with more room.
+ * describing. On larger screens it goes on the side with more room — but only a
+ * side that can actually hold it. A card clamped back into the viewport would
+ * land on top of the ring and hide the thing being taught, which is worse than
+ * putting it in the corner, so if neither side fits it becomes a sheet there too.
  */
 export function placeTooltip(
   spotlight: Box,
   viewport: Viewport,
   card: { width: number; height: number },
+  gap = 14,
 ): TooltipPlacement {
   const mode = layoutMode(viewport)
-  if (mode === "mobile") {
-    return { side: "overlay", left: EDGE, top: viewport.height - card.height - EDGE, maxWidth: viewport.width - EDGE * 2 }
-  }
+  const overlay = (): TooltipPlacement => ({
+    side: "overlay",
+    left: EDGE,
+    top: viewport.height - card.height - EDGE,
+    maxWidth: viewport.width - EDGE * 2,
+  })
+
+  if (mode === "mobile") return overlay()
 
   const width = Math.min(card.width, viewport.width - EDGE * 2)
   const roomBelow = viewport.height - (spotlight.top + spotlight.height)
   const roomAbove = spotlight.top
-  const side: TooltipSide = roomBelow >= card.height + 24 || roomAbove < roomBelow ? "bottom" : "top"
+  const fitsBelow = roomBelow >= card.height + gap
+  const fitsAbove = roomAbove >= card.height + gap
+
+  if (!fitsBelow && !fitsAbove) return overlay()
+  const side: TooltipSide = fitsBelow && fitsAbove ? (roomBelow >= roomAbove ? "bottom" : "top") : fitsBelow ? "bottom" : "top"
 
   const left = Math.min(Math.max(spotlight.left + spotlight.width / 2 - width / 2, EDGE), viewport.width - width - EDGE)
-  const top =
-    side === "bottom"
-      ? Math.min(spotlight.top + spotlight.height + 14, viewport.height - card.height - EDGE)
-      : Math.max(spotlight.top - card.height - 14, EDGE)
+  const top = side === "bottom" ? spotlight.top + spotlight.height + gap : Math.max(EDGE, spotlight.top - card.height - gap)
 
   return { side, left, top, maxWidth: width }
 }
@@ -92,4 +102,23 @@ export function placeTooltip(
  * scrolling before it can be highlighted. */
 export function needsScroll(box: Box, viewport: Viewport, stickyTop = STICKY_TOP): boolean {
   return box.top < stickyTop || box.top + box.height > viewport.height
+}
+
+export interface Point {
+  x: number
+  y: number
+}
+
+/**
+ * Keep a dragged card on screen. A card wider than the phone viewport still
+ * gets its left edge at the gutter rather than a negative offset, so it can
+ * never be dragged somewhere it cannot be dragged back from.
+ */
+export function clampPosition(point: Point, card: { width: number; height: number }, viewport: Viewport): Point {
+  const maxX = Math.max(EDGE, viewport.width - card.width - EDGE)
+  const maxY = Math.max(EDGE, viewport.height - card.height - EDGE)
+  return {
+    x: Math.min(Math.max(point.x, EDGE), maxX),
+    y: Math.min(Math.max(point.y, EDGE), maxY),
+  }
 }

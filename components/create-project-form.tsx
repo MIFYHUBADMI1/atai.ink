@@ -147,13 +147,14 @@ export function CreateProjectForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+    <form data-atai-tour="website-form" onSubmit={handleSubmit} className="flex flex-col gap-3">
       <div className="flex flex-col gap-2">
         <Label htmlFor="project-name" className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
           Project name <span className="text-destructive">*</span>
         </Label>
         <Input
           id="project-name"
+          data-atai-tour="website-name-field"
           autoComplete="off"
           placeholder="Name your workspace — this becomes your project title"
           value={title}
@@ -180,6 +181,7 @@ export function CreateProjectForm() {
           <Input
             ref={urlRef}
             id="source-url"
+            data-atai-tour="website-url-field"
             inputMode="url"
             autoComplete="url"
             placeholder="Paste the website URL — e.g. linear.app"
@@ -194,7 +196,7 @@ export function CreateProjectForm() {
             )}
             aria-invalid={url.length > 0 && !valid}
           />
-          <Button type="submit" disabled={!valid || Boolean(titleError) || submitting} className="h-11 shrink-0 px-6">
+          <Button type="submit" data-atai-tour="website-submit" disabled={!valid || Boolean(titleError) || submitting} className="h-11 shrink-0 px-6">
             {submitting ? (
               <>
                 <Loader2 className="mr-1.5 size-3.5 animate-spin" />
@@ -233,7 +235,7 @@ export function CreateProjectForm() {
         </p>
       ) : null}
 
-      <div>
+      <div data-atai-tour="website-examples">
         <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
           Need some inspiration?
         </p>

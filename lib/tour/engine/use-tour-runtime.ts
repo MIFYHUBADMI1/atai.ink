@@ -137,37 +137,51 @@ export function useTourRuntime(): TourRuntime {
     setMissing(false)
     observe({ state: "searching", box: null, label, stepId })
 
-    let settled = false
-    let scrollAttempts = 0
+    let placed = false
+    let scrollTries = 0
+    let retry = 0
+    let frame = 0
 
-    const measure = (): boolean => {
+    const measure = () => {
       const el = findTarget(targetId)
-      if (!el) return false
+      if (!el) return
       const box = el.getBoundingClientRect()
-      if (needsScroll(box, viewport()) && scrollAttempts < 3) {
-        scrollAttempts += 1
+      // Only chase the element into view the first few times. Once it has been
+      // placed, the founder scrolling away is their choice, not a bug to undo.
+      if (!placed && needsScroll(box, viewport()) && scrollTries < 3) {
+        scrollTries += 1
         el.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "center" })
-        window.setTimeout(() => {
-          if (!settled) settled = measure()
-        }, prefersReducedMotion() ? 60 : 200)
-        // Treat the pending re-measure as handled; the timeout finishes it.
-        return true
+        // Smooth scrolling emits scroll events that re-measure anyway; a
+        // reduced-motion jump emits none, so schedule one.
+        if (retry) window.clearTimeout(retry)
+        retry = window.setTimeout(measure, prefersReducedMotion() ? 80 : 280)
+        return
       }
       const spotlight = computeSpotlight(
         { top: box.top, left: box.left, width: box.width, height: box.height },
         viewport(),
       )
       observe({ state: "found", box: spotlight, label, stepId })
-      return true
+      placed = true
     }
 
-    settled = measure()
+    // DOM churn and scrolling are both bursty; one measurement per frame is
+    // enough, and it keeps a highlight glued to a moving element for free.
+    const schedule = () => {
+      if (frame) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        measure()
+      })
+    }
 
-    // Watch the DOM rather than polling it: a step's element usually arrives
-    // with the page's own data, and this fires exactly when it does.
-    const observer = new MutationObserver(() => {
-      if (settled) settled = measure()
-    })
+    measure()
+
+    // The element usually arrives *after* this effect runs — with the page's
+    // own data, or at the far end of a cross-page navigation. Re-measuring on
+    // every mutation (not only once something was already found) is what lets a
+    // step on a newly loaded page highlight the section it is describing.
+    const observer = new MutationObserver(schedule)
     observer.observe(document.body, {
       childList: true,
       subtree: true,
@@ -175,24 +189,22 @@ export function useTourRuntime(): TourRuntime {
       attributeFilter: ["class", "hidden", "style", TOUR_TARGET_ATTR, "open"],
     })
 
-    const reposition = () => {
-      if (settled) measure()
-    }
-    window.addEventListener("scroll", reposition, { passive: true, capture: true })
-    window.addEventListener("resize", reposition)
+    window.addEventListener("scroll", schedule, { passive: true, capture: true })
+    window.addEventListener("resize", schedule)
 
     const giveUpTimer = window.setTimeout(() => {
-      if (settled) return
-      settled = true
+      if (placed) return
       observe({ state: "missing", box: null, label })
       setMissing(true)
     }, waitBudget(step ?? undefined))
 
     return () => {
+      if (retry) window.clearTimeout(retry)
+      if (frame) cancelAnimationFrame(frame)
       window.clearTimeout(giveUpTimer)
       observer.disconnect()
-      window.removeEventListener("scroll", reposition, { capture: true })
-      window.removeEventListener("resize", reposition)
+      window.removeEventListener("scroll", schedule, { capture: true })
+      window.removeEventListener("resize", schedule)
     }
   }, [active, targetId, stepId, step?.requiresProject, projectId, observe])
 
@@ -239,6 +251,9 @@ export function useTourKeyboard() {
       el instanceof HTMLSelectElement ||
       (el instanceof HTMLElement && el.isContentEditable)
     if (typing) return false
+    // The card's drag handle owns the arrow keys: nudging the card is not
+    // stepping the tour.
+    if (el instanceof HTMLElement && el.closest("[data-tour-drag-handle]")) return false
     if (event.key === "Escape") {
       event.preventDefault()
       state.exit()

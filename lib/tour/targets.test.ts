@@ -14,6 +14,10 @@ import { referencedTargets } from "./registry"
  *   data-atai-tour="projects-list"                 a literal anchor
  *   data-atai-tour={`new-method-${source.id}`}     one anchor per item in a list
  *   data-atai-tour={item.tour} with tour: "..."    a navigation table entry
+ * A shell component can also take the id as a prop (`heroTourTarget="…"` on the
+ * caller, `data-atai-tour={heroTourTarget}` inside), which the second pass below
+ * resolves. Without it a tour would look unanchored while really pointing at the
+ * element the shell renders.
  */
 
 const ROOT = path.resolve(__dirname, "..", "..")
@@ -49,10 +53,15 @@ function annotatedTargets(): Map<string, string[]> {
     found.set(id, list)
   }
 
-  for (const file of DIRS.flatMap(sourceFiles)) {
-    const text = readFileSync(file, "utf8")
-    const relative = path.relative(ROOT, file).replace(/\\/g, "/")
+  const files = DIRS.flatMap(sourceFiles).map((file) => ({
+    file,
+    relative: path.relative(ROOT, file).replace(/\\/g, "/"),
+    text: readFileSync(file, "utf8"),
+  }))
 
+  const propNames = new Set<string>()
+
+  for (const { relative, text } of files) {
     for (const match of text.matchAll(new RegExp(`${TOUR_TARGET_ATTR}="([a-z0-9-]+)"`, "g"))) {
       add(match[1], relative)
     }
@@ -69,7 +78,20 @@ function annotatedTargets(): Map<string, string[]> {
     for (const match of text.matchAll(/\btour:\s*"([a-z0-9-]+)"/g)) {
       add(match[1], relative)
     }
+
+    for (const match of text.matchAll(new RegExp(`${TOUR_TARGET_ATTR}=\\{([A-Za-z][A-Za-z0-9]*)\\}`, "g"))) {
+      propNames.add(match[1])
+    }
   }
+
+  // A shell renders the attribute from a prop; the caller supplies the literal.
+  for (const prop of propNames) {
+    const pattern = new RegExp(`\\b${prop}="([a-z0-9-]+)"`, "g")
+    for (const { relative, text } of files) {
+      for (const match of text.matchAll(pattern)) add(match[1], relative)
+    }
+  }
+
   return found
 }
 
