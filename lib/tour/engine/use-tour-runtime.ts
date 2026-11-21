@@ -6,7 +6,7 @@ import { TOUR_TARGET_ATTR, TOUR_TARGETS, type TourTargetId } from "../targets"
 import { useTourStore } from "./store"
 import { routeForSteps } from "./resolve"
 import { locationMatches, verifyTypeOf, verdictFor, waitBudget } from "./verify"
-import { computeSpotlight, needsScroll } from "./geometry"
+import { computeSpotlight, needsScroll, STICKY_TOP } from "./geometry"
 
 /**
  * Drives one step at a time against the real page: navigate if needed, find
@@ -27,15 +27,42 @@ import { computeSpotlight, needsScroll } from "./geometry"
  */
 function findTarget(id: TourTargetId): HTMLElement | null {
   const matches = document.querySelectorAll<HTMLElement>(`[${TOUR_TARGET_ATTR}="${id}"]`)
+  let fallback: HTMLElement | null = null
   for (const el of matches) {
     const rect = el.getBoundingClientRect()
-    if (rect.width > 0 && rect.height > 0) return el
+    if (rect.width <= 0 || rect.height <= 0) continue
+    const style = getComputedStyle(el)
+    if (style.visibility === "hidden" || style.display === "none" || style.opacity === "0") continue
+    // The same id can be rendered twice (desktop rail, off-canvas mobile
+    // drawer). Prefer the copy actually on screen, so the ring never lands on
+    // a control the founder cannot see.
+    if (rect.bottom > 0 && rect.right > 0 && rect.top < window.innerHeight && rect.left < window.innerWidth) {
+      return el
+    }
+    fallback ??= el
   }
-  return null
+  return fallback
 }
 
 function viewport() {
   return { width: window.innerWidth, height: window.innerHeight }
+}
+
+/**
+ * A control that lives in the app's sticky/fixed chrome (the top bar, the
+ * sidebar header) cannot be scrolled out from under that chrome — it *is* the
+ * chrome. Reserving the sticky-header band for it would draw the ring below the
+ * very button the step is explaining.
+ */
+function isChromeTarget(el: HTMLElement, box: { top: number; height: number }): boolean {
+  if (window.scrollY < 4 && box.top < STICKY_TOP && box.height <= STICKY_TOP) return true
+  let node: HTMLElement | null = el
+  while (node && node !== document.body) {
+    const position = getComputedStyle(node).position
+    if (position === "fixed" || position === "sticky") return true
+    node = node.parentElement
+  }
+  return false
 }
 
 function currentHref(): string {
@@ -146,9 +173,10 @@ export function useTourRuntime(): TourRuntime {
       const el = findTarget(targetId)
       if (!el) return
       const box = el.getBoundingClientRect()
+      const stickyTop = isChromeTarget(el, box) ? 0 : STICKY_TOP
       // Only chase the element into view the first few times. Once it has been
       // placed, the founder scrolling away is their choice, not a bug to undo.
-      if (!placed && needsScroll(box, viewport()) && scrollTries < 3) {
+      if (!placed && needsScroll(box, viewport(), stickyTop) && scrollTries < 3) {
         scrollTries += 1
         el.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "center" })
         // Smooth scrolling emits scroll events that re-measure anyway; a
@@ -160,6 +188,7 @@ export function useTourRuntime(): TourRuntime {
       const spotlight = computeSpotlight(
         { top: box.top, left: box.left, width: box.width, height: box.height },
         viewport(),
+        stickyTop,
       )
       observe({ state: "found", box: spotlight, label, stepId })
       placed = true

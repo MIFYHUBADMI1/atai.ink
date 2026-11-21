@@ -39,10 +39,13 @@ export function layoutMode(viewport: Viewport): LayoutMode {
 export function computeSpotlight(box: Box, viewport: Viewport, stickyTop = STICKY_TOP): Box | null {
   if (box.width <= 0 || box.height <= 0) return null
 
-  const maxVisible = Math.max(160, viewport.height - stickyTop - EDGE * 2)
-  const height = Math.min(box.height, maxVisible)
-  let top = Math.max(stickyTop, box.top)
-  if (top + height > viewport.height - EDGE) top = Math.max(stickyTop, viewport.height - EDGE - height)
+  const minTop = Math.max(EDGE, stickyTop)
+  const maxVisible = Math.max(160, viewport.height - minTop - EDGE)
+  // Pad both axes: a ring that hugs a 20px-tall control reads as a border on
+  // the text rather than a highlight around a button.
+  const height = Math.min(box.height + PAD * 2, maxVisible)
+  let top = Math.max(minTop, box.top - PAD)
+  if (top + height > viewport.height - EDGE) top = Math.max(minTop, viewport.height - EDGE - height)
 
   const width = Math.min(box.width + PAD * 2, viewport.width - EDGE * 2)
   const left = Math.min(Math.max(box.left - PAD, EDGE), Math.max(EDGE, viewport.width - width - EDGE))
