@@ -18,7 +18,7 @@ export default async function NewExistingBusinessPage() {
       <CreateWorkspaceShell
         kicker="Already running something real"
         title="Connect the business you already run."
-        description="Your application keeps running where it is. Atai reads its public pages and your own words, then your AI co-founder writes an honest first assessment with next steps inside your workspace. No rebuild, no redeploy, no second onboarding."
+        description="Your application keeps running where it is. Atai reads its public pages and your own words, your co-founder writes an honest first read, and the workspace opens from there. No rebuild, no redeploy."
         backLabel="All starting points"
         heroTourTarget="existing-business-intro"
       >

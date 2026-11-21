@@ -35,7 +35,8 @@ describe("ConnectionCard", () => {
     const html = render({ connection: connection(), domainVerified: false })
 
     expect(html).toContain(CONNECTION_STATUS_LABEL.not_connected)
-    expect(html).toContain("Both halves are required")
+    // The missing half must be named, not implied.
+    expect(html).toContain("Go back a step — the connection cannot verify without it.")
     expect(html).not.toContain("Disconnect")
   })
 
@@ -50,7 +51,7 @@ describe("ConnectionCard", () => {
     })
 
     expect(html).toContain(CONNECTION_STATUS_LABEL.awaiting_app)
-    expect(html).toContain("The first authenticated call is the handshake")
+    expect(html).toContain("That first authenticated call is the handshake Atai records.")
     expect(html).not.toContain("Disconnect")
   })
 
@@ -66,7 +67,7 @@ describe("ConnectionCard", () => {
     })
 
     expect(html).toContain(CONNECTION_STATUS_LABEL.verified)
-    expect(html).toContain("Nothing in Atai builds, hosts or edits it.")
+    expect(html).toContain("Recorded — this is the proof Atai trusts.")
     expect(html).toContain("Disconnect")
   })
 })

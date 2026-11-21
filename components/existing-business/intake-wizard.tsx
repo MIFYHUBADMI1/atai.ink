@@ -246,11 +246,12 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
                 <div className="rounded-xl border border-border/80 bg-background/50 p-4">
                   <p className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
                     <ShieldCheck className="size-3.5 text-primary" />
-                    Ownership verification is optional, and comes later
+                    Proving the site is the next step — about two minutes
                   </p>
                   <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                    After connecting you can prove the domain is yours with a small meta tag or file. It never blocks
-                    your business profile. It is an Atai ownership check — not Google Search Console verification.
+                    After your first read, Atai asks for one small meta tag or file on your site. That proof is what
+                    lets a connection count as verified, and it is an Atai ownership check — not Google Search Console
+                    verification.
                   </p>
                 </div>
               </div>

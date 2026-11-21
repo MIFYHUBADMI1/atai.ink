@@ -89,7 +89,7 @@ export const existingBusinessTour: TourDefinition = {
       id: "the-assessment",
       kind: "info",
       title: "An assessment that shows its evidence",
-      text: "The report opens with what Atai really read, labels every finding as observed, inferred, owner-stated or assumption, and never invents visitor counts, rankings or conversion rates. Priorities link to the Atai section that carries them out — or say plainly when none exists yet.",
+      text: "Step 1 of the path, and it stays open for re-reading. The report opens with what Atai really read, labels every finding as observed, inferred, owner-stated or assumption, and never invents visitor counts, rankings or conversion rates. Priorities link to the Atai section that carries them out — or say plainly when none exists yet.",
       target: "existing-business-assessment",
       route: "projectBusiness",
       requiresProject: true,
@@ -98,7 +98,7 @@ export const existingBusinessTour: TourDefinition = {
     {
       id: "domain-ownership",
       kind: "info",
-      title: "Prove the domain is yours — optionally",
+      title: "Prove the domain is yours",
       text: "Verification is native: paste a meta tag or upload a small file Atai gives you, then press Check. It is hostname-exact, expires if left too long, and a failed re-check never silently drops a verified domain. It is Atai's own check, not Google Search Console verification. Your assessment never waits on it — but a connection only counts as verified once the domain is proven, which is why it is the step before connecting.",
       why: "Proving the domain is what lets Atai trust that the application calling it is really yours.",
       target: "existing-business-domains",

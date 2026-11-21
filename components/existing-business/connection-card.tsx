@@ -2,10 +2,9 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { Check, Copy, Download, KeyRound, Loader2, PlugZap, ShieldCheck } from "lucide-react"
+import { Check, Copy, Download, KeyRound, Loader2, ShieldCheck } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { deleteJson, postJson } from "@/lib/client/api"
 import type { IntakeView } from "@/lib/existing-business/view"
 import { cn } from "@/lib/utils"
@@ -92,91 +91,109 @@ export function ConnectionCard({
   const needsApp = !connection.firstSeenAt
 
   return (
-    <Card data-atai-tour="existing-business-connection">
-      <CardHeader>
-        <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-          <PlugZap className="size-4 text-primary" />
-          Your application
-          <Badge variant={connected ? "default" : "secondary"}>{connection.label}</Badge>
-        </CardTitle>
-        <CardDescription>
+    <div data-atai-tour="existing-business-connection" className="flex flex-col gap-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant={connected ? "default" : "secondary"}>{connection.label}</Badge>
+        <p className="text-xs text-muted-foreground">
           {connected
-            ? `Your app last called Atai ${connection.lastSeenAt ? new Date(connection.lastSeenAt).toLocaleString() : "recently"}. Nothing in Atai builds, hosts or edits it.`
-            : "Atai calls this connected once your application has authenticated at least once and the domain is proven yours. Both halves are required — either alone is a half-finished connection."}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <ol className="flex flex-col gap-2">
-          <Step done={!needsDomain} label="Prove the domain is yours" detail={hostname ? hostname : "Add the address where your app runs"} />
-          <Step done={Boolean(connection.guideIssuedAt)} label="Issue a connection key and download the guide" detail="Shown once, server-side only, revocable" />
-          <Step done={!needsApp} label="Your application calls Atai once" detail={needsApp ? "The first authenticated call is the handshake" : "Recorded — this is the proof Atai trusts"} />
-        </ol>
-
-        <div className="rounded-xl border border-border/70 bg-secondary/30 p-3">
-          <div className="flex items-center justify-between gap-2">
-            <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Handshake check</p>
-            <button
-              type="button"
-              onClick={copySnippet}
-              className="inline-flex items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
-              {copied ? "Copied" : "Copy"}
-            </button>
-          </div>
-          <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-muted-foreground">
-            {snippet}
-          </pre>
-        </div>
-
-        {error ? (
-          <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-            {error}
-          </p>
-        ) : null}
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" size="sm" onClick={issueGuide} disabled={busy !== null}>
-            {busy === "download" ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-            {connection.guideIssuedAt ? "Reissue key & download guide" : "Issue key & download guide"}
-          </Button>
-          <Link
-            href={`/project/${projectId}/runtime`}
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-primary underline underline-offset-2"
-          >
-            <KeyRound className="size-3.5" />
-            Runtime keys & usage
-          </Link>
-          {connection.status === "verified" || connection.status === "stale" ? (
-            <Button type="button" size="sm" variant="ghost" onClick={disconnect} disabled={busy !== null}>
-              {busy === "disconnect" ? <Loader2 className="size-3.5 animate-spin" /> : null}
-              Disconnect
-            </Button>
-          ) : null}
-        </div>
-        <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-muted-foreground">
-          <ShieldCheck className="mt-0.5 size-3 shrink-0 text-primary" />
-          Reissuing revokes the previous key, so a business never accumulates live credentials.
+            ? `Your app last called Atai ${connection.lastSeenAt ? new Date(connection.lastSeenAt).toLocaleString() : "recently"}.`
+            : "A connection is only counted once your own application has authenticated — a typed address is not a connection."}
         </p>
-      </CardContent>
-    </Card>
+      </div>
+
+      <ol className="flex flex-col gap-2">
+        <Step
+          index={1}
+          done={!needsDomain}
+          label="The domain is proven yours"
+          detail={
+            needsDomain
+              ? "Go back a step — the connection cannot verify without it."
+              : `${hostname ?? "The domain"} is proven. This half is finished.`
+          }
+        />
+        <Step
+          index={2}
+          done={connected || Boolean(connection.guideIssuedAt)}
+          label="Issue a connection key"
+          detail={connection.guideIssuedAt ? "Issued. Reissuing revokes the previous key." : "One key, shown once, server-side only."}
+        />
+        <Step
+          index={3}
+          done={!needsApp}
+          label="Your application calls Atai once"
+          detail={needsApp ? "That first authenticated call is the handshake Atai records." : "Recorded — this is the proof Atai trusts."}
+        />
+      </ol>
+
+      <div className="rounded-2xl border border-border/70 bg-secondary/30 p-4">
+        <div className="flex items-center justify-between gap-2">
+          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">The one call that finishes it</p>
+          <button
+            type="button"
+            onClick={copySnippet}
+            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+          >
+            {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
+            {copied ? "Copied" : "Copy"}
+          </button>
+        </div>
+        <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-muted-foreground">
+          {snippet}
+        </pre>
+        <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+          Keep the key on your server. There is no browser-safe key, and Atai never asks for your repository.
+        </p>
+      </div>
+
+      {error ? (
+        <p role="alert" className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs leading-relaxed text-destructive">
+          {error}
+        </p>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" onClick={issueGuide} disabled={busy !== null}>
+          {busy === "download" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+          {connection.guideIssuedAt ? "Reissue key & download guide" : "Issue key & download guide"}
+        </Button>
+        <Link
+          href={`/project/${projectId}/runtime`}
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-primary underline underline-offset-2"
+        >
+          <KeyRound className="size-3.5" />
+          Runtime keys & usage
+        </Link>
+        {connection.status === "verified" || connection.status === "stale" ? (
+          <Button type="button" variant="ghost" onClick={disconnect} disabled={busy !== null}>
+            {busy === "disconnect" ? <Loader2 className="size-4 animate-spin" /> : null}
+            Disconnect
+          </Button>
+        ) : null}
+      </div>
+
+      <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-muted-foreground">
+        <ShieldCheck className="mt-0.5 size-3 shrink-0 text-primary" />
+        Reissuing revokes the previous key, so a business never accumulates live credentials.
+      </p>
+    </div>
   )
 }
 
-function Step({ done, label, detail }: { done: boolean; label: string; detail: string }) {
+function Step({ index, done, label, detail }: { index: number; done: boolean; label: string; detail: string }) {
   return (
-    <li className="flex items-start gap-2.5">
+    <li className="flex items-start gap-3 rounded-xl border border-border/70 bg-background/60 px-4 py-3">
       <span
         className={cn(
-          "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border text-[10px]",
-          done ? "border-primary/40 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground",
+          "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-medium",
+          done ? "border-success/40 bg-success/10 text-success" : "border-border bg-card text-muted-foreground",
         )}
       >
-        {done ? <Check className="size-3" /> : null}
+        {done ? <Check className="size-3.5" /> : index}
       </span>
       <span className="min-w-0">
-        <span className={cn("block text-xs font-medium", done ? "text-foreground" : "text-muted-foreground")}>{label}</span>
-        <span className="block text-[11px] leading-relaxed text-muted-foreground">{detail}</span>
+        <span className={cn("block text-sm font-medium", done ? "text-foreground" : "text-muted-foreground")}>{label}</span>
+        <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">{detail}</span>
       </span>
     </li>
   )
