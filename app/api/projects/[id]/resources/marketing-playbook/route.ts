@@ -95,7 +95,7 @@ And a **Common Mistakes** section — what founders in this niche typically get 
         operation: "marketingPlaybook",
       })
       
-      // @ts-expect-error — dynamic cache fields not in strict type
+      // @ts-expect-error -- resourcesCache is not part of the strict project type
       const cachedPlaybook = project.resourcesCache?.marketingPlaybook
       if (cachedPlaybook?.text) {
         return ok({
@@ -114,9 +114,9 @@ And a **Common Mistakes** section — what founders in this niche typically get 
     }
 
     await store.updateProject(id, {
-      // @ts-expect-error
+      // @ts-expect-error -- resourcesCache is not part of the strict project type
       resourcesCache: {
-        // @ts-expect-error
+        // @ts-expect-error -- resourcesCache is an untyped cache bag on the stored project
         ...(project.resourcesCache ?? {}),
         marketingPlaybook: { text, generatedAt: Date.now() },
       },

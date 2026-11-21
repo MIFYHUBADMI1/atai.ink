@@ -162,8 +162,10 @@ describe("tool registry — schema hygiene", () => {
     for (const tool of listTools()) {
       expect(tool.description.length, `${tool.name} description`).toBeGreaterThan(20)
       expect(tool.inputSchema, `${tool.name} inputSchema`).toBeTruthy()
-      // Stripped schemas — no pass-through of unknown keys.
-      expect(() => tool.inputSchema.parse({ rogue: "key" }, {})).not.toThrow
+      // Stripped schemas — no pass-through of unknown keys. `.partial()` keeps
+      // the parse valid for every tool while still exercising the strip.
+      const parsed = tool.inputSchema.partial().parse({ rogue: "key" })
+      expect(parsed, `${tool.name} strips unknown keys`).not.toHaveProperty("rogue")
     }
   })
 })

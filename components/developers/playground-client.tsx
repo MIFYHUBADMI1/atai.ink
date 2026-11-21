@@ -489,7 +489,7 @@ export function PlaygroundClient() {
   )
 
   /** Lets a result drive the next request (copy a place id, re-send endpoints). */
-  const useInRequest = useCallback((op: string, input: Record<string, unknown>) => {
+  const submitRequest = useCallback((op: string, input: Record<string, unknown>) => {
     setCapability("maps")
     setOperation(op)
     setInputText(JSON.stringify(input, null, 2))
@@ -1253,7 +1253,7 @@ export function PlaygroundClient() {
                         operation={inspected.operation}
                         requestJson={inspected.requestJson}
                         runMaps={runMaps}
-                        useInRequest={useInRequest}
+                        submitRequest={submitRequest}
                         onCopy={(text) => void copyToClipboard(text)}
                       />
                     ) : (

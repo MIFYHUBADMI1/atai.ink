@@ -106,6 +106,9 @@ export function messageForCode(code: ErrorCode): string {
 // Registers runtime_* codes into the maps above WITHOUT mutating the unions:
 // the shared registry stays source-of-truth, runtime owns its vocabulary.
 try {
+  // Optional module: a static import would turn "runtime unavailable" into a
+  // load-time crash, so this require is intentional.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { importRuntimeErrorCodes } = require("@/runtime/contracts/errors") as {
     importRuntimeErrorCodes: () => void
   }

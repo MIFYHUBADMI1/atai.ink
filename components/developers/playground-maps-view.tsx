@@ -40,7 +40,7 @@ export interface MapsResultViewProps {
   requestJson: string
   runMaps: MapsRunner
   /** Loads a follow-up request into the composer. */
-  useInRequest: (operation: string, input: Rec) => void
+  submitRequest: (operation: string, input: Rec) => void
   onCopy: (text: string) => void
 }
 
@@ -304,13 +304,13 @@ function PlacesBlock({
   places,
   operation,
   runMaps,
-  useInRequest,
+  submitRequest,
   onCopy,
 }: {
   places: Rec[]
   operation: string
   runMaps: MapsRunner
-  useInRequest: (operation: string, input: Rec) => void
+  submitRequest: (operation: string, input: Rec) => void
   onCopy: (text: string) => void
 }) {
   const [selected, setSelected] = useState(0)
@@ -361,7 +361,7 @@ function PlacesBlock({
                           type="button"
                           size="xs"
                           variant="outline"
-                          onClick={() => useInRequest("placeDetails", { poiId: id })}
+                          onClick={() => submitRequest("placeDetails", { poiId: id })}
                         >
                           Look up details
                         </Button>
@@ -391,11 +391,11 @@ function PlacesBlock({
 function DirectionsBlock({
   routes,
   runMaps,
-  useInRequest,
+  submitRequest,
 }: {
   routes: Rec[]
   runMaps: MapsRunner
-  useInRequest: (operation: string, input: Rec) => void
+  submitRequest: (operation: string, input: Rec) => void
 }) {
   const [picked, setPicked] = useState(0)
   const route = routes[Math.min(picked, routes.length - 1)]
@@ -471,7 +471,7 @@ function DirectionsBlock({
         variant="outline"
         className="self-start"
         disabled={line.length < 2}
-        onClick={() => useInRequest("directions", { coordinates: [line[0], line[line.length - 1]] })}
+        onClick={() => submitRequest("directions", { coordinates: [line[0], line[line.length - 1]] })}
       >
         Re-send these endpoints
       </Button>
@@ -715,7 +715,7 @@ export function MapsResultView({
   operation,
   requestJson,
   runMaps,
-  useInRequest,
+  submitRequest,
   onCopy,
 }: MapsResultViewProps) {
   const body = parseObject(json)
@@ -731,7 +731,7 @@ export function MapsResultView({
         places={places}
         operation={operation}
         runMaps={runMaps}
-        useInRequest={useInRequest}
+        submitRequest={submitRequest}
         onCopy={onCopy}
       />
     )
@@ -739,7 +739,7 @@ export function MapsResultView({
 
   if (operation === "directions" && payload) {
     const routes = asRecords(payload.routes)
-    if (routes.length > 0) return <DirectionsBlock routes={routes} runMaps={runMaps} useInRequest={useInRequest} />
+    if (routes.length > 0) return <DirectionsBlock routes={routes} runMaps={runMaps} submitRequest={submitRequest} />
   }
 
   if (operation === "isochrone" && payload) {

@@ -234,7 +234,7 @@ export interface CalComCreateBookingResponse {
   }
 }
 
-export interface CreateBookingResultData extends BookingItem {}
+export type CreateBookingResultData = BookingItem
 
 export function toCreateBookingResult(
   response: CalComCreateBookingResponse,

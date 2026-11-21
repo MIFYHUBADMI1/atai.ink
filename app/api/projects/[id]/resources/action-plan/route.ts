@@ -89,7 +89,7 @@ Be ruthlessly specific to this business type and stage. No generic startup advic
       })
       
       // Check if we have a cached version to fall back to
-      // @ts-expect-error — dynamic cache fields not in strict type
+      // @ts-expect-error -- resourcesCache is not part of the strict project type
       const cachedPlan = project.resourcesCache?.actionPlan
       if (cachedPlan?.text) {
         // Return cached version with a note
@@ -111,9 +111,9 @@ Be ruthlessly specific to this business type and stage. No generic startup advic
 
     // Cache on project
     await store.updateProject(id, {
-      // @ts-expect-error — dynamic cache fields not in strict type
+      // @ts-expect-error -- resourcesCache is not part of the strict project type
       resourcesCache: {
-        // @ts-expect-error
+        // @ts-expect-error -- resourcesCache is an untyped cache bag on the stored project
         ...(project.resourcesCache ?? {}),
         actionPlan: { text, generatedAt: Date.now() },
       },

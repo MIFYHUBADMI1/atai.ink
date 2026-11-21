@@ -103,7 +103,7 @@ Be specific to this exact business type and category. Cite real market data wher
         operation: "marketResearch",
       })
       
-      // @ts-expect-error — dynamic cache fields not in strict type
+      // @ts-expect-error -- resourcesCache is not part of the strict project type
       const cachedResearch = project.resourcesCache?.marketResearch
       if (cachedResearch?.text) {
         return ok({
@@ -122,9 +122,9 @@ Be specific to this exact business type and category. Cite real market data wher
     }
 
     await store.updateProject(id, {
-      // @ts-expect-error
+      // @ts-expect-error -- resourcesCache is not part of the strict project type
       resourcesCache: {
-        // @ts-expect-error
+        // @ts-expect-error -- resourcesCache is an untyped cache bag on the stored project
         ...(project.resourcesCache ?? {}),
         marketResearch: { text, generatedAt: Date.now() },
       },

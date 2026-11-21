@@ -10,7 +10,7 @@ import {
 } from "./playground-maps-view"
 
 const noRun = async (): Promise<MapsCallOutcome> => ({ ok: false, error: { message: "not in test" } })
-const useInRequest = () => {}
+const submitRequest = () => {}
 const onCopy = () => {}
 
 function render(props: {
@@ -25,7 +25,7 @@ function render(props: {
       operation: props.operation,
       requestJson: JSON.stringify({ capability: "maps", operation: props.operation, input: props.request ?? {} }),
       runMaps: props.runMaps ?? noRun,
-      useInRequest,
+      submitRequest,
       onCopy,
     }),
   )

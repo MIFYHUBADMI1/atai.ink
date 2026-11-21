@@ -10,6 +10,9 @@
  * (Requirements 3.1-3.8, 9.1-9.8, 10.1-10.8)
  */
 
+import { extractCommonFields } from "@/lib/planning/schemas/understanding"
+import { TOTALUM_STACK } from "./core-types"
+
 // Re-export ApplicationSpecification types
 export {
   SuggestedFeatureSchema,
@@ -68,8 +71,6 @@ export function buildPlanningContext(
   understanding: import("@/lib/planning/schemas/understanding").UnderstandingBase,
   research: import("@/lib/types/research-findings").ResearchFindings
 ): PlanningContext {
-  const { extractCommonFields } = require("@/lib/planning/schemas/understanding")
-  const { TOTALUM_STACK } = require("./core-types")
   const common = extractCommonFields(understanding)
 
   // Extract core features from understanding

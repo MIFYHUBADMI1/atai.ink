@@ -107,7 +107,7 @@ export async function patchProjectRuntimeConfig(
 
   const nextAllowed = data.allowedModels ?? current.allowedModels
   const nextFallback = data.fallbackModels ?? current.fallbackModels
-  let nextDefault: string | undefined =
+  const nextDefault: string | undefined =
     data.defaultModel === ""
       ? undefined
       : data.defaultModel !== undefined

@@ -138,7 +138,7 @@ Only name is required; omit other fields rather than inventing details. No URLs,
       })
 
       // Check if we have a cached version to fall back to
-      // @ts-expect-error — dynamic cache fields not in strict type
+      // @ts-expect-error -- resourcesCache is not part of the strict project type
       const cachedCompetitors = readResourcesCompetitors(project.resourcesCache)
       if (cachedCompetitors.competitors.length > 0) {
         return ok({
@@ -162,9 +162,9 @@ Only name is required; omit other fields rather than inventing details. No URLs,
     const generatedAt = Date.now()
     try {
       const saved = await store.updateProject(id, {
-        // @ts-expect-error
+        // @ts-expect-error -- resourcesCache is an untyped cache bag on the stored project
         resourcesCache: {
-          // @ts-expect-error
+          // @ts-expect-error -- resourcesCache is an untyped cache bag on the stored project
           ...(project.resourcesCache ?? {}),
           competitors: { data: competitors, generatedAt, intentKey },
         },

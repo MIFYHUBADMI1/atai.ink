@@ -13,6 +13,8 @@
  * (Requirements 2.1-2.8, 16.1-16.8)
  */
 
+import { calculateCompletenessScore } from "@/lib/types/research-findings"
+
 // Re-export ResearchFindings types
 export {
   SeverityLevelSchema,
@@ -125,8 +127,6 @@ export function mergeResearchFindings(
     }
   }
   
-  // Recalculate completeness score
-  const { calculateCompletenessScore } = require("@/lib/types/research-findings")
   merged.completenessScore = calculateCompletenessScore(merged)
   
   return merged

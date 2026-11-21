@@ -278,6 +278,7 @@ function buildSystemPrompt(): string {
 function loggerSafe(level: "info" | "warn" | "error", message: string, fields?: Record<string, unknown>) {
   try {
     // Lazy import keeps the logger out of unit-test paths that stub modules.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- must stay lazy for those tests
     const { logger } = require("@/lib/logging/logger") as typeof import("@/lib/logging/logger")
     logger[level]("cofounder.agent", message, fields)
   } catch {
