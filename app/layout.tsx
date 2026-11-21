@@ -187,7 +187,7 @@ const STRUCTURED_DATA = JSON.stringify({
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html suppressHydrationWarning lang="en" className={`bg-background ${jakarta.variable} ${geistMono.variable}`}>
-      <head>
+      <head suppressHydrationWarning>
         {/* Theme initialization script - runs before first paint to avoid FOUC */}
         <Script id="theme-init" strategy="beforeInteractive">
           {THEME_INIT_SCRIPT}
