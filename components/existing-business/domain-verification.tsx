@@ -2,12 +2,11 @@
 
 import { useEffect, useState } from "react"
 import { Check, Copy, Download, Globe, Loader2, RefreshCw, ShieldCheck, Trash2, TriangleAlert } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { jsonFetcher, patchJson, postJson } from "@/lib/client/api"
+import { patchJson, postJson } from "@/lib/client/api"
 import type { DomainView } from "@/lib/domain/service"
 import type { BusinessDomainMethod, BusinessDomainStatus } from "@/lib/types/business-intake"
 import { cn } from "@/lib/utils"
@@ -58,12 +57,6 @@ export function DomainVerification({
   const [showHistory, setShowHistory] = useState<string | null>(null)
 
   const base = `/api/projects/${projectId}/domains`
-
-  async function refresh() {
-    const data = await jsonFetcher<{ domains: DomainView[] }>(base)
-    setDomains(data.domains)
-    onChanged?.()
-  }
 
   async function run(key: string, fn: () => Promise<void>) {
     setBusy(key)
@@ -162,9 +155,9 @@ export function DomainVerification({
           Domain ownership
         </CardTitle>
         <CardDescription>
-          Prove a website is yours by adding a small meta tag or file that Atai checks. This is optional and never
-          blocks your business profile. It verifies ownership inside Atai only — it is not Google Search Console
-          verification and does not affect search indexing.
+          Prove a website is yours by adding a small meta tag or file that Atai checks. Your assessment and business
+          profile never wait on this — but a connection only counts as verified once the domain is proven. It verifies
+          ownership inside Atai only: it is not Google Search Console verification and does not affect search indexing.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">

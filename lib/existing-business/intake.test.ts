@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { AppError } from "@/lib/errors"
-import type { MirrorProject } from "@/lib/types/project"
 import type { BusinessIntake } from "@/lib/types/business-intake"
 
 // In-memory project document + a collection fake that understands the dotted

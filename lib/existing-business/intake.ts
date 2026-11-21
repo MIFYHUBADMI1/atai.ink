@@ -34,7 +34,6 @@ import type { MirrorProject } from "@/lib/types/project"
 import { buildWebsiteDigest, collectWebsiteFacts, type WebsiteFacts } from "./website-facts"
 import { generateBusinessAssessment, type AssessmentEvidence } from "./assessment"
 import { isBusinessObjectiveId, resolveObjectiveActions, type ResolvedAction } from "./objectives"
-import { INTAKE_SOURCE_ERROR, hasIntakeSource, parseIntakeWebsite } from "./source-rule"
 
 /** A `processing` stamp older than this belongs to a run that died quietly. */
 export const STALE_RUN_MS = 10 * 60_000

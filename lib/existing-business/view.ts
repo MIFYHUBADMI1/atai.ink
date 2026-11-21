@@ -24,6 +24,8 @@ import type { MirrorProject } from "@/lib/types/project"
 import { objectiveLabel } from "./objectives"
 import { intakeProgress } from "./intake"
 
+export { intakeStatusLabel } from "./stage-labels"
+
 export interface IntakeView {
   startingPoint: "from_scratch" | "existing_business"
   displayName?: string
@@ -119,29 +121,5 @@ export function buildIntakeView(project: MirrorProject, domains: BusinessDomainD
       ...(stageError(intake?.assessment) ? { error: stageError(intake?.assessment) } : {}),
       ...(intake?.assessment?.result ? { result: intake.assessment.result } : {}),
     },
-  }
-}
-
-/**
- * A short, honest status sentence for a processing panel. The wording follows
- * the real stage outcomes — a partially completed run says which part failed
- * instead of claiming the whole business was read.
- */
-export function intakeStatusLabel(status: IntakeStageStatus): string {
-  switch (status) {
-    case "pending":
-      return "Waiting to start"
-    case "processing":
-      return "Reading your business"
-    case "completed":
-      return "Done"
-    case "partially_completed":
-      return "Done, with gaps"
-    case "failed":
-      return "Could not complete"
-    case "skipped":
-      return "Not applicable"
-    default:
-      return "Waiting to start"
   }
 }

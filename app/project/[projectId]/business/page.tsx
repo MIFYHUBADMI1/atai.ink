@@ -21,7 +21,7 @@ export default async function BusinessProfilePage({ params }: { params: Promise<
 
   return (
     <DashboardShell title={view.displayName || project.name} projectId={project.id}>
-      <div className="mx-auto w-full max-w-5xl px-4 pb-16 pt-6 sm:px-6 lg:px-8">
+      <div className="mx-auto w-full max-w-3xl px-4 pb-16 pt-6 sm:px-6 lg:px-8">
         <BusinessProfile projectId={project.id} initialView={view} />
       </div>
     </DashboardShell>
