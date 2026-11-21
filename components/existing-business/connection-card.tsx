@@ -101,6 +101,26 @@ export function ConnectionCard({
         </p>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" onClick={issueGuide} disabled={busy !== null}>
+          {busy === "download" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+          {connection.guideIssuedAt ? "Reissue key & download guide" : "Issue key & download guide"}
+        </Button>
+        <Link
+          href={`/project/${projectId}/runtime`}
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-primary underline underline-offset-2"
+        >
+          <KeyRound className="size-3.5" />
+          Runtime keys & usage
+        </Link>
+        {connection.status === "verified" || connection.status === "stale" ? (
+          <Button type="button" variant="ghost" onClick={disconnect} disabled={busy !== null}>
+            {busy === "disconnect" ? <Loader2 className="size-4 animate-spin" /> : null}
+            Disconnect
+          </Button>
+        ) : null}
+      </div>
+
       <ol className="flex flex-col gap-2">
         <Step
           index={1}
@@ -151,26 +171,6 @@ export function ConnectionCard({
           {error}
         </p>
       ) : null}
-
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" onClick={issueGuide} disabled={busy !== null}>
-          {busy === "download" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-          {connection.guideIssuedAt ? "Reissue key & download guide" : "Issue key & download guide"}
-        </Button>
-        <Link
-          href={`/project/${projectId}/runtime`}
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-primary underline underline-offset-2"
-        >
-          <KeyRound className="size-3.5" />
-          Runtime keys & usage
-        </Link>
-        {connection.status === "verified" || connection.status === "stale" ? (
-          <Button type="button" variant="ghost" onClick={disconnect} disabled={busy !== null}>
-            {busy === "disconnect" ? <Loader2 className="size-4 animate-spin" /> : null}
-            Disconnect
-          </Button>
-        ) : null}
-      </div>
 
       <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-muted-foreground">
         <ShieldCheck className="mt-0.5 size-3 shrink-0 text-primary" />

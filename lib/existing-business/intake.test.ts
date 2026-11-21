@@ -108,6 +108,7 @@ import {
   intakeProgress,
   runBusinessIntake,
   sanitizeIntakeInput,
+  startIntakeRun,
 } from "./intake"
 
 const rateMock = vi.mocked(checkRateLimit)
@@ -311,6 +312,55 @@ describe("runBusinessIntake — gates", () => {
     ;(projectDoc!.intake as BusinessIntake).run = { status: "processing", at: Date.now() }
     expect(await runBusinessIntake("proj-1")).toMatchObject({ ok: false, code: "INTAKE_IN_PROGRESS" })
     expect(websiteMock).not.toHaveBeenCalled()
+  })
+})
+
+describe("startIntakeRun — the answer the retry button depends on", () => {
+  /** The state the founder was stuck in: pages read, assessment failed. */
+  function seedFailedAssessment() {
+    seedProject({
+      ...buildIntakeRecord({ description: "d", websiteUrl: "https://bakery.example" }),
+      website: { status: "completed" },
+      assessment: { status: "failed", attemptedAt: Date.now(), errorCode: "ASSESSMENT_FAILED", errorMessage: "x" },
+    } as BusinessIntake)
+  }
+
+  it("accepts a retry after a failed assessment instead of reporting a finished run", async () => {
+    seedFailedAssessment()
+    const result = await startIntakeRun("proj-1", { userId: "user-1" })
+    expect(result).toMatchObject({ ok: true, started: true })
+    // A partially completed intake is not a completed one: the retry must run.
+    expect(rateMock).toHaveBeenCalled()
+  })
+
+  it("says why a start was refused instead of always answering started", async () => {
+    seedFailedAssessment()
+    rateMock.mockRejectedValue(new AppError("RATE_LIMITED", "slow down", 429))
+    expect(await startIntakeRun("proj-1", { userId: "user-1" })).toMatchObject({
+      ok: false,
+      code: "RATE_LIMITED",
+      message: expect.stringContaining("Too many attempts"),
+    })
+  })
+
+  it("reports a run already in flight rather than starting a second one", async () => {
+    seedFailedAssessment()
+    ;(projectDoc!.intake as BusinessIntake).run = { status: "processing", at: Date.now() }
+    expect(await startIntakeRun("proj-1", { userId: "user-1" })).toMatchObject({
+      ok: false,
+      code: "INTAKE_IN_PROGRESS",
+    })
+    expect(websiteMock).not.toHaveBeenCalled()
+  })
+
+  it("reports a finished intake as not started, without spending anything", async () => {
+    seedProject({
+      ...buildIntakeRecord({ description: "d" }),
+      website: { status: "completed" },
+      assessment: { status: "completed" },
+    } as BusinessIntake)
+    expect(await startIntakeRun("proj-1", { userId: "user-1" })).toMatchObject({ ok: true, started: false })
+    expect(assessmentMock).not.toHaveBeenCalled()
   })
 })
 

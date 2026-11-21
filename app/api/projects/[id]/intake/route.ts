@@ -5,7 +5,7 @@ import { readJsonBody } from "@/lib/api/request-body"
 import { businessStartingPointOf } from "@/lib/types/business-intake"
 import { listProjectDomains } from "@/lib/domain/service"
 import { buildIntakeView } from "@/lib/existing-business/view"
-import { intakeProgress, runBusinessIntake } from "@/lib/existing-business/intake"
+import { startIntakeRun } from "@/lib/existing-business/intake"
 
 /**
  * Existing-business intake status + run control (Phase 1 Part G/H).
@@ -42,15 +42,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const body = await readJsonBody(req, 4096)
     const reassess = body.action === "reassess"
 
-    if (!reassess && intakeProgress(project.intake).status === "completed") {
-      const domains = await listProjectDomains(id)
-      return ok({ started: false, view: buildIntakeView(project, domains) })
+    // Await the decision, not the run: a rate limit or a run already in flight
+    // must reach the founder as a sentence, not as a page that silently does
+    // nothing when they press the button again.
+    const result = await startIntakeRun(id, { userId: user.id, allowReassessment: reassess })
+    if (!result.ok) {
+      const status = result.code === "RATE_LIMITED" ? 429 : result.code === "INTAKE_IN_PROGRESS" ? 409 : 422
+      return fail(result.code, result.message, status)
     }
 
-    // Fire-and-forget in the house style: the client polls GET for progress.
-    void runBusinessIntake(id, { userId: user.id, allowReassessment: reassess })
     const domains = await listProjectDomains(id)
-    return ok({ started: true, view: buildIntakeView(project, domains) }, { status: 202 })
+    const fresh = (await store.getProject(id)) ?? project
+    return ok(
+      { started: result.started, view: buildIntakeView(fresh, domains) },
+      { status: result.started ? 202 : 200 },
+    )
   } catch (error) {
     return handleRouteError("projects.intake.post", error)
   }

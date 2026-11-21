@@ -344,14 +344,26 @@ export type IntakeRunResult =
   | { ok: true; projectId: string; status: IntakeStageStatus; assessmentCompleted: boolean; stopped?: boolean }
   | { ok: false; code: string; message: string }
 
+/** What a caller learns about a run it asked for: accepted, already done, or refused. */
+export type IntakeStartResult =
+  | { ok: true; projectId: string; started: boolean; status: IntakeStageStatus; assessmentCompleted: boolean }
+  | { ok: false; code: string; message: string }
+
+type PreparedRun =
+  | { ok: true; project: MirrorProject; intake: BusinessIntake; alreadyDone: boolean }
+  | { ok: false; code: string; message: string }
+
 /**
- * Runs (or resumes) the intake for one project. Safe to call twice, safe to
- * call after a partial failure, and never calls the build pipeline.
+ * Everything that can refuse a run, decided before any work starts: access,
+ * eligibility, a run that is already finished, the rate limit, and the
+ * single-writer claim. Callers use this to answer "did it start?" honestly —
+ * the previous fire-and-forget POST could not, so a refused retry looked
+ * exactly like a working one.
  */
-export async function runBusinessIntake(
+async function prepareIntakeRun(
   projectId: string,
-  options: { userId?: string; allowReassessment?: boolean } = {},
-): Promise<IntakeRunResult> {
+  options: { userId?: string; allowReassessment?: boolean },
+): Promise<PreparedRun> {
   const project = await store.getProject(projectId)
   if (!project) return { ok: false, code: "NOT_FOUND", message: "That business could not be found." }
   if (options.userId && project.userId !== options.userId) {
@@ -363,7 +375,7 @@ export async function runBusinessIntake(
 
   const intake = project.intake ?? buildIntakeRecord({})
   if (intakeProgress(intake).status === "completed" && !options.allowReassessment) {
-    return { ok: true, projectId, status: "completed", assessmentCompleted: intake.assessment?.status === "completed" }
+    return { ok: true, project, intake, alreadyDone: true }
   }
 
   try {
@@ -376,9 +388,19 @@ export async function runBusinessIntake(
   }
 
   if (!(await claimIntakeRun(projectId))) {
-    return { ok: false, code: "INTAKE_IN_PROGRESS", message: "This business is already being read. Please wait for that to finish." }
+    return {
+      ok: false,
+      code: "INTAKE_IN_PROGRESS",
+      message: "This business is already being read. Please wait for that to finish.",
+    }
   }
 
+  return { ok: true, project, intake, alreadyDone: false }
+}
+
+/** The work itself. The claim is already held by the caller. */
+async function executeIntakeRun(project: MirrorProject, intake: BusinessIntake): Promise<IntakeRunResult> {
+  const projectId = project.id
   try {
     const stopBeforeWebsite = await stopGate(projectId)
     if (stopBeforeWebsite) return stopBeforeWebsite
@@ -429,6 +451,56 @@ export async function runBusinessIntake(
       message: "We could not finish reading your business this time. Nothing was invented for you — open the business and try again.",
     }
   }
+}
+
+/**
+ * Runs (or resumes) the intake for one project and waits for it. Safe to call
+ * twice, safe to call after a partial failure, never calls the build pipeline.
+ */
+export async function runBusinessIntake(
+  projectId: string,
+  options: { userId?: string; allowReassessment?: boolean } = {},
+): Promise<IntakeRunResult> {
+  const prepared = await prepareIntakeRun(projectId, options)
+  if (!prepared.ok) return prepared
+  if (prepared.alreadyDone) {
+    return {
+      ok: true,
+      projectId,
+      status: "completed",
+      assessmentCompleted: prepared.intake.assessment?.status === "completed",
+    }
+  }
+  return executeIntakeRun(prepared.project, prepared.intake)
+}
+
+/**
+ * Accepts a run and returns as soon as it is genuinely accepted, so a route can
+ * tell "started" from "refused" without holding the request open for the whole
+ * crawl and model call.
+ */
+export async function startIntakeRun(
+  projectId: string,
+  options: { userId?: string; allowReassessment?: boolean } = {},
+): Promise<IntakeStartResult> {
+  const prepared = await prepareIntakeRun(projectId, options)
+  if (!prepared.ok) return prepared
+  if (prepared.alreadyDone) {
+    return {
+      ok: true,
+      projectId,
+      started: false,
+      status: "completed",
+      assessmentCompleted: prepared.intake.assessment?.status === "completed",
+    }
+  }
+  void executeIntakeRun(prepared.project, prepared.intake).catch((error) => {
+    logger.error("intake.start", "background run threw", {
+      projectId,
+      message: error instanceof Error ? error.message : String(error),
+    })
+  })
+  return { ok: true, projectId, started: true, status: "processing", assessmentCompleted: false }
 }
 
 /**

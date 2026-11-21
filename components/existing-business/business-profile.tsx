@@ -86,12 +86,34 @@ export function BusinessProfile({ projectId, initialView }: { projectId: string;
   }, [projectId])
 
   const running = view.overall === "pending" || view.overall === "processing"
+  // A run started from this page is accepted by the server before it does any
+  // work, so the view it returns is still the old one. Without this the page
+  // looked frozen: the button re-enabled and nothing ever changed.
+  const [watching, setWatching] = useState(false)
+  const watchDeadline = useRef(0)
+  const watchStartedAt = useRef(0)
 
   useEffect(() => {
-    if (!running) return
-    const timer = setInterval(refresh, POLL_MS)
+    if (!running && !watching) return
+    const timer = setInterval(async () => {
+      await refresh()
+      if (watching && Date.now() > watchDeadline.current) setWatching(false)
+    }, POLL_MS)
     return () => clearInterval(timer)
-  }, [running, refresh])
+  }, [running, watching, refresh])
+
+  // Stop polling once the run reports a verdict. The view right after a start
+  // still shows the previous outcome, so an old failure only counts once enough
+  // time has passed for this run to have failed on its own.
+  useEffect(() => {
+    if (!watching) return
+    if (view.assessment.status === "completed") {
+      setWatching(false)
+      return
+    }
+    const settled = view.assessment.status === "failed" && view.overall !== "pending" && view.overall !== "processing"
+    if (settled && Date.now() - watchStartedAt.current > 15_000) setWatching(false)
+  }, [watching, view.assessment.status, view.overall])
 
   async function startRun(action?: "reassess") {
     setBusy(action === "reassess" ? "reassess" : "retry")
@@ -102,7 +124,13 @@ export function BusinessProfile({ projectId, initialView }: { projectId: string;
         action ? { action } : {},
       )
       setView(data.view)
-      if (!data.started && action !== "reassess") await refresh()
+      if (data.started) {
+        watchStartedAt.current = Date.now()
+        watchDeadline.current = Date.now() + 180_000
+        setWatching(true)
+      } else {
+        await refresh()
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not start the run. Please try again.")
     } finally {
@@ -142,26 +170,23 @@ export function BusinessProfile({ projectId, initialView }: { projectId: string;
   const hostname = view.domain.hostname ?? view.website.url?.replace(/^https?:\/\//, "").replace(/\/$/, "")
 
   return (
-    <div className="flex flex-col gap-8">
-      <header className="flex flex-col gap-4" data-atai-tour="existing-business-status">
+    <div className="flex flex-col gap-6">
+      <header className="flex flex-col gap-3" data-atai-tour="existing-business-status">
         <div className="flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.16em] text-primary">
             <Globe className="size-3" />
             Connected business
           </span>
-          <span className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] text-muted-foreground">
-            Atai advises this business — it never rebuilds or redeploys it
-          </span>
         </div>
 
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-1.5">
           <h1 className="text-2xl font-semibold tracking-tight text-balance sm:text-3xl">
             {view.displayName || "Your existing business"}
           </h1>
           <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
             {allDone
               ? "All three steps are done. Your co-founder can see this business now — ask it anything, or pick the section that matches your goal."
-              : `${doneCount} of ${steps.length} steps done. Finish the one below and the next opens on its own — nothing else on this page needs your attention yet.`}
+              : `${doneCount} of ${steps.length} steps done. Finish this one and the next opens on its own.`}
           </p>
         </div>
 
@@ -213,9 +238,9 @@ export function BusinessProfile({ projectId, initialView }: { projectId: string;
             </div>
           ) : null}
 
-          <section className="rounded-2xl border border-border/80 bg-card p-5 sm:p-7">
-            <header className="flex items-start gap-4">
-              <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary [&_svg]:size-5">
+          <section className="rounded-2xl border border-border/80 bg-card p-5 sm:p-6">
+            <header className="flex items-start gap-3">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary [&_svg]:size-[18px]">
                 <copy.icon />
               </span>
               <div className="min-w-0">
@@ -225,13 +250,19 @@ export function BusinessProfile({ projectId, initialView }: { projectId: string;
                   {active.done ? "done" : copy.minutes}
                 </p>
                 <h2 className="mt-1 text-xl font-semibold tracking-tight text-balance sm:text-2xl">{active.title}</h2>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{copy.purpose}</p>
+                <p className="mt-1.5 max-w-2xl text-sm leading-6 text-muted-foreground">{copy.purpose}</p>
               </div>
             </header>
 
-            <div className="mt-6 border-t border-border/70 pt-6">
+            <div className="mt-5 border-t border-border/70 pt-5">
               {active.id === "assessment" ? (
-                <AssessmentStep view={view} running={running} busy={busy} error={error} onStart={startRun} />
+                <AssessmentStep
+              view={view}
+              running={running || watching}
+              busy={busy}
+              error={error}
+              onStart={startRun}
+            />
               ) : null}
               {active.id === "domain" ? (
                 <DomainVerification
@@ -252,7 +283,7 @@ export function BusinessProfile({ projectId, initialView }: { projectId: string;
               ) : null}
             </div>
 
-            <footer className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-border/70 pt-5">
+            <footer className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border/70 pt-4">
               <p className="flex items-center gap-2 text-xs text-muted-foreground">
                 {active.done ? (
                   <>
@@ -436,6 +467,29 @@ function AssessmentStep({
 
   return (
     <div className="flex flex-col gap-5">
+      {/* The control comes first: a founder who lands on this step should not
+          have to scroll past status lines to find the one button that acts. */}
+      {running ? (
+        <div className="flex items-center gap-2 rounded-xl border border-primary/25 bg-primary/5 px-3 py-2.5 text-sm text-primary">
+          <Loader2 className="size-4 shrink-0 animate-spin" />
+          <span className="min-w-0 flex-1">Your co-founder is writing the first read. This page updates itself.</span>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="button" onClick={() => onStart()} disabled={busy !== null}>
+            {busy === "retry" ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+            {assessment.status === "failed" ? "Try again" : "Write my first read"}
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            {assessment.status === "failed"
+              ? "The last attempt did not produce a usable read. Nothing was invented, and the charge was refunded."
+              : "One read, written from your own words and your live pages."}
+          </p>
+        </div>
+      )}
+
+      {error ? <Alert>{error}</Alert> : null}
+
       <ul className="flex flex-col gap-2">
         <StageLine
           label={website.url ? `Reading ${website.url.replace(/^https?:\/\//, "")}` : "Reading your website"}
@@ -452,20 +506,6 @@ function AssessmentStep({
           detail={assessment.status === "processing" ? "Your co-founder is writing it now" : assessment.error?.message}
         />
       </ul>
-
-      {error ? <Alert>{error}</Alert> : null}
-
-      {running ? (
-        <p className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Loader2 className="size-3.5 animate-spin" />
-          This page updates itself. Nothing is marked done until it really is.
-        </p>
-      ) : (
-        <Button type="button" onClick={() => onStart()} disabled={busy !== null}>
-          {busy === "retry" ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-          {assessment.status === "failed" ? "Try again" : "Write my first read"}
-        </Button>
-      )}
     </div>
   )
 }

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("ai", () => ({ generateText: vi.fn() }))
-vi.mock("@/lib/analysis/model", () => ({ MODEL: "test-model" }))
+vi.mock("@/lib/analysis/model", () => ({ MODEL: "test-model", MODEL_ID: "test-model" }))
 vi.mock("@/lib/api/ai-context", () => ({ aiSignal: (signal: unknown) => signal }))
 vi.mock("@/lib/store/store", () => ({ cryptoId: () => randomUUID() }))
 vi.mock("@/lib/logging/logger", () => ({
@@ -191,8 +191,60 @@ describe("buildAssessment — validation and honesty", () => {
     expect(() => buildAssessment("I cannot help with that.", input, actions)).toThrow()
   })
 
-  it("throws on a schema violation instead of shipping a partial assessment", () => {
+  it("keeps a usable assessment when one field is weak", () => {
     const raw = JSON.stringify(validPayload({ understanding: "too short" }))
+    const assessment = buildAssessment(raw, input, actions)
+    // A 9-character summary is a reason to distrust that sentence, not a reason
+    // to throw away every section the model did produce.
+    expect(assessment.understanding).toBe("too short")
+    expect(assessment.strengths.length).toBeGreaterThan(0)
+  })
+
+  it("drops only the unusable finding, not the whole assessment", () => {
+    const payload = validPayload()
+    payload.strengths = [
+      { title: "Clear niche", detail: "The owner describes a focused product line for office buyers.", basis: "owner_stated" },
+      { title: "x", detail: "short", basis: "owner_stated" },
+    ]
+    const assessment = buildAssessment(JSON.stringify(payload), input, actions)
+    expect(assessment.strengths.map((item) => item.title)).toEqual(["Clear niche"])
+  })
+
+  it("accepts the key spellings models actually emit", () => {
+    const payload = validPayload() as Record<string, unknown>
+    payload.current_position = payload.currentPosition
+    delete payload.currentPosition
+    payload.growth_opportunities = [finding("Office lunch orders", "The site never mentions the office lunch trade it already serves.")]
+    delete payload.growthOpportunities
+    payload.actionPlan = {
+      immediate: ["Add a recurring-order enquiry form."],
+      short_term: ["Photograph the counter."],
+      later: ["Open a second pickup window."],
+    }
+    const assessment = buildAssessment(JSON.stringify(payload), input, actions)
+    expect(assessment.currentPosition).toContain("steady local demand")
+    expect(assessment.growthOpportunities.length).toBe(1)
+    expect(assessment.actionPlan.map((entry) => entry.horizon)).toEqual(["immediate", "short_term", "later"])
+  })
+
+  it("accepts an action plan shaped as a list of horizons", () => {
+    const payload = validPayload()
+    ;(payload as Record<string, unknown>).actionPlan = [
+      { horizon: "now", items: ["Add a recurring-order enquiry form."] },
+    ]
+    const assessment = buildAssessment(JSON.stringify(payload), input, actions)
+    expect(assessment.actionPlan).toEqual([{ horizon: "immediate", items: ["Add a recurring-order enquiry form."] }])
+  })
+
+  it("throws when there is genuinely nothing usable to ship", () => {
+    const raw = JSON.stringify({
+      understanding: "",
+      currentPosition: "",
+      strengths: [],
+      challenges: [],
+      priorities: [],
+      openQuestions: [],
+    })
     expect(() => buildAssessment(raw, input, actions)).toThrow()
   })
 
@@ -359,6 +411,26 @@ describe("generateBusinessAssessment — billing and failure honesty", () => {
     const outcome = await generateBusinessAssessment(input, { actions })
     expect(outcome).toMatchObject({ ok: false, code: "ASSESSMENT_FAILED" })
     expect(grantMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("asks once more when the first reply cannot be parsed, and charges only once", async () => {
+    textMock.mockReset()
+    textMock
+      .mockResolvedValueOnce({ text: "Here you go:\nnot json" } as Awaited<ReturnType<typeof generateText>>)
+      .mockResolvedValueOnce({ text: JSON.stringify(validPayload()) } as Awaited<ReturnType<typeof generateText>>)
+    const outcome = await generateBusinessAssessment(input, { actions })
+    expect(outcome.ok).toBe(true)
+    expect(textMock).toHaveBeenCalledTimes(2)
+    expect(consumeMock).toHaveBeenCalledTimes(1)
+    expect(grantMock).not.toHaveBeenCalled()
+  })
+
+  it("does not ask twice when the provider itself failed", async () => {
+    textMock.mockReset()
+    textMock.mockRejectedValue(new Error("provider 502"))
+    const outcome = await generateBusinessAssessment(input, { actions })
+    expect(outcome).toMatchObject({ ok: false, code: "ASSESSMENT_FAILED" })
+    expect(textMock).toHaveBeenCalledTimes(1)
   })
 
   it("refunds when every section comes back empty after honesty filtering", async () => {
