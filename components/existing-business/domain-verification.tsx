@@ -1,11 +1,12 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Check, Copy, Download, Globe, Loader2, RefreshCw, ShieldCheck, Trash2, TriangleAlert } from "lucide-react"
+import { Check, Clock, Copy, Download, Globe, Loader2, RefreshCw, ShieldCheck, Trash2, TriangleAlert } from "lucide-react"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { patchJson, postJson } from "@/lib/client/api"
+import { relativeTime } from "@/lib/client/format"
 import type { DomainView } from "@/lib/domain/service"
 import type { BusinessDomainMethod, BusinessDomainStatus } from "@/lib/types/business-intake"
 import { cn } from "@/lib/utils"
@@ -29,7 +30,7 @@ function statusTone(status: BusinessDomainStatus): string {
 
 function formatDate(at: number | null | undefined): string {
   if (!at) return "—"
-  return new Date(at).toLocaleString()
+  return new Date(at).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })
 }
 
 export function DomainVerification({
@@ -233,6 +234,10 @@ export function DomainVerification({
                   {domain.registrableDomain !== domain.hostname ? `Part of ${domain.registrableDomain} · ` : ""}
                   Added {formatDate(domain.createdAt)}
                 </p>
+                <p className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <Clock className="size-3 shrink-0" />
+                  {domain.lastCheckedAt ? `Last checked ${relativeTime(domain.lastCheckedAt)}` : "Not checked yet"}
+                </p>
               </div>
               <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-medium", statusTone(domain.status))}>
                 {STATUS_LABEL[domain.status]}
@@ -240,24 +245,31 @@ export function DomainVerification({
             </div>
 
             {domain.needsAttention && domain.status === "verified" ? (
-              <p className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-700 dark:text-amber-400">
+              <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-700 dark:text-amber-400">
                 <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
-                The last re-check could not find your tag or file. Your domain stays verified for now — restore the
-                tag/file and re-check. After repeated failures the verification expires and you can generate a new
-                challenge.
-              </p>
+                <div className="min-w-0">
+                  <p>
+                    The re-check {domain.lastFailure ? relativeTime(domain.lastFailure.at) : "just now"} could not find
+                    your tag or file. Your domain stays verified for now — restore it and re-check. After repeated
+                    failures the verification expires and you can generate a new challenge.
+                  </p>
+                  {domain.lastFailure ? <p className="mt-1 opacity-90">{domain.lastFailure.message}</p> : null}
+                </div>
+              </div>
             ) : null}
 
             {domain.lastFailure && domain.status !== "verified" ? (
-              <p className="mt-3 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs leading-relaxed text-destructive">
-                {domain.lastFailure.message}
-              </p>
+              <div className="mt-3 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs leading-relaxed text-destructive">
+                <p>{domain.lastFailure.message}</p>
+                <p className="mt-1 opacity-80">Checked {relativeTime(domain.lastFailure.at)}.</p>
+              </div>
             ) : null}
 
             {domain.status === "verified" ? (
               <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-                <Check className="size-3.5 text-primary" />
-                Verified {formatDate(domain.verifiedAt)} via {domain.verifiedMethod === "html_file" ? "HTML file" : "meta tag"}.
+                <Check className="size-3.5 shrink-0 text-primary" />
+                Verified {formatDate(domain.verifiedAt)} via{" "}
+                {domain.verifiedMethod === "html_file" ? "HTML file" : "meta tag"}.
               </p>
             ) : null}
 

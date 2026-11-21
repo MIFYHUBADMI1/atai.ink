@@ -226,6 +226,12 @@ describe("toDomainView", () => {
     const view = toDomainView({ ...doc, tokenExpiresAt: Date.now() - 1 })
     expect(view.status).toBe("expired")
   })
+
+  it("carries when the last check ran, so the page can say it", async () => {
+    const doc = await register()
+    expect(toDomainView(doc).lastCheckedAt).toBeNull()
+    expect(toDomainView({ ...doc, lastCheckedAt: 1_700_000_000_000 }).lastCheckedAt).toBe(1_700_000_000_000)
+  })
 })
 
 describe("ownership gate", () => {

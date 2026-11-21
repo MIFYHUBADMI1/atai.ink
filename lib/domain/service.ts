@@ -91,6 +91,8 @@ export interface DomainView {
   tokenExpiresAt: number | null
   attempts: number
   lastAttemptAt: number | null
+  /** When a check actually ran, successful or not. Null until the first check. */
+  lastCheckedAt: number | null
   verifiedAt: number | null
   verifiedMethod: BusinessDomainMethod | null
   needsAttention: boolean
@@ -117,6 +119,7 @@ export function toDomainView(doc: BusinessDomainDoc, opts: { includeToken?: bool
     tokenExpiresAt: doc.tokenExpiresAt ?? null,
     attempts: doc.attempts ?? 0,
     lastAttemptAt: doc.lastAttemptAt ?? null,
+    lastCheckedAt: doc.lastCheckedAt ?? null,
     verifiedAt: doc.verifiedAt ?? null,
     verifiedMethod: doc.verifiedMethod ?? null,
     needsAttention: Boolean(doc.lastFailure) && (doc.status === "verified" || doc.status === "failed"),
