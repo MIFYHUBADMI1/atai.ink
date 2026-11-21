@@ -101,6 +101,15 @@ export function placeTooltip(
   return { side, left, top, maxWidth: width }
 }
 
+/**
+ * The card's width, in every state. A dragged card used to adopt the overlay's
+ * full-width budget, so picking it up ballooned it to the width of the window —
+ * the card must be the same size under the founder's finger as it was before.
+ */
+export function cardWidth(viewport: Viewport, preferred = 380): number {
+  return Math.min(preferred, viewport.width - EDGE * 2)
+}
+
 /** A target sitting under the sticky header, or outside the viewport, needs
  * scrolling before it can be highlighted. */
 export function needsScroll(box: Box, viewport: Viewport, stickyTop = STICKY_TOP): boolean {

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { ArrowLeft, ArrowRight, Clock, Crosshair, GripVertical, Pause, Play, X } from "lucide-react"
 import { useTourStore } from "@/lib/tour/engine/store"
 import { remainingMinutes } from "@/lib/tour/engine/resolve"
-import { clampPosition, layoutMode, placeTooltip, EDGE, type Point } from "@/lib/tour/engine/geometry"
+import { clampPosition, cardWidth, layoutMode, placeTooltip, EDGE, type Point } from "@/lib/tour/engine/geometry"
 import { getTour } from "@/lib/tour/registry"
 import type { TourRuntime } from "@/lib/tour/engine/use-tour-runtime"
 
@@ -81,11 +81,16 @@ export function TourCard({ runtime }: { runtime: TourRuntime }) {
     return placeTooltip(box, viewport, CARD_SIZE)
   }, [box, viewport])
 
+  const width = cardWidth(viewport, CARD_SIZE.width)
+
   const measureCard = () => {
     const el = cardRef.current
     if (!el) return
     size.current = { width: el.offsetWidth || CARD_SIZE.width, height: el.offsetHeight || CARD_SIZE.height }
   }
+
+  const dragTo = (point: Point) =>
+    clampPosition(point, { width, height: size.current.height }, { width: window.innerWidth, height: window.innerHeight })
 
   const onPointerDown = (event: React.PointerEvent<HTMLElement>) => {
     const el = cardRef.current
@@ -99,13 +104,7 @@ export function TourCard({ runtime }: { runtime: TourRuntime }) {
 
   const onPointerMove = (event: React.PointerEvent<HTMLElement>) => {
     if (!grab.current) return
-    setManual(
-      clampPosition(
-        { x: event.clientX - grab.current.dx, y: event.clientY - grab.current.dy },
-        size.current,
-        { width: window.innerWidth, height: window.innerHeight },
-      ),
-    )
+    setManual(dragTo({ x: event.clientX - grab.current.dx, y: event.clientY - grab.current.dy }))
   }
 
   const endDrag = (event: React.PointerEvent<HTMLElement>) => {
@@ -136,12 +135,12 @@ export function TourCard({ runtime }: { runtime: TourRuntime }) {
     event.stopPropagation()
     measureCard()
     const from = manual ?? { x: placement.left, y: placement.top }
-    setManual(clampPosition({ x: from.x + delta.x, y: from.y + delta.y }, size.current, viewport))
+    setManual(dragTo({ x: from.x + delta.x, y: from.y + delta.y }))
   }
 
   if (status === "finished" && tour) {
     return (
-      <Sheet placement={placement} manual={manual} tone="done" dragging={dragging} cardRef={cardRef}>
+      <Sheet placement={placement} manual={manual} tone="done" dragging={dragging} cardRef={cardRef} width={width}>
         <FinishedCard tourId={tour.id} onExit={exit} onRestart={() => useTourStore.getState().restart()} />
       </Sheet>
     )
@@ -161,6 +160,7 @@ export function TourCard({ runtime }: { runtime: TourRuntime }) {
       manual={manual}
       dragging={dragging}
       cardRef={cardRef}
+      width={width}
       caret={manual || placement.side === "overlay" || !box ? null : placement.side}
     >
       <div className="flex items-start justify-between gap-3">
@@ -326,6 +326,7 @@ function Sheet({
   dragging = false,
   caret = null,
   cardRef,
+  width,
 }: {
   children: React.ReactNode
   placement: { side: "top" | "bottom" | "overlay"; left: number; top: number; maxWidth: number }
@@ -334,12 +335,15 @@ function Sheet({
   dragging?: boolean
   caret?: "top" | "bottom" | null
   cardRef?: React.Ref<HTMLElement>
+  width: number
 }) {
   // A dragged card keeps exactly where the founder put it, on a phone too.
   const moved = Boolean(manual)
   const mobile = placement.side === "overlay" && !moved
+  // The width is fixed, never the overlay's full-width budget: adopting that
+  // mid-drag made the card balloon to the width of the window under the pointer.
   const style: React.CSSProperties = moved
-    ? { left: manual!.x, top: manual!.y, width: placement.maxWidth }
+    ? { left: manual!.x, top: manual!.y, width }
     : mobile
       ? { left: placement.left, right: placement.left, maxWidth: placement.maxWidth }
       : { left: placement.left, top: placement.top, width: placement.maxWidth }

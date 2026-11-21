@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { EDGE, STICKY_TOP, clampPosition, computeSpotlight, layoutMode, needsScroll, placeTooltip } from "./geometry"
+import { EDGE, STICKY_TOP, cardWidth, clampPosition, computeSpotlight, layoutMode, needsScroll, placeTooltip } from "./geometry"
 
 /**
  * Layout is checked at the sizes the product is actually used at, measured in
@@ -155,6 +155,15 @@ describe("dragging the card anywhere on screen", () => {
     const wide = clampPosition({ x: 999, y: 120 }, { width: 380, height: 320 }, viewport)
     expect(wide.x).toBe(EDGE)
     expect(wide.y).toBeLessThanOrEqual(viewport.height - 320 - EDGE)
+  })
+
+  it("keeps the card's width while it is dragged", () => {
+    // Dragging used to adopt the overlay's full-width budget, so the card
+    // ballooned to the width of the window under the founder's pointer.
+    expect(cardWidth({ width: 1440, height: 900 })).toBe(380)
+    expect(cardWidth({ width: 1024, height: 768 })).toBe(380)
+    expect(cardWidth({ width: 768, height: 1024 })).toBe(380)
+    expect(cardWidth({ width: 360, height: 640 })).toBe(360 - EDGE * 2)
   })
 })
 
