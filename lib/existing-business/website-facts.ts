@@ -3,6 +3,7 @@ import { assertPublicHttpUrl } from "@/lib/runtime/router/adapters/shared/ssrf"
 import { crawlWebsite, normalizeUrl } from "@/lib/integrations/firecrawl/service"
 import { auditWebsiteEvidence } from "@/lib/marketing/seo/auditor"
 import type { WebsiteEvidence } from "@/lib/integrations/firecrawl/types"
+import type { IntakeWebsiteReading } from "@/lib/types/business-intake"
 import type { SeoFinding } from "@/lib/types/db"
 
 /**
@@ -20,6 +21,10 @@ import type { SeoFinding } from "@/lib/types/db"
  */
 
 export const INTAKE_MAX_PAGES = 6
+/** How much of the read we keep for the founder to inspect. Enough to judge the
+ * reading, far short of mirroring the site into our database. */
+export const READING_PAGE_LIMIT = 8
+export const READING_EXCERPT_CHARS = 700
 
 const SOCIAL_HOSTS: Array<[string, string]> = [
   ["facebook.com", "Facebook"],
@@ -169,6 +174,32 @@ export async function collectWebsiteFacts(
           : "We couldn't read that website. You can still continue — we'll work from what you told us.",
       },
     }
+  }
+}
+
+/**
+ * A bounded copy of the read: the opening of each page, and the exact evidence
+ * block the co-founder is given. Built from the same `facts` the assessment
+ * uses, so the founder sees what the model saw rather than a retelling.
+ */
+export function buildReadingSnapshot(facts: WebsiteFacts, evidence?: WebsiteEvidence): IntakeWebsiteReading {
+  const textByUrl = new Map((evidence?.pages ?? []).map((page) => [page.url, page.markdown ?? ""]))
+  const pages = facts.pages.slice(0, READING_PAGE_LIMIT).map((page) => {
+    const text = (textByUrl.get(page.url) ?? "").replace(/\s+/g, " ").trim()
+    return {
+      url: page.url,
+      ...(page.title ? { title: page.title } : {}),
+      headings: page.headings.slice(0, 12),
+      excerpt: text.slice(0, READING_EXCERPT_CHARS),
+      chars: text.length,
+    }
+  })
+  return {
+    capturedAt: Date.now(),
+    digest: buildWebsiteDigest(facts),
+    pages,
+    pagesRead: facts.pagesCrawled,
+    charsRead: pages.reduce((total, page) => total + page.chars, 0),
   }
 }
 

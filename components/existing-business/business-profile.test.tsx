@@ -102,9 +102,33 @@ describe("BusinessProfile", () => {
     expect(html).toContain("Never asks for your repository to advise you.")
   })
 
+  it("lets the founder open the read instead of trusting the page count", () => {
+    const html = render(
+      view({
+        assessment: { status: "failed" },
+        website: { submitted: true, analyzed: true, status: "completed", url: "https://bakery.example", pagesCrawled: 1 },
+      }),
+    )
+
+    expect(html).toContain("1 page read")
+    expect(html).toContain("See what was read")
+  })
+
+  it("offers no preview when the website was not read", () => {
+    const html = render(
+      view({
+        assessment: { status: "pending" },
+        website: { submitted: true, analyzed: false, status: "failed", url: "https://bakery.example" },
+      }),
+    )
+
+    expect(html).not.toContain("See what was read")
+  })
+
   it("offers the finished first read instead of hiding it behind the current step", () => {
     const html = render(view())
 
     expect(html).toContain("Your first read is ready")
   })
+
 })

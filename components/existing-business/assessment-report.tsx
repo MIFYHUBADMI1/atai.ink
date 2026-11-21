@@ -69,7 +69,14 @@ function FindingList({ findings }: { findings: AssessmentFinding[] }) {
   )
 }
 
-export function AssessmentReport({ assessment }: { assessment: BusinessAssessment }) {
+export function AssessmentReport({
+  assessment,
+  onShowReading,
+}: {
+  assessment: BusinessAssessment
+  /** Opens the read itself. Omitted where there is nothing to open. */
+  onShowReading?: () => void
+}) {
   const evidence = assessment.evidence
   const opportunities = [
     ...assessment.growthOpportunities,
@@ -88,7 +95,11 @@ export function AssessmentReport({ assessment }: { assessment: BusinessAssessmen
 
         <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px]">
           <span className="text-muted-foreground">Built only from:</span>
-          <EvidenceChip ok={evidence.websiteAnalysed} label={evidence.websiteAnalysed ? `Your site · ${evidence.pagesCrawled} page(s)` : "Your site · not read"} />
+          <EvidenceChip
+            ok={evidence.websiteAnalysed}
+            label={evidence.websiteAnalysed ? `Your site · ${evidence.pagesCrawled} page(s)` : "Your site · not read"}
+            {...(evidence.websiteAnalysed && onShowReading ? { onClick: onShowReading } : {})}
+          />
           <EvidenceChip ok={evidence.ownerDescription} label={evidence.ownerDescription ? "Your description" : "No description"} />
           <EvidenceChip ok={evidence.domainVerified} label={evidence.domainVerified ? "Verified domain" : "Domain not proven"} />
         </div>
@@ -222,16 +233,23 @@ export function AssessmentReport({ assessment }: { assessment: BusinessAssessmen
   )
 }
 
-function EvidenceChip({ ok, label }: { ok: boolean; label: string }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5",
-        ok ? "border-success/30 bg-success/10 text-success" : "border-border bg-secondary/60 text-muted-foreground",
-      )}
-    >
+function EvidenceChip({ ok, label, onClick }: { ok: boolean; label: string; onClick?: () => void }) {
+  const className = cn(
+    "inline-flex items-center gap-1 rounded-full border px-2 py-0.5",
+    ok ? "border-success/30 bg-success/10 text-success" : "border-border bg-secondary/60 text-muted-foreground",
+    onClick && "transition-colors hover:border-success/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+  )
+  const content = (
+    <>
       <Sparkles className="size-2.5" />
       {label}
-    </span>
+    </>
+  )
+  return onClick ? (
+    <button type="button" onClick={onClick} className={className} title="See what was read">
+      {content}
+    </button>
+  ) : (
+    <span className={className}>{content}</span>
   )
 }

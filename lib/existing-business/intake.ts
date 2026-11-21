@@ -31,7 +31,7 @@ import { listProjectDomains, registerDomain } from "@/lib/domain/service"
 import { businessStartingPointOf, type BusinessIntake, type BusinessObjectiveId, type IntakeStageStatus } from "@/lib/types/business-intake"
 import type { FeaturePreferences } from "@/lib/types/db"
 import type { MirrorProject } from "@/lib/types/project"
-import { buildWebsiteDigest, collectWebsiteFacts, type WebsiteFacts } from "./website-facts"
+import { buildReadingSnapshot, buildWebsiteDigest, collectWebsiteFacts, type WebsiteFacts } from "./website-facts"
 import { generateBusinessAssessment, type AssessmentEvidence } from "./assessment"
 import { isBusinessObjectiveId, resolveObjectiveActions, type ResolvedAction } from "./objectives"
 
@@ -249,6 +249,9 @@ async function readWebsite(project: MirrorProject, intake: BusinessIntake): Prom
     completedAt: Date.now(),
     pagesCrawled: result.facts.pagesCrawled,
     fromCache: result.facts.fromCache,
+    // Kept so the founder can inspect the read on the profile page instead of
+    // taking "1 page read" on faith.
+    reading: buildReadingSnapshot(result.facts, result.evidence),
     errorCode: null,
     errorMessage: null,
   }))

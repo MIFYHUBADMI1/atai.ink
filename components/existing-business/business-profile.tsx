@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils"
 import { AssessmentReport } from "./assessment-report"
 import { ConnectionCard } from "./connection-card"
 import { DomainVerification } from "./domain-verification"
+import { ReadingPreviewButton, ReadingPreviewDialog } from "./reading-preview-dialog"
 
 const POLL_MS = 4000
 
@@ -68,6 +69,7 @@ const STEP_COPY: Record<BusinessStepId, { icon: IconType; purpose: string; whyTi
  * "what do I do next?" unanswerable.
  */
 export function BusinessProfile({ projectId, initialView }: { projectId: string; initialView: IntakeView }) {
+  const [readingOpen, setReadingOpen] = useState(false)
   const [view, setView] = useState<IntakeView>(initialView)
   const [busy, setBusy] = useState<"retry" | "reassess" | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -257,12 +259,13 @@ export function BusinessProfile({ projectId, initialView }: { projectId: string;
             <div className="mt-5 border-t border-border/70 pt-5">
               {active.id === "assessment" ? (
                 <AssessmentStep
-              view={view}
-              running={running || watching}
-              busy={busy}
-              error={error}
-              onStart={startRun}
-            />
+                  view={view}
+                  running={running || watching}
+                  busy={busy}
+                  error={error}
+                  onStart={startRun}
+                  onShowReading={() => setReadingOpen(true)}
+                />
               ) : null}
               {active.id === "domain" ? (
                 <DomainVerification
@@ -317,6 +320,8 @@ export function BusinessProfile({ projectId, initialView }: { projectId: string;
 
           {allDone ? <NextBestActions projectId={projectId} /> : null}
         </div>
+
+        <ReadingPreviewDialog projectId={projectId} open={readingOpen} onOpenChange={setReadingOpen} />
 
         <aside className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-28">
           <nav aria-label="Your connection path" className="rounded-2xl border border-border/80 bg-card p-5">
@@ -437,12 +442,14 @@ function AssessmentStep({
   busy,
   error,
   onStart,
+  onShowReading,
 }: {
   view: IntakeView
   running: boolean
   busy: "retry" | "reassess" | null
   error: string | null
   onStart: (action?: "reassess") => void
+  onShowReading: () => void
 }) {
   const assessment = view.assessment
   const website = view.website
@@ -450,7 +457,7 @@ function AssessmentStep({
   if (assessment.result) {
     return (
       <div className="flex flex-col gap-5">
-        <AssessmentReport assessment={assessment.result} />
+        <AssessmentReport assessment={assessment.result} onShowReading={onShowReading} />
         <div className="flex flex-wrap items-center gap-3">
           <Button type="button" variant="outline" onClick={() => onStart("reassess")} disabled={busy !== null || running}>
             {busy === "reassess" ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
@@ -499,6 +506,7 @@ function AssessmentStep({
               ? `${website.pagesCrawled ?? 0} page${website.pagesCrawled === 1 ? "" : "s"} read${website.fromCache ? " — cached, no new spend" : ""}`
               : website.error?.message
           }
+          action={website.analyzed ? <ReadingPreviewButton onClick={onShowReading} /> : null}
         />
         <StageLine
           label="Writing your first read"
@@ -525,16 +533,19 @@ function StageLine({
   label,
   status,
   detail,
+  action,
 }: {
   label: string
   status: IntakeView["assessment"]["status"]
   detail?: string
+  action?: React.ReactNode
 }) {
   return (
     <li className="flex items-start justify-between gap-3 rounded-xl border border-border/70 bg-background/60 px-4 py-3">
       <span className="min-w-0">
         <span className="block truncate text-sm font-medium">{label}</span>
         {detail ? <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">{detail}</span> : null}
+        {action ? <span className="mt-2 block">{action}</span> : null}
       </span>
       <span
         className={cn(

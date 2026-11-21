@@ -68,6 +68,28 @@ export interface IntakeWebsiteStage extends IntakeStage {
   pagesCrawled?: number
   /** True when the evidence came from the 7-day Firecrawl cache (no new spend). */
   fromCache?: boolean
+  /** A bounded copy of what the read actually returned, kept so the founder can
+   * check the reading instead of trusting it. Bounded on purpose: this is a
+   * preview of the read, not an archive of their site. */
+  reading?: IntakeWebsiteReading
+}
+
+export interface IntakeWebsiteReading {
+  capturedAt: number
+  /** Exactly the evidence block the co-founder's prompt contained. */
+  digest: string
+  pages: Array<{
+    url: string
+    title?: string
+    headings: string[]
+    /** Opening characters of the page text the crawl returned. */
+    excerpt: string
+    /** Characters the crawler returned for this page, before the excerpt cut. */
+    chars: number
+  }>
+  pagesRead: number
+  /** Characters of page text behind the excerpts — not the digest size. */
+  charsRead: number
 }
 /**
  * How the customer's own application proved it is connected to Atai.

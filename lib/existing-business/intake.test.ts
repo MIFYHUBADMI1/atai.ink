@@ -81,6 +81,13 @@ vi.mock("@/lib/domain/service", () => ({
 vi.mock("./website-facts", () => ({
   collectWebsiteFacts: vi.fn(),
   buildWebsiteDigest: () => "website digest",
+  buildReadingSnapshot: () => ({
+    capturedAt: 1,
+    digest: "website digest",
+    pages: [{ url: "https://bakery.example", headings: [], excerpt: "Bread, baked daily.", chars: 19 }],
+    pagesRead: 3,
+    charsRead: 19,
+  }),
 }))
 vi.mock("./assessment", () => ({
   generateBusinessAssessment: vi.fn(async () => ({
@@ -383,6 +390,15 @@ describe("runBusinessIntake — sources and billing", () => {
     expect(stages().run?.status).toBe("completed")
     expect(stages().website?.status).toBe("completed")
     expect(stages().assessment?.status).toBe("completed")
+  })
+
+  it("keeps a copy of the read so the founder can inspect it", async () => {
+    await runBusinessIntake("proj-1")
+    expect(stages().website?.reading).toMatchObject({
+      digest: "website digest",
+      pagesRead: 3,
+      pages: [{ url: "https://bakery.example", excerpt: "Bread, baked daily." }],
+    })
   })
 
   it("never pays for a crawl served from the cache", async () => {
