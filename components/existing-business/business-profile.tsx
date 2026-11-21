@@ -156,7 +156,14 @@ export function BusinessProfile({ projectId, initialView }: { projectId: string;
 
       <div className="flex flex-wrap items-center gap-3">
         {next ? (
-          <Button type="button" size="sm" onClick={() => setPinned(null)} disabled={!active.done}>
+          <Button
+            type="button"
+            size="sm"
+            // Land on the step the label names, not on whatever is current now:
+            // re-reading step 1 must not skip past step 2 on the way to step 3.
+            onClick={() => setPinned(activeIndex + 1 === current ? null : activeIndex + 1)}
+            disabled={!active.done}
+          >
             Next: {next.title}
             <ArrowRight className="size-3.5" />
           </Button>
