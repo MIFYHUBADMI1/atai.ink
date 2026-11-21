@@ -69,19 +69,51 @@ export interface IntakeWebsiteStage extends IntakeStage {
   /** True when the evidence came from the 7-day Firecrawl cache (no new spend). */
   fromCache?: boolean
 }
-export interface IntakeRepoStage extends IntakeStage {
-  owner?: string
-  repo?: string
-  /** Branch the founder named, if any. Absent means the repository default. */
-  branch?: string
-  /** Recorded from a live `getRepo` call with the user's own token — never
-   * inferred from the repository being publicly reachable. */
-  accessVerified?: boolean
-  private?: boolean
-  filesListed?: number
-  readmeChars?: number
-  manifestsRead?: number
+/**
+ * How the customer's own application proved it is connected to Atai.
+ *
+ * Facts only. The founder-facing status is derived from these facts by
+ * `lib/connected-business/status` and cached back onto `status` whenever a
+ * write path changes them, so a stored status can never drift from the facts
+ * it was derived from.
+ */
+export interface BusinessConnection {
+  /** Derived cache — see `businessConnectionStatus`. */
+  status?: BusinessConnectionStatus
+  /** When the integration guide (with a connection key) was issued. */
+  guideIssuedAt?: number
+  guideVersion?: string
+  /** Runtime key the guide was issued with. Metadata only, never the secret. */
+  keyId?: string
+  /** First authenticated call from the customer's application. This is the
+   * only truthful proof that an app outside Atai is talking to Atai. */
+  firstSeenAt?: number
+  lastSeenAt?: number
+  /** Bounded counter of authenticated calls recorded for display. */
+  seenCalls?: number
+  /** Set the first time a verified domain and a seen application coexist. */
+  verifiedAt?: number
+  revokedAt?: number
+  revokedReason?: string
 }
+
+/**
+ * `not_connected`  no guide, no app call
+ * `guide_issued`   the founder downloaded the guide, nothing has called yet
+ * `awaiting_app`   the domain is verified, no application call yet
+ * `awaiting_domain`an application called, the domain is not verified
+ * `verified`       verified domain + a recent authenticated call
+ * `stale`          verified before, but the app has gone quiet
+ * `revoked`        the founder disconnected the application
+ */
+export type BusinessConnectionStatus =
+  | "not_connected"
+  | "guide_issued"
+  | "awaiting_app"
+  | "awaiting_domain"
+  | "verified"
+  | "stale"
+  | "revoked"
 
 /**
  * What the founder told us, what we could read, and what the co-founder made of
@@ -110,7 +142,6 @@ export interface BusinessIntake {
   additionalContext?: string
   objectives: BusinessObjectiveId[]
   website?: IntakeWebsiteStage
-  repo?: IntakeRepoStage
   assessment?: IntakeStage & { generatedAt?: number; result?: BusinessAssessment }
   /** Domain ownership verification summary, kept in sync with the domain
    * records (which are authoritative — this is a projection for display). */
@@ -165,7 +196,6 @@ export interface BusinessAssessment {
   evidence: {
     websiteAnalysed: boolean
     pagesCrawled: number
-    repoAnalysed: boolean
     ownerDescription: boolean
     domainVerified: boolean
   }

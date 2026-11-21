@@ -110,19 +110,16 @@ describe("evidenceHeader", () => {
     expect(evidenceHeader(baseEvidence)).toEqual({
       websiteAnalysed: false,
       pagesCrawled: 0,
-      repoAnalysed: false,
       ownerDescription: true,
       domainVerified: false,
     })
     const withSources = evidenceHeader({
       ...baseEvidence,
       website: { hostname: "bakery.example", pagesCrawled: 3, digest: "d" },
-      repo: { label: "o/r", filesListed: 10, digest: "d" },
       domainVerified: true,
     })
     expect(withSources.websiteAnalysed).toBe(true)
     expect(withSources.pagesCrawled).toBe(3)
-    expect(withSources.repoAnalysed).toBe(true)
     expect(withSources.domainVerified).toBe(true)
   })
 })
@@ -137,10 +134,8 @@ describe("buildAssessmentMessages", () => {
   it("tells the model honestly when sources were NOT read", () => {
     const { prompt } = buildAssessmentMessages(input)
     expect(prompt).toContain("Their live website: NOT READ")
-    expect(prompt).toContain("Their source repository: NOT READ")
     expect(prompt).toContain("Domain ownership: NOT VERIFIED")
     expect(prompt).toContain("LIVE WEBSITE EVIDENCE: none.")
-    expect(prompt).toContain("REPOSITORY EVIDENCE: none.")
   })
 
   it("lists read sources with their real counts", () => {
@@ -149,12 +144,10 @@ describe("buildAssessmentMessages", () => {
       evidence: {
         ...baseEvidence,
         website: { hostname: "bakery.example", pagesCrawled: 4, digest: "site digest" },
-        repo: { label: "owner/repo", filesListed: 12, digest: "repo digest" },
         domainVerified: true,
       },
     })
     expect(prompt).toContain("READ (4 page(s) at bakery.example)")
-    expect(prompt).toContain("READ (12 files listed for owner/repo)")
     expect(prompt).toContain("Domain ownership: VERIFIED")
   })
 

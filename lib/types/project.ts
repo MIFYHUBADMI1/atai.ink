@@ -3,7 +3,7 @@ import type { ApplicationSpecification } from "./specification"
 import type { PlanAnalysis } from "./plan-analysis"
 import type { AIArtifact } from "./ai-artifacts"
 import type { RuntimeProvisioningMap } from "@/lib/runtime/provisioning/types"
-import type { BusinessIntake, BusinessStartingPoint } from "./business-intake"
+import type { BusinessConnection, BusinessConnectionStatus, BusinessIntake, BusinessStartingPoint } from "./business-intake"
 
 /** Explicit Atai project lifecycle (spec section 30). State is always
  * persisted server-side and never inferred from frontend state alone. */
@@ -216,6 +216,9 @@ export interface MirrorProject {
   /** What the founder told us about an existing business, what we could read,
    * and the assessment built from it. Only present for existing businesses. */
   intake?: BusinessIntake
+  /** Proof that the customer's own application is connected to Atai. Only
+   * present for existing businesses; absent means nothing has been issued. */
+  connection?: BusinessConnection
   name: string
   state: ProjectState
   sourceUrl?: string
@@ -315,6 +318,11 @@ export interface ProjectSummary {
   totalumProjectId?: string
   lastPolledAt?: number
   visibility?: "private" | "public"
+  /** Absent reads as "from_scratch". Lets the list label a connected business
+   * as a business, never as an app built from scratch. */
+  startingPoint?: BusinessStartingPoint
+  /** Cached connection status for connected businesses (derived server-side). */
+  connectionStatus?: BusinessConnectionStatus
 }
 
 /** User-facing labels for lifecycle states. */

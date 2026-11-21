@@ -59,7 +59,7 @@ export interface CofounderExistingBusinessBrief {
   targetCustomers?: string
   objectives: string[]
   website: { submitted: boolean; analyzed: boolean; url?: string; status: string; error?: string }
-  repository: { connected: boolean; read: boolean; label?: string; status: string }
+  connection: { status: string; label: string; lastSeenAt?: number }
   /** From the authoritative domain records, not the intake projection. */
   domainVerified: boolean
   assessment: {

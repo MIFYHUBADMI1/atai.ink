@@ -4,12 +4,12 @@ import "server-only"
  * Existing-business intake orchestration (Phase 1, Parts D–H).
  *
  * One background run over the sources the founder actually supplied:
- * website → repository → domain claim → co-founder assessment.
+ * website → domain claim → co-founder assessment.
  *
  * Deliberate properties:
- *  - Sources are independent. A repository we cannot read does not void the
- *    website evidence, and neither voids what the owner typed. The stage that
- *    failed says so, in its own status, with a founder-safe message.
+ *  - Reading a website is the only evidence gathering here. A repository is
+ *    NOT read: importing code is the GitHub journey's job, and duplicating it
+ *    on this path made two products look like one.
  *  - Nothing here starts a build, a plan or a mirror. Reading a business is not
  *    an instruction to rebuild it (`startProjectPipeline` is never called).
  *  - `ProjectState` is untouched. The build-oriented state machine does not
@@ -31,7 +31,6 @@ import { listProjectDomains, registerDomain } from "@/lib/domain/service"
 import { businessStartingPointOf, type BusinessIntake, type BusinessObjectiveId, type IntakeStageStatus } from "@/lib/types/business-intake"
 import type { FeaturePreferences } from "@/lib/types/db"
 import type { MirrorProject } from "@/lib/types/project"
-import { buildRepoDigest, collectRepoFacts, type RepoFacts } from "./repo-facts"
 import { buildWebsiteDigest, collectWebsiteFacts, type WebsiteFacts } from "./website-facts"
 import { generateBusinessAssessment, type AssessmentEvidence } from "./assessment"
 import { isBusinessObjectiveId, resolveObjectiveActions, type ResolvedAction } from "./objectives"
@@ -47,9 +46,6 @@ export interface IntakeInput {
   additionalContext?: string
   objectives?: BusinessObjectiveId[]
   websiteUrl?: string
-  githubOwner?: string
-  githubRepo?: string
-  githubBranch?: string
 }
 
 function event(stage: string, message: string, level: "info" | "warn" | "error" = "info") {
@@ -88,14 +84,6 @@ export function buildIntakeRecord(input: IntakeInput): BusinessIntake {
     website: input.websiteUrl?.trim()
       ? { status: "pending", url: input.websiteUrl.trim().slice(0, 500) }
       : { status: "skipped" },
-    repo: input.githubOwner?.trim() && input.githubRepo?.trim()
-      ? {
-          status: "pending",
-          owner: input.githubOwner.trim().slice(0, 100),
-          repo: input.githubRepo.trim().slice(0, 100),
-          ...(input.githubBranch?.trim() ? { branch: input.githubBranch.trim().slice(0, 100) } : {}),
-        }
-      : { status: "skipped" },
     assessment: { status: "pending" },
   }
 }
@@ -112,7 +100,7 @@ export function intakeProgress(intake?: BusinessIntake): {
   failed: number
   skipped: number
 } {
-  const stages: Array<IntakeStageStatus | undefined> = [intake?.website?.status, intake?.repo?.status, intake?.assessment?.status]
+  const stages: Array<IntakeStageStatus | undefined> = [intake?.website?.status, intake?.assessment?.status]
   const active = stages.filter((status): status is IntakeStageStatus => Boolean(status))
   const count = (status: IntakeStageStatus) => active.filter((s) => s === status).length
 
@@ -202,13 +190,9 @@ async function patchIntake(projectId: string, fields: Record<string, unknown>): 
   await col.updateOne({ id: projectId }, { $set: compact({ ...fields, updatedAt: Date.now() }) })
 }
 
-function stageFields(
-  key: "website" | "repo",
-  intake: BusinessIntake,
-  patch: Record<string, unknown>,
-): Record<string, unknown> {
-  const existing = (intake[key] ?? {}) as Record<string, unknown>
-  return { [`intake.${key}`]: compact({ ...existing, ...patch }) }
+function websiteStageFields(intake: BusinessIntake, patch: Record<string, unknown>): Record<string, unknown> {
+  const existing = (intake.website ?? {}) as Record<string, unknown>
+  return { "intake.website": compact({ ...existing, ...patch }) }
 }
 
 /**
@@ -223,7 +207,7 @@ async function readWebsite(project: MirrorProject, intake: BusinessIntake): Prom
   const scrapeCost = await getScrapeCost(project.pipelineMode)
   const affordable = await hasSufficientCredits(project.userId, scrapeCost)
   if (!affordable) {
-    await patchIntake(project.id, stageFields("website", intake, {
+    await patchIntake(project.id, websiteStageFields(intake, {
       status: "failed",
       attemptedAt: Date.now(),
       errorCode: "INSUFFICIENT_CREDITS",
@@ -233,13 +217,13 @@ async function readWebsite(project: MirrorProject, intake: BusinessIntake): Prom
     return null
   }
 
-  await patchIntake(project.id, stageFields("website", intake, { status: "processing", attemptedAt: Date.now() }))
+  await patchIntake(project.id, websiteStageFields(intake, { status: "processing", attemptedAt: Date.now() }))
   const result = await collectWebsiteFacts(url)
   const refreshed = await store.getProject(project.id)
   const current = refreshed?.intake ?? intake
 
   if ("failure" in result) {
-    await patchIntake(project.id, stageFields("website", current, {
+    await patchIntake(project.id, websiteStageFields(current, {
       status: "failed",
       completedAt: Date.now(),
       errorCode: result.failure.code,
@@ -261,7 +245,7 @@ async function readWebsite(project: MirrorProject, intake: BusinessIntake): Prom
     }
   }
 
-  await patchIntake(project.id, stageFields("website", current, {
+  await patchIntake(project.id, websiteStageFields(current, {
     status: "completed",
     completedAt: Date.now(),
     pagesCrawled: result.facts.pagesCrawled,
@@ -274,53 +258,6 @@ async function readWebsite(project: MirrorProject, intake: BusinessIntake): Prom
     event("intake", `Read ${result.facts.pagesCrawled} page(s) of ${result.facts.hostname || "your website"}.`),
   )
   return result.facts
-}
-
-async function readRepo(project: MirrorProject, intake: BusinessIntake): Promise<{ facts: RepoFacts; readme: string | null } | null> {
-  const owner = intake.repo?.owner
-  const repo = intake.repo?.repo
-  if (!owner || !repo || intake.repo?.status === "skipped") return null
-
-  await patchIntake(project.id, stageFields("repo", intake, { status: "processing", attemptedAt: Date.now() }))
-  const branch = intake.repo?.branch
-  const result = await collectRepoFacts({
-    userId: project.userId,
-    owner,
-    repo,
-    ...(branch ? { branch } : {}),
-  })
-  const refreshed = await store.getProject(project.id)
-  const current = refreshed?.intake ?? intake
-
-  if ("failure" in result) {
-    await patchIntake(project.id, stageFields("repo", current, {
-      status: "failed",
-      completedAt: Date.now(),
-      owner,
-      repo,
-      accessVerified: false,
-      errorCode: result.failure.code,
-      errorMessage: result.failure.message,
-    }))
-    await store.appendEvent(project.id, event("intake", `Could not read ${owner}/${repo} (${result.failure.code}).`, "warn"))
-    return null
-  }
-
-  await patchIntake(project.id, stageFields("repo", current, {
-    status: "completed",
-    completedAt: Date.now(),
-    owner,
-    repo,
-    accessVerified: true,
-    private: result.facts.isPrivate,
-    filesListed: result.facts.filesListed,
-    readmeChars: result.facts.readmeChars,
-    manifestsRead: result.facts.manifests.length,
-    errorCode: null,
-    errorMessage: null,
-  }))
-  await store.appendEvent(project.id, event("intake", `Read ${owner}/${repo}: ${result.facts.filesListed} files listed.`))
-  return { facts: result.facts, readme: result.readme }
 }
 
 /**
@@ -449,11 +386,6 @@ export async function runBusinessIntake(
 
     const websiteFacts = await readWebsite(project, intake)
 
-    const stopBeforeRepo = await stopGate(projectId)
-    if (stopBeforeRepo) return stopBeforeRepo
-
-    const repoResult = await readRepo(project, intake)
-
     const stopBeforeAssessment = await stopGate(projectId)
     if (stopBeforeAssessment) return stopBeforeAssessment
 
@@ -474,11 +406,6 @@ export async function runBusinessIntake(
         pagesCrawled: websiteFacts.pagesCrawled,
         // Fenced as untrusted inside the assessment prompt, never here.
         digest: buildWebsiteDigest(websiteFacts),
-      } } : {}),
-      ...(repoResult ? { repo: {
-        label: `${repoResult.facts.owner}/${repoResult.facts.repo}`,
-        filesListed: repoResult.facts.filesListed,
-        digest: buildRepoDigest(repoResult.facts, repoResult.readme),
       } } : {}),
     }
 
@@ -549,8 +476,5 @@ export function sanitizeIntakeInput(body: Record<string, unknown>): IntakeInput 
     additionalContext: text(body.additionalContext) || undefined,
     objectives: objectives.length ? [...new Set(objectives)].slice(0, 10) : [],
     websiteUrl: websiteUrl || undefined,
-    githubOwner: text(body.githubOwner) || undefined,
-    githubRepo: text(body.githubRepo) || undefined,
-    githubBranch: text(body.githubBranch) || undefined,
   }
 }

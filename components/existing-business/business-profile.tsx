@@ -1,7 +1,8 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { Building2, FileCode2, Globe, Loader2, RefreshCw, Sparkles } from "lucide-react"
+import Link from "next/link"
+import { Building2, Globe, Loader2, PlugZap, RefreshCw, Sparkles } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,6 +10,7 @@ import { jsonFetcher, postJson } from "@/lib/client/api"
 import type { IntakeView } from "@/lib/existing-business/view"
 import type { IntakeStageStatus } from "@/lib/types/business-intake"
 import { AssessmentReport } from "./assessment-report"
+import { ConnectionCard } from "./connection-card"
 import { DomainVerification } from "./domain-verification"
 import { cn } from "@/lib/utils"
 
@@ -79,7 +81,7 @@ export function BusinessProfile({ projectId, initialView }: { projectId: string;
   }
 
   const website = view.website
-  const repository = view.repository
+  const connection = view.connection
   const assessment = view.assessment
 
   return (
@@ -134,17 +136,38 @@ export function BusinessProfile({ projectId, initialView }: { projectId: string;
             <li className="rounded-xl border border-border/70 bg-card p-3">
               <div className="flex items-center justify-between gap-2">
                 <span className="flex items-center gap-1.5 text-xs font-medium">
-                  <FileCode2 className="size-3.5 text-muted-foreground" />
-                  Repository
+                  <PlugZap className="size-3.5 text-muted-foreground" />
+                  Your application
                 </span>
-                <StageChip status={repository.status} />
+                <span
+                  className={cn(
+                    "rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em]",
+                    connection.status === "verified"
+                      ? "bg-primary/10 text-primary"
+                      : connection.status === "revoked" || connection.status === "stale"
+                        ? "bg-destructive/10 text-destructive"
+                        : "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+                  )}
+                >
+                  {connection.label}
+                </span>
               </div>
               <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-                {repository.connected ? repository.label : "No repository provided."}
-                {repository.read ? " · Read-only evidence collected." : ""}
-                {repository.accessVerified === false && repository.status === "failed" ? " · Access could not be verified." : ""}
+                {connection.lastSeenAt
+                  ? `Your app last called Atai on ${new Date(connection.lastSeenAt).toLocaleString()}.`
+                  : "No call from your app has reached Atai yet."}
+                {connection.status === "awaiting_domain"
+                  ? " Prove the domain is yours to finish the connection."
+                  : connection.status === "awaiting_app"
+                    ? " The domain is yours — the connection completes when your app calls Atai once."
+                    : ""}
               </p>
-              {repository.error ? <p className="mt-1.5 text-[11px] leading-relaxed text-destructive">{repository.error.message}</p> : null}
+              <Link
+                href={`/project/${projectId}/runtime`}
+                className="mt-1.5 inline-flex text-[11px] font-medium text-primary underline underline-offset-2"
+              >
+                Connect your application
+              </Link>
             </li>
             <li className="rounded-xl border border-border/70 bg-card p-3">
               <div className="flex items-center justify-between gap-2">
@@ -197,6 +220,14 @@ export function BusinessProfile({ projectId, initialView }: { projectId: string;
       </Card>
 
       {assessment.result ? <AssessmentReport assessment={assessment.result} /> : null}
+
+      <ConnectionCard
+        projectId={projectId}
+        connection={connection}
+        domainVerified={view.domain.verified}
+        hostname={view.domain.hostname}
+        onChanged={refresh}
+      />
 
       <DomainVerification
         projectId={projectId}

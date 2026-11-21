@@ -15,9 +15,11 @@ import { toDomainView, type DomainView } from "@/lib/domain/service"
 import {
   businessStartingPointOf,
   type BusinessAssessment,
+  type BusinessConnectionStatus,
   type BusinessDomainDoc,
   type IntakeStageStatus,
 } from "@/lib/types/business-intake"
+import { CONNECTION_STATUS_LABEL, businessConnectionStatus } from "@/lib/connected-business/status"
 import type { MirrorProject } from "@/lib/types/project"
 import { objectiveLabel } from "./objectives"
 import { intakeProgress } from "./intake"
@@ -40,20 +42,21 @@ export interface IntakeView {
     status: IntakeStageStatus
     error?: { code: string; message: string }
   }
-  repository: {
-    connected: boolean
-    read: boolean
-    label?: string
-    accessVerified?: boolean
-    status: IntakeStageStatus
-    error?: { code: string; message: string }
-  }
   domain: {
     hostname?: string
     /** Only the domains belonging to this business, tokens included because
      * every caller of this view is session-authenticated and ownership-checked. */
     records: DomainView[]
     verified: boolean
+  }
+  /** Whether the founder's own application has actually reached Atai. Derived
+   * from recorded calls plus domain proof — never assumed from a submitted URL. */
+  connection: {
+    status: BusinessConnectionStatus
+    label: string
+    firstSeenAt?: number
+    lastSeenAt?: number
+    guideIssuedAt?: number
   }
   assessment: {
     status: IntakeStageStatus
@@ -76,6 +79,10 @@ export function buildIntakeView(project: MirrorProject, domains: BusinessDomainD
   const startingPoint = businessStartingPointOf(project)
   const views = domains.map((doc) => toDomainView(doc, { includeToken: true }))
   const verifiedRecord = views.find((view) => view.status === "verified")
+  const connectionStatus = businessConnectionStatus({
+    connection: project.connection,
+    domainVerified: Boolean(verifiedRecord),
+  })
 
   return {
     startingPoint,
@@ -94,13 +101,12 @@ export function buildIntakeView(project: MirrorProject, domains: BusinessDomainD
       status: intake?.website?.status ?? "skipped",
       ...(stageError(intake?.website) ? { error: stageError(intake?.website) } : {}),
     },
-    repository: {
-      connected: Boolean(intake?.repo?.owner && intake?.repo?.repo),
-      read: intake?.repo?.status === "completed",
-      ...(intake?.repo?.owner ? { label: `${intake.repo.owner}/${intake.repo.repo ?? ""}` } : {}),
-      ...(intake?.repo?.accessVerified !== undefined ? { accessVerified: intake.repo.accessVerified } : {}),
-      status: intake?.repo?.status ?? "skipped",
-      ...(stageError(intake?.repo) ? { error: stageError(intake?.repo) } : {}),
+    connection: {
+      status: connectionStatus,
+      label: CONNECTION_STATUS_LABEL[connectionStatus],
+      ...(project.connection?.firstSeenAt ? { firstSeenAt: project.connection.firstSeenAt } : {}),
+      ...(project.connection?.lastSeenAt ? { lastSeenAt: project.connection.lastSeenAt } : {}),
+      ...(project.connection?.guideIssuedAt ? { guideIssuedAt: project.connection.guideIssuedAt } : {}),
     },
     domain: {
       ...(intake?.domain?.hostname ? { hostname: intake.domain.hostname } : verifiedRecord ? { hostname: verifiedRecord.hostname } : {}),

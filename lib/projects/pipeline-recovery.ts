@@ -7,6 +7,7 @@ import { markPipelineFailure, runDeepCrawlAnalysis, runScratchAnalysis, runWebsi
 import { runGitHubAnalysis } from "@/lib/analysis/github-pipeline"
 import { generateSpecificationFromUnderstanding } from "@/lib/analysis/specification"
 import { getProjectAttachmentContext } from "@/lib/projects/attachments"
+import { CONNECTED_BUSINESS_BUILD_BLOCKED, isConnectedBusiness } from "@/lib/connected-business/guards"
 import type { MirrorProject, ProjectEvent, ProjectState } from "@/lib/types/project"
 
 /**
@@ -238,6 +239,9 @@ export async function startProjectPipeline(
 ): Promise<StepRetryResult> {
   const project = await store.getProject(projectId)
   if (!project) return { ok: false, status: 404, message: "We couldn't find this project." }
+  if (isConnectedBusiness(project)) {
+    return { ok: false, status: 409, message: CONNECTED_BUSINESS_BUILD_BLOCKED }
+  }
   if (project.specification) {
     return { ok: false, status: 409, message: "This project already has a plan." }
   }
@@ -292,6 +296,9 @@ export async function startPlanRegeneration(
 ): Promise<StepRetryResult> {
   const project = await store.getProject(projectId)
   if (!project) return { ok: false, status: 404, message: "We couldn't find this project." }
+  if (isConnectedBusiness(project)) {
+    return { ok: false, status: 409, message: CONNECTED_BUSINESS_BUILD_BLOCKED }
+  }
   if (project.specification) {
     return { ok: false, status: 409, message: "This project already has a plan." }
   }
@@ -331,6 +338,10 @@ export async function startPlanRegeneration(
  *
  * Returns true when the project was changed and should be re-read. */
 export async function recoverStalledPipeline(project: MirrorProject, now = Date.now()): Promise<boolean> {
+  // A connected business never enters the build pipeline, so it can never be
+  // "stalled" in it. Without this, a freshly connected business would be
+  // auto-restarted into a website analysis it does not have.
+  if (isConnectedBusiness(project)) return false
   if (project.specification) return false
   if (
     project.state !== "created" &&
@@ -383,6 +394,9 @@ export async function recoverStalledPipeline(project: MirrorProject, now = Date.
 export async function retryProjectStep(projectId: string): Promise<StepRetryResult> {
   const project = await store.getProject(projectId)
   if (!project) return { ok: false, status: 404, message: "We couldn't find this project." }
+  if (isConnectedBusiness(project)) {
+    return { ok: false, status: 409, message: CONNECTED_BUSINESS_BUILD_BLOCKED }
+  }
   const state = project.state
 
   if (state === "build_failed") {

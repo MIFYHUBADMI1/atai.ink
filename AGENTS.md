@@ -7,3 +7,9 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+## Project notes
+
+- Two separate journeys, never merged: **GitHub import** (`/new/github` → `lib/projects/create-project.ts`) brings a repository in to build; **connected business** (`/new/existing` → `lib/existing-business/*`) reads a live website and connects an app that keeps running outside Atai. The existing-business path never reads a repository.
+- Connection truth lives in `lib/connected-business/` (`businessConnectionStatus` needs both a verified domain and a first authenticated call). Access helpers: `userHasBuiltBusiness` (Atai-built app) vs `userHasRealBusiness` (built **or** connected) in `lib/dashboard/business-access.ts`; nav items declare `requires: "built" | "business"`.
+- Verify with `npx tsc --noEmit` and `npx vitest run` (no eslint config in the repo).

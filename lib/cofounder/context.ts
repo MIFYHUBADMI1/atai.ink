@@ -7,6 +7,7 @@ import { planIsLocked } from "@/lib/types/project"
 import { businessStartingPointOf } from "@/lib/types/business-intake"
 import { objectiveLabel } from "@/lib/existing-business/objectives"
 import { listProjectDomains } from "@/lib/domain/service"
+import { CONNECTION_STATUS_LABEL, businessConnectionStatus } from "@/lib/connected-business/status"
 import type {
   CofounderBuildSummary,
   CofounderCreditCosts,
@@ -107,10 +108,13 @@ async function buildExistingBusinessBrief(project: {
   id: string
   startingPoint?: string
   intake?: import("@/lib/types/business-intake").BusinessIntake
+  connection?: import("@/lib/types/business-intake").BusinessConnection
 }): Promise<CofounderExistingBusinessBrief> {
   const intake = project.intake
   const domains = await listProjectDomains(project.id).catch(() => [])
   const result = intake?.assessment?.result
+  const domainVerified = domains.some((d) => d.status === "verified" && !d.releasedAt)
+  const connectionStatus = businessConnectionStatus({ connection: project.connection, domainVerified })
   const websiteError =
     intake?.website &&
     (intake.website.status === "failed" || intake.website.status === "partially_completed") &&
@@ -129,13 +133,12 @@ async function buildExistingBusinessBrief(project: {
       status: intake?.website?.status ?? "skipped",
       ...(websiteError ? { error: websiteError } : {}),
     },
-    repository: {
-      connected: Boolean(intake?.repo?.owner && intake?.repo?.repo),
-      read: intake?.repo?.status === "completed",
-      ...(intake?.repo?.owner ? { label: `${intake.repo.owner}/${intake.repo.repo ?? ""}` } : {}),
-      status: intake?.repo?.status ?? "skipped",
+    connection: {
+      status: connectionStatus,
+      label: CONNECTION_STATUS_LABEL[connectionStatus],
+      ...(project.connection?.lastSeenAt ? { lastSeenAt: project.connection.lastSeenAt } : {}),
     },
-    domainVerified: domains.some((d) => d.status === "verified" && !d.releasedAt),
+    domainVerified,
     assessment: {
       status: intake?.assessment?.status ?? "pending",
       ...(result?.understanding ? { understanding: result.understanding.slice(0, 700) } : {}),

@@ -2,16 +2,19 @@
  * The single rule that decides whether an existing business has anything to
  * read. Shared by the intake wizard and the server so a founder cannot be told
  * one thing in the form and get another from the API.
+ *
+ * The live application address is the one required source. Importing a
+ * repository is a different journey (bring a repository into Atai to build
+ * from) and is deliberately NOT accepted here — accepting it duplicated that
+ * journey and left two products looking like one.
  */
 
 export interface IntakeSourceInput {
   websiteUrl?: string | null
-  githubOwner?: string | null
-  githubRepo?: string | null
 }
 
 export const INTAKE_SOURCE_ERROR =
-  "Atai needs one real thing to read before it can assess a business: a website address or a repository. Your description alone is not enough."
+  "Atai needs your live application address before it can connect the business. A description alone is not enough."
 
 /**
  * A usable website source, or null. Only a resolvable http(s) hostname counts:
@@ -34,7 +37,5 @@ export function parseIntakeWebsite(raw?: string | null): { url: string; hostname
 }
 
 export function hasIntakeSource(input: IntakeSourceInput): boolean {
-  const owner = (input.githubOwner ?? "").trim()
-  const repo = (input.githubRepo ?? "").trim()
-  return Boolean(parseIntakeWebsite(input.websiteUrl)) || Boolean(owner && repo)
+  return Boolean(parseIntakeWebsite(input.websiteUrl))
 }

@@ -14,6 +14,7 @@ import { getBuildCost } from "@/lib/billing/build-auth"
 import { getDeploymentCosts } from "@/lib/billing/runtime-config"
 import { authorizeProductionWork } from "@/lib/billing/entitlements/require"
 import { getProjectAttachments, clearProjectAttachments } from "@/lib/projects/attachments"
+import { CONNECTED_BUSINESS_BUILD_BLOCKED, isConnectedBusiness } from "@/lib/connected-business/guards"
 import {
   getPlanSection,
   validatePlanSectionValue,
@@ -108,6 +109,9 @@ export async function startProjectBuild(userId: string, projectId: string): Prom
   const project = await store.getProject(projectId)
   if (!project || project.userId !== userId) {
     return { ok: false, status: 404, code: "UNAUTHORIZED_PROJECT_ACCESS", message: "We couldn't find this project." }
+  }
+  if (isConnectedBusiness(project)) {
+    return { ok: false, status: 409, code: "NOT_A_BUILD_PROJECT", message: CONNECTED_BUSINESS_BUILD_BLOCKED }
   }
   if (project.state === "building" || project.state === "deploying") {
     return { ok: false, status: 409, code: "AGENT_RUNNING", message: "This project is already being built." }
@@ -338,6 +342,9 @@ export async function startProjectDeploy(userId: string, projectId: string): Pro
   const project = await store.getProject(projectId)
   if (!project || project.userId !== userId) {
     return { ok: false, status: 404, code: "UNAUTHORIZED_PROJECT_ACCESS", message: "We couldn't find this project." }
+  }
+  if (isConnectedBusiness(project)) {
+    return { ok: false, status: 409, code: "NOT_A_BUILD_PROJECT", message: CONNECTED_BUSINESS_BUILD_BLOCKED }
   }
   if (!project.totalumProjectId) {
     return { ok: false, status: 400, code: "NO_TOTALUM_PROJECT", message: "This project hasn't been built yet." }

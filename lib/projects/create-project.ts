@@ -6,6 +6,7 @@ import { saveProjectAttachments } from "@/lib/projects/attachments"
 import { authorizeProjectCreation, ENTITLEMENT_ENFORCEMENT_ENABLED } from "@/lib/billing/entitlements/require"
 import { normalizeUrl } from "@/lib/integrations/firecrawl/service"
 import { buildIntakeRecord, sanitizeIntakeInput, startBusinessIntake, type IntakeInput } from "@/lib/existing-business/intake"
+import { INTAKE_SOURCE_ERROR, hasIntakeSource } from "@/lib/existing-business/source-rule"
 import type { BusinessStartingPoint } from "@/lib/types/business-intake"
 import type { MirrorProject, ProjectPreferences, UserPipelineMode } from "@/lib/types/project"
 
@@ -258,11 +259,11 @@ export async function createUserProject(userId: string, body: CreateProjectInput
     : (body.idea ?? "").trim()
 
   if (isExistingBusiness) {
-    const hasAnything = Boolean(idea || intake?.websiteUrl || (intake?.githubOwner && intake?.githubRepo))
-    if (!hasAnything) {
-      return {
-        error: fail("VALIDATION", "Tell us about your business, or give us a website or repository to read.", 422),
-      }
+    // The live application address is the entry point of this journey, so it
+    // is required — not merely one of several accepted sources. Validated with
+    // the same rule the wizard uses.
+    if (!hasIntakeSource({ websiteUrl: intake?.websiteUrl })) {
+      return { error: fail("VALIDATION", INTAKE_SOURCE_ERROR, 422) }
     }
   } else if (idea.length < 8) {
     return { error: fail("VALIDATION", "Please describe your app idea in a bit more detail.", 422) }

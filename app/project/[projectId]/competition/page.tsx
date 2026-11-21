@@ -11,7 +11,7 @@ import { readOwnerGoals } from "@/lib/marketing/growth-overview"
 import { isPlaceholderValue, readMarketPositioningText, readValuePropositionText } from "@/lib/analysis/plan-sections"
 import type { ApplicationSpecification } from "@/lib/types/specification"
 import { requireOwnedProject } from "@/lib/workspace/require-owned-project"
-import { userHasBuiltBusiness } from "@/lib/dashboard/business-access"
+import { userHasRealBusiness } from "@/lib/dashboard/business-access"
 import { BusinessLockedForProject } from "@/components/workspace/business-locked"
 import { getResourcesCompetitorIntelligence } from "@/lib/resources/competitor-intelligence"
 
@@ -30,7 +30,7 @@ import { getResourcesCompetitorIntelligence } from "@/lib/resources/competitor-i
 export default async function ProjectCompetitionPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
   const project = await requireOwnedProject(projectId, `/project/${projectId}/competition`)
-  if (!(await userHasBuiltBusiness(project.userId))) return <BusinessLockedForProject section="Competition" projectId={project.id} />
+  if (!(await userHasRealBusiness(project.userId))) return <BusinessLockedForProject section="Competition" projectId={project.id} />
   const user = await getCurrentUser()
 
   if (!user) {

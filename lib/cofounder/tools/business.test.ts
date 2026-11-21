@@ -31,7 +31,7 @@ const ctx: ToolContext = {
 
 const assessment: BusinessAssessment = {
   generatedAt: 100,
-  evidence: { websiteAnalysed: true, pagesCrawled: 4, repoAnalysed: false, ownerDescription: true, domainVerified: false },
+  evidence: { websiteAnalysed: true, pagesCrawled: 4, ownerDescription: true, domainVerified: false },
   understanding: "A neighborhood bakery selling online.",
   currentPosition: "Orders come through Instagram DMs; no checkout on the site.",
   strengths: [{ title: "Loyal locals", detail: "Repeat customers mention the sourdough.", basis: "observed", evidence: "homepage testimonials" }],
@@ -159,16 +159,18 @@ describe("get_business_assessment tool", () => {
     }
   })
 
-  it("reports the three website states and the repository state distinctly", async () => {
+  it("reports the website states and the connection state distinctly", async () => {
     const result = await getBusinessAssessmentTool.execute!({ projectId: "proj_1" }, ctx)
     expect(result.success).toBe(true)
     if (result.success) {
-      const intake = (result.data as { intake: { website: Record<string, unknown>; repository: Record<string, unknown> } }).intake
+      const intake = (result.data as {
+        intake: { website: Record<string, unknown>; connection: Record<string, unknown> }
+      }).intake
       expect(intake.website.submitted).toBe(true)
       expect(intake.website.analyzed).toBe(true)
       expect(intake.website.pagesCrawled).toBe(4)
-      expect(intake.repository.connected).toBe(false)
-      expect(intake.repository.read).toBe(false)
+      expect(intake.connection.status).toBe("not_connected")
+      expect(intake).not.toHaveProperty("repository")
     }
   })
 

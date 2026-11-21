@@ -116,14 +116,14 @@ export default function NewProjectPage() {
             >
               <span className="min-w-0">
                 <span id="existing-business-entry" className="block text-sm font-semibold tracking-tight">
-                  Already running a business?
+                  Already running an application?
                 </span>
                 <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
-                  Bring it to Atai as it is — your website, your code, your words. No rebuild required.
+                  Connect what you already run. Atai works with your application as it is — nothing is rebuilt.
                 </span>
               </span>
               <span className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-primary">
-                Bring my existing business
+                Connect my business
                 <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
               </span>
             </Link>

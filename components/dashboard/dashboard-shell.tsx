@@ -39,13 +39,14 @@ import { useProjects } from "@/lib/client/api"
 import { AuthGate } from "@/components/auth/auth-gate"
 import { interpretProjectState, selectActiveProject } from "@/lib/dashboard/view-model"
 import { projectIsBuilt } from "@/lib/dashboard/built-states"
+import { isConnectedBusiness } from "@/lib/connected-business/guards"
 import type { ProjectSummary } from "@/lib/types/project"
 import { cn } from "@/lib/utils"
 
 const NAV = [
   { href: "/dashboard", label: "Home", icon: Home, tour: "nav-dashboard" },
   { href: "/projects", label: "Businesses", icon: Building2, tour: "nav-businesses" },
-  { href: "/finances", label: "Finances", icon: Wallet, tour: "nav-finances", requiresBuilt: true },
+  { href: "/finances", label: "Finances", icon: Wallet, tour: "nav-finances", requires: "built" },
   { href: "/notifications", label: "Notifications", icon: Bell, tour: "nav-notifications" },
   { href: "/contributions", label: "Contributions", icon: Gift, tour: "nav-contributions" },
   { href: "/new", label: "New business", icon: Sparkles, tour: "nav-new" },
@@ -77,6 +78,8 @@ export function DashboardShell({
   const active = workspaceProject ?? selectActiveProject(projects)
   const askHref = active ? `/project/${active.id}/collaborate` : "/new"
   const hasBuilt = projects.some((p) => projectIsBuilt(p.state))
+  // A connected business is a real business even though Atai did not build it.
+  const hasRealBusiness = projects.some((p) => projectIsBuilt(p.state) || isConnectedBusiness(p))
 
   useEffect(() => {
     setMobileOpen(false)
@@ -126,6 +129,7 @@ export function DashboardShell({
             projectId={resolvedProjectId}
             workspaceName={title}
             hasBuilt={hasBuilt}
+            hasRealBusiness={hasRealBusiness}
           />
           <div className={cn("flex items-center gap-1 border-t border-border p-2", collapsed && "flex-col")}>
             <button
@@ -179,7 +183,7 @@ export function DashboardShell({
                   <X className="size-4" />
                 </button>
               </div>
-              <SidebarBody collapsed={false} pathname={pathname} recent={recent} projectCount={projects.length} active={active} askHref={askHref} projectId={resolvedProjectId} workspaceName={title} hasBuilt={hasBuilt} />
+              <SidebarBody collapsed={false} pathname={pathname} recent={recent} projectCount={projects.length} active={active} askHref={askHref} projectId={resolvedProjectId} workspaceName={title} hasBuilt={hasBuilt} hasRealBusiness={hasRealBusiness} />
             </aside>
           </div>
         ) : null}
@@ -256,18 +260,19 @@ function SidebarLink({
   item,
   pathname,
   collapsed,
-  locked = false,
+  locked = { built: false, business: false },
 }: {
-  item: Pick<AtaiNavItem, "href" | "label" | "icon" | "match" | "requiresBuilt" | "tour">
+  item: Pick<AtaiNavItem, "href" | "label" | "icon" | "match" | "requires" | "tour">
   pathname: string
   collapsed: boolean
-  locked?: boolean
+  locked?: { built: boolean; business: boolean }
 }) {
   const activeNav = item.match
     ? item.match(pathname)
     : pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href))
   const Icon = item.icon
-  const showLock = locked && item.requiresBuilt
+  const showLock =
+    item.requires === "built" ? locked.built : item.requires === "business" ? locked.business : false
   return (
     <Link
       href={item.href}
@@ -308,6 +313,7 @@ function SidebarBody({
   projectId,
   workspaceName,
   hasBuilt,
+  hasRealBusiness,
 }: {
   collapsed: boolean
   pathname: string
@@ -318,6 +324,7 @@ function SidebarBody({
   projectId?: string
   workspaceName?: string
   hasBuilt: boolean
+  hasRealBusiness: boolean
 }) {
   if (projectId) {
     const tools = workspaceProjectNav(projectId)
@@ -336,14 +343,14 @@ function SidebarBody({
         ) : null}
         <nav className="flex flex-col gap-1" aria-label="Workspace">
           <SidebarLink item={{ href: "/dashboard", label: "Dashboard", icon: Home, tour: "nav-dashboard", match: (p) => p === "/dashboard" }} pathname={pathname} collapsed={collapsed} />
-          <SidebarLink item={{ href: "/finances", label: "All business finances", icon: Wallet, match: (p) => p === "/finances", requiresBuilt: true }} pathname={pathname} collapsed={collapsed} locked={!hasBuilt} />
+          <SidebarLink item={{ href: "/finances", label: "All business finances", icon: Wallet, match: (p) => p === "/finances", requires: "built" }} pathname={pathname} collapsed={collapsed} locked={{ built: !hasBuilt, business: !hasRealBusiness }} />
         </nav>
         <nav className="flex flex-col gap-1" aria-label="Project tools">
           {!collapsed ? (
             <p className="px-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Project tools</p>
           ) : null}
           {tools.map((item) => (
-            <SidebarLink key={item.href} item={item} pathname={pathname} collapsed={collapsed} locked={!hasBuilt} />
+            <SidebarLink key={item.href} item={item} pathname={pathname} collapsed={collapsed} locked={{ built: !hasBuilt, business: !hasRealBusiness }} />
           ))}
         </nav>
         <nav className="flex flex-col gap-1" aria-label="Application intelligence">
@@ -351,7 +358,7 @@ function SidebarBody({
             <p className="px-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Application intelligence</p>
           ) : null}
           {intelligence.map((item) => (
-            <SidebarLink key={item.href} item={item} pathname={pathname} collapsed={collapsed} locked={!hasBuilt} />
+            <SidebarLink key={item.href} item={item} pathname={pathname} collapsed={collapsed} locked={{ built: !hasBuilt, business: !hasRealBusiness }} />
           ))}
         </nav>
         <nav className="flex flex-col gap-1" aria-label="Grow your business">
@@ -361,7 +368,8 @@ function SidebarBody({
           {grow.map((item) => {
             const Icon = item.icon
             const activeNav = pathname === item.href || pathname.startsWith(`${item.href}/`)
-            const showLock = !hasBuilt && item.requiresBuilt
+            const showLock =
+            item.requires === "built" ? !hasBuilt : item.requires === "business" ? !hasRealBusiness : false
             return (
               <Link
                 key={item.href}
@@ -422,7 +430,7 @@ function SidebarBody({
 
       <nav className="flex flex-col gap-1" aria-label="Primary">
         {NAV.map((item) => (
-          <SidebarLink key={item.href} item={item} pathname={pathname} collapsed={collapsed} locked={!hasBuilt} />
+          <SidebarLink key={item.href} item={item} pathname={pathname} collapsed={collapsed} locked={{ built: !hasBuilt, business: !hasRealBusiness }} />
         ))}
       </nav>
 

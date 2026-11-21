@@ -1,8 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react"
+import { useMemo, useState, type ComponentType, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import Link from "next/link"
 import {
   AlertTriangle,
   ArrowLeft,
@@ -10,20 +9,19 @@ import {
   Building2,
   Check,
   CheckCircle2,
-  ExternalLink,
   Globe,
   ListChecks,
   Loader2,
   Minus,
+  PlugZap,
   ShieldCheck,
 } from "lucide-react"
-import { GitHubIcon } from "@/components/github-icon"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import { jsonFetcher, postJson } from "@/lib/client/api"
+import { postJson } from "@/lib/client/api"
 import { INTAKE_SOURCE_ERROR, parseIntakeWebsite } from "@/lib/existing-business/source-rule"
 import { cn } from "@/lib/utils"
 
@@ -33,21 +31,12 @@ export interface WizardObjective {
   blurb: string
 }
 
-interface RepoOption {
-  fullName: string
-  name: string
-  owner: string
-  defaultBranch: string
-  private: boolean
-}
-
 type IconType = ComponentType<{ className?: string }>
 
 const STEPS: Array<{ label: string; short: string; icon: IconType }> = [
-  { label: "Your business", short: "Your words", icon: Building2 },
-  { label: "Your website", short: "Where customers find you", icon: Globe },
-  { label: "Your code", short: "The repository behind it", icon: GitHubIcon },
-  { label: "Goals & review", short: "Confirm and hand over", icon: ListChecks },
+  { label: "Your application", short: "Where it already runs", icon: Globe },
+  { label: "Your business", short: "In your own words", icon: Building2 },
+  { label: "Goals & review", short: "Confirm and connect", icon: ListChecks },
 ]
 
 const DESCRIPTION_MAX = 4000
@@ -99,40 +88,19 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
   const [targetCustomers, setTargetCustomers] = useState("")
   const [additionalContext, setAdditionalContext] = useState("")
   const [websiteUrl, setWebsiteUrl] = useState("")
-  const [githubOwner, setGithubOwner] = useState("")
-  const [githubRepo, setGithubRepo] = useState("")
-  const [githubBranch, setGithubBranch] = useState("")
   const [chosen, setChosen] = useState<string[]>([])
-
-  const [repos, setRepos] = useState<RepoOption[] | null>(null)
-  const [reposError, setReposError] = useState<string | null>(null)
-  const [reposLoading, setReposLoading] = useState(false)
-
-  useEffect(() => {
-    if (step !== 2 || repos !== null || reposLoading) return
-    setReposLoading(true)
-    jsonFetcher<{ repos: RepoOption[] }>("/api/github/repos")
-      .then((data) => setRepos(data.repos))
-      .catch((e) => {
-        setRepos([])
-        setReposError(e instanceof Error ? e.message : "Could not list your repositories.")
-      })
-      .finally(() => setReposLoading(false))
-  }, [step, repos, reposLoading])
 
   const website = useMemo(() => parseIntakeWebsite(websiteUrl), [websiteUrl])
   const websiteTypedButUnusable = websiteUrl.trim().length > 0 && !website
-  const hasRepo = githubOwner.trim().length > 0 && githubRepo.trim().length > 0
   const hasDescription = description.trim().length > 0
-  /** The gate: a business only exists for Atai once a domain or a repository is in play. */
-  const hasRealSource = Boolean(website) || hasRepo
+  /** The gate: a business only exists for Atai once its live application is known. */
+  const hasRealSource = Boolean(website)
 
   const reviewName = useMemo(() => {
     if (displayName.trim()) return displayName.trim()
     if (website) return website.hostname
-    if (hasRepo) return `${githubOwner.trim()}/${githubRepo.trim()}`
     return "My existing business"
-  }, [displayName, website, hasRepo, githubOwner, githubRepo])
+  }, [displayName, website])
 
   function toggleObjective(id: string) {
     setChosen((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]))
@@ -145,12 +113,8 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
 
   function next() {
     setError(null)
-    if ((step === 1 || step === 2) && !hasRealSource) {
-      setError(
-        step === 1
-          ? `${INTAKE_SOURCE_ERROR} Add your website above, or continue to your code and add a repository.`
-          : `${INTAKE_SOURCE_ERROR} Pick or type a repository here, or go back and add your website.`,
-      )
+    if (step === 0 && !hasRealSource) {
+      setError(INTAKE_SOURCE_ERROR)
       return
     }
     goTo(step + 1)
@@ -176,15 +140,12 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
           targetCustomers: targetCustomers.trim() || undefined,
           additionalContext: additionalContext.trim() || undefined,
           objectives: chosen,
-          websiteUrl: website?.url ?? (websiteUrl.trim() || undefined),
-          githubOwner: githubOwner.trim() || undefined,
-          githubRepo: githubRepo.trim() || undefined,
-          githubBranch: githubBranch.trim() || undefined,
+          websiteUrl: website?.url,
         },
       })
       router.push(`/project/${project.id}/business`)
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not bring your business to Atai. Please try again.")
+      setError(e instanceof Error ? e.message : "Could not connect your business. Please try again.")
       setBusy(false)
     }
   }
@@ -208,26 +169,94 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
                 Step {step + 1} of {STEPS.length}
               </p>
               <h2 className="mt-1 text-xl font-medium tracking-tight sm:text-2xl">
-                {step === 0 && "Tell us about the business you already run"}
-                {step === 1 && "Where do customers find you online?"}
-                {step === 2 && "Is there code behind the business?"}
-                {step === 3 && "What should Atai work on first?"}
+                {step === 0 && "Where does your application already run?"}
+                {step === 1 && "Tell Atai about the business behind it"}
+                {step === 2 && "What should Atai work on first?"}
               </h2>
               <p className="mt-1.5 text-sm leading-6 text-muted-foreground">
                 {step === 0 &&
-                  "Your own words steer the assessment. Atai never invents facts about your business — anything not written here or read from your website or repository is labelled as an assumption."}
+                  "Atai connects to an application you already run — it does not build or replace one. This address is how it finds your business."}
                 {step === 1 &&
-                  "Atai reads a few public pages as evidence. It does not copy, rebuild or edit your site — and this is one of the two sources it needs to see a real business."}
+                  "Your own words steer everything Atai advises. Anything not written here or read from your site is labelled as an assumption, never as a fact."}
                 {step === 2 &&
-                  "Read-only evidence: Atai lists files and reads the README and manifests with your connected GitHub account. Nothing is cloned, pushed or executed, and no access token is ever asked for here."}
-                {step === 3 &&
-                  "Pick the goals that matter now, then check what Atai will read. Every recommendation links only to screens that exist and are switched on for you."}
+                  "Pick the goals that matter now, then check what Atai will read and what it will not touch."}
               </p>
             </div>
           </header>
 
           <div className="mt-6">
             {step === 0 ? (
+              <div className="flex flex-col gap-5">
+                <div className="flex flex-col gap-2">
+                  <FieldLabel
+                    htmlFor="eb-website"
+                    chip={
+                      hasRealSource ? (
+                        <Chip tone="ok">
+                          <Check className="size-3" />
+                          Address confirmed
+                        </Chip>
+                      ) : (
+                        <Chip tone="warn">Required</Chip>
+                      )
+                    }
+                  >
+                    Live application address
+                  </FieldLabel>
+                  <Input
+                    id="eb-website"
+                    value={websiteUrl}
+                    onChange={(e) => setWebsiteUrl(e.target.value.slice(0, 500))}
+                    placeholder="app.yourbusiness.com"
+                    inputMode="url"
+                    autoComplete="url"
+                    maxLength={500}
+                    aria-invalid={websiteTypedButUnusable || undefined}
+                    className={cn("h-10", website && "border-success/50")}
+                  />
+                  {website ? (
+                    <p className="flex items-center gap-1.5 text-[11px] leading-relaxed text-success">
+                      <CheckCircle2 className="size-3.5 shrink-0" />
+                      Atai will read a few public pages of {website.hostname} — nothing else.
+                    </p>
+                  ) : websiteTypedButUnusable ? (
+                    <p className="text-[11px] leading-relaxed text-destructive">
+                      That is not a web address yet. Try the full hostname, like app.yourbusiness.com or
+                      https://app.yourbusiness.com.
+                    </p>
+                  ) : (
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">
+                      Reading uses Atai credits, and a retry within 7 days reuses the cached read at no extra cost.
+                    </p>
+                  )}
+                </div>
+
+                <div className="rounded-xl border border-border/80 bg-secondary/40 p-4">
+                  <p className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                    <PlugZap className="size-3.5 text-primary" />
+                    Connecting is not building
+                  </p>
+                  <ul className="mt-2 flex flex-col gap-1.5 text-xs leading-relaxed text-muted-foreground">
+                    <li>Your application keeps running exactly where it is. Nothing is copied, rebuilt or deployed.</li>
+                    <li>Atai never edits your code, database or hosting from this screen.</li>
+                    <li>If you would rather bring a repository into Atai to build from, that is a different starting point — not this one.</li>
+                  </ul>
+                </div>
+
+                <div className="rounded-xl border border-border/80 bg-background/50 p-4">
+                  <p className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                    <ShieldCheck className="size-3.5 text-primary" />
+                    Ownership verification is optional, and comes later
+                  </p>
+                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                    After connecting you can prove the domain is yours with a small meta tag or file. It never blocks
+                    your business profile. It is an Atai ownership check — not Google Search Console verification.
+                  </p>
+                </div>
+              </div>
+            ) : null}
+
+            {step === 1 ? (
               <div className="flex flex-col gap-5">
                 <div className="grid gap-4 sm:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
                   <div className="flex flex-col gap-2">
@@ -240,7 +269,9 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
                       maxLength={120}
                       autoComplete="organization"
                     />
-                    <p className="text-[11px] leading-relaxed text-muted-foreground">Optional — leave it blank and Atai names the business from your website or repository.</p>
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">
+                      Optional — leave it blank and Atai names the business from your application address.
+                    </p>
                   </div>
                   <div className="flex flex-col gap-2">
                     <FieldLabel
@@ -293,213 +324,10 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
                     </div>
                   </div>
                 </div>
-
-                <p className="flex items-start gap-2 rounded-xl border border-border/70 bg-background/60 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
-                  <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-primary" />
-                  This step is description only — the source Atai needs comes next. A website address or a repository
-                  proves there is a business to read, so keep going and add one of the two.
-                </p>
-              </div>
-            ) : null}
-
-            {step === 1 ? (
-              <div className="flex flex-col gap-5">
-                <div className="flex flex-col gap-2">
-                  <FieldLabel
-                    htmlFor="eb-website"
-                    chip={
-                      hasRealSource ? (
-                        <Chip tone="ok">
-                          <Check className="size-3" />
-                          Source covered
-                        </Chip>
-                      ) : (
-                        <Chip tone="warn">Required — unless you add a repository</Chip>
-                      )
-                    }
-                  >
-                    Website address
-                  </FieldLabel>
-                  <Input
-                    id="eb-website"
-                    value={websiteUrl}
-                    onChange={(e) => setWebsiteUrl(e.target.value.slice(0, 500))}
-                    placeholder="yourbusiness.com"
-                    inputMode="url"
-                    autoComplete="url"
-                    maxLength={500}
-                    aria-invalid={websiteTypedButUnusable || undefined}
-                    className={cn("h-10", website && "border-success/50")}
-                  />
-                  {website ? (
-                    <p className="flex items-center gap-1.5 text-[11px] leading-relaxed text-success">
-                      <CheckCircle2 className="size-3.5 shrink-0" />
-                      Atai will read {website.hostname} — a few public pages, nothing else.
-                    </p>
-                  ) : websiteTypedButUnusable ? (
-                    <p className="text-[11px] leading-relaxed text-destructive">
-                      That is not a web address yet. Try the full hostname, like yourbusiness.com or
-                      https://yourbusiness.com.
-                    </p>
-                  ) : (
-                    <p className="text-[11px] leading-relaxed text-muted-foreground">
-                      Include the domain only — no need for tracking parameters. Reading uses Atai credits, and a
-                      retry within 7 days reuses the cached read at no extra cost.
-                    </p>
-                  )}
-                </div>
-
-                <div className="rounded-xl border border-border/80 bg-secondary/40 p-4">
-                  <p className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-                    <ShieldCheck className="size-3.5 text-primary" />
-                    Ownership comes later, and it is optional
-                  </p>
-                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                    After intake you can verify the domain with a small meta tag or file. Verification never blocks
-                    your business profile. It is an Atai ownership check — not Google Search Console verification.
-                  </p>
-                </div>
-
-                <div className="flex flex-col gap-3 rounded-xl border border-dashed border-border bg-background/40 p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="min-w-0 text-xs leading-relaxed text-muted-foreground">
-                    No website at all? That is fine — a repository works instead. Atai still needs one of the two
-                    before it will assess a business.
-                  </p>
-                  <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => goTo(2)}>
-                    Go to your code
-                    <ArrowRight className="size-3.5" />
-                  </Button>
-                </div>
               </div>
             ) : null}
 
             {step === 2 ? (
-              <div className="flex flex-col gap-5">
-                <div className="flex flex-wrap items-center gap-2">
-                  {hasRealSource ? (
-                    <Chip tone="ok">
-                      <Check className="size-3" />
-                      Source requirement covered{website ? ` by ${website.hostname}` : ""}
-                    </Chip>
-                  ) : (
-                    <Chip tone="warn">Required — this is your only remaining source</Chip>
-                  )}
-                  {website ? (
-                    <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                      <ExternalLink className="size-3" />
-                      Website already added: {website.hostname}
-                    </span>
-                  ) : null}
-                </div>
-
-                {reposLoading ? (
-                  <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="size-4 animate-spin" /> Loading your repositories…
-                  </p>
-                ) : null}
-
-                {repos && repos.length > 0 ? (
-                  <div className="flex flex-col gap-2">
-                    <Label htmlFor="eb-repo-picker">Pick a repository</Label>
-                    <select
-                      id="eb-repo-picker"
-                      className="h-10 w-full rounded-lg border border-input bg-transparent px-3 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm"
-                      value={githubOwner && githubRepo ? `${githubOwner}/${githubRepo}` : ""}
-                      onChange={(e) => {
-                        const picked = repos.find((r) => r.fullName === e.target.value)
-                        if (picked) {
-                          setGithubOwner(picked.owner)
-                          setGithubRepo(picked.name)
-                          setGithubBranch(picked.defaultBranch)
-                        } else {
-                          setGithubOwner("")
-                          setGithubRepo("")
-                          setGithubBranch("")
-                        }
-                      }}
-                    >
-                      <option value="">Don&apos;t add a repository</option>
-                      {repos.map((repo) => (
-                        <option key={repo.fullName} value={repo.fullName}>
-                          {repo.fullName}
-                          {repo.private ? " (private)" : ""}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="text-[11px] leading-relaxed text-muted-foreground">
-                      A private repository is read the same way: metadata, the file list, the README and manifests —
-                      with your own GitHub connection.
-                    </p>
-                  </div>
-                ) : null}
-
-                {reposError ? (
-                  <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs leading-relaxed text-destructive">
-                    {reposError} Connect GitHub in{" "}
-                    <Link href="/settings/profile" className="underline underline-offset-2">
-                      settings
-                    </Link>{" "}
-                    and come back, or type the repository details below.
-                  </p>
-                ) : null}
-
-                {repos && repos.length === 0 && !reposError && !reposLoading ? (
-                  <p className="text-xs leading-relaxed text-muted-foreground">
-                    No repositories were found on the connected GitHub account. Type the details below if you know
-                    them, or connect the right account in{" "}
-                    <Link href="/settings/profile" className="underline underline-offset-2">
-                      settings
-                    </Link>
-                    .
-                  </p>
-                ) : null}
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="flex flex-col gap-2">
-                    <Label htmlFor="eb-gh-owner">Owner</Label>
-                    <Input
-                      id="eb-gh-owner"
-                      value={githubOwner}
-                      onChange={(e) => setGithubOwner(e.target.value.slice(0, 100))}
-                      placeholder="your-account"
-                      maxLength={100}
-                      className="h-10"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <Label htmlFor="eb-gh-repo">Repository</Label>
-                    <Input
-                      id="eb-gh-repo"
-                      value={githubRepo}
-                      onChange={(e) => setGithubRepo(e.target.value.slice(0, 100))}
-                      placeholder="your-repo"
-                      maxLength={100}
-                      className="h-10"
-                    />
-                  </div>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <FieldLabel
-                    htmlFor="eb-gh-branch"
-                    chip={<span className="font-mono text-[10px] text-muted-foreground">optional</span>}
-                  >
-                    Branch
-                  </FieldLabel>
-                  <Input
-                    id="eb-gh-branch"
-                    value={githubBranch}
-                    onChange={(e) => setGithubBranch(e.target.value.slice(0, 100))}
-                    placeholder="main"
-                    maxLength={100}
-                  />
-                  <p className="text-[11px] leading-relaxed text-muted-foreground">
-                    Leave blank and Atai reads the default branch it sees on the repository.
-                  </p>
-                </div>
-              </div>
-            ) : null}
-
-            {step === 3 ? (
               <div className="flex flex-col gap-6">
                 <div>
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -559,31 +387,24 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
                   </p>
                   <ul className="mt-3 flex flex-col divide-y divide-border/70 overflow-hidden rounded-xl border border-border/80 bg-card">
                     <ReviewRow
+                      label="Application"
+                      value={website ? website.hostname : "Not provided"}
+                      detail={website ? "A few public pages, read-only" : "Required to connect"}
+                      tone={website ? "ok" : "muted"}
+                      onEdit={() => goTo(0)}
+                    />
+                    <ReviewRow
                       label="Business"
                       value={reviewName}
-                      detail={displayName.trim() ? "Named by you" : "Derived from your source"}
+                      detail={displayName.trim() ? "Named by you" : "Derived from your address"}
                       tone="ok"
-                    />
-                    <ReviewRow
-                      label="Website"
-                      value={website ? website.hostname : "Not provided"}
-                      detail={website ? "Public pages, read-only" : "Add one if you have it"}
-                      tone={website ? "ok" : "muted"}
-                      onEdit={() => goTo(1)}
-                    />
-                    <ReviewRow
-                      label="Repository"
-                      value={hasRepo ? `${githubOwner.trim()}/${githubRepo.trim()}` : "Not provided"}
-                      detail={hasRepo ? `${githubBranch.trim() || "default branch"}, files and README only` : "Optional"}
-                      tone={hasRepo ? "ok" : "muted"}
-                      onEdit={() => goTo(2)}
                     />
                     <ReviewRow
                       label="Your description"
                       value={hasDescription ? `${description.trim().length} characters` : "Not provided"}
                       detail={hasDescription ? "Plus any optional detail you added" : "Your words still help"}
                       tone={hasDescription ? "ok" : "muted"}
-                      onEdit={() => goTo(0)}
+                      onEdit={() => goTo(1)}
                     />
                     <ReviewRow
                       label="Goals"
@@ -601,17 +422,12 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
                   >
                     <p className="flex min-w-0 items-start gap-2 text-xs leading-relaxed text-destructive">
                       <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-                      Nothing real is connected yet. Atai will not assess a business it cannot see — add a website
-                      address or a repository.
+                      Nothing is connected yet. Atai will not assess a business it cannot see — add your live
+                      application address.
                     </p>
-                    <div className="flex shrink-0 gap-2">
-                      <Button type="button" variant="outline" size="sm" onClick={() => goTo(1)}>
-                        Add website
-                      </Button>
-                      <Button type="button" variant="outline" size="sm" onClick={() => goTo(2)}>
-                        Add repository
-                      </Button>
-                    </div>
+                    <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => goTo(0)}>
+                      Add address
+                    </Button>
                   </div>
                 ) : null}
 
@@ -647,10 +463,10 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
           </Button>
           <div className="flex flex-col items-stretch gap-2 sm:items-end">
             <p className="text-right text-[11px] leading-5 text-muted-foreground">
-              {step === 3
+              {step === STEPS.length - 1
                 ? hasRealSource
-                  ? "Creates the business and starts the reading."
-                  : "Locked until a website or repository is added."
+                  ? "Connects the business and starts the reading."
+                  : "Locked until your application address is added."
                 : `Step ${step + 1} of ${STEPS.length}`}
             </p>
             {step < STEPS.length - 1 ? (
@@ -660,8 +476,8 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
               </Button>
             ) : (
               <Button type="button" onClick={submit} disabled={busy || !hasRealSource} className="h-10">
-                {busy ? <Loader2 className="size-4 animate-spin" /> : <Building2 className="size-4" />}
-                {busy ? "Bringing your business to Atai…" : "Analyze and bring my business to Atai"}
+                {busy ? <Loader2 className="size-4 animate-spin" /> : <PlugZap className="size-4" />}
+                {busy ? "Connecting your business…" : "Connect my business"}
               </Button>
             )}
           </div>
@@ -677,10 +493,9 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
               const visited = index < step
               /** A step you walked past with nothing in it is not a completed step. */
               const filled =
-                (index === 0 && (hasDescription || displayName.trim().length > 0)) ||
-                (index === 1 && Boolean(website)) ||
-                (index === 2 && hasRepo) ||
-                (index === 3 && chosen.length > 0)
+                (index === 0 && Boolean(website)) ||
+                (index === 1 && (hasDescription || displayName.trim().length > 0)) ||
+                (index === 2 && chosen.length > 0)
               const done = visited && filled
               const now = index === step
               return (
@@ -722,11 +537,10 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
 
         <div className="rounded-2xl border border-border/80 bg-card/90 p-5">
           <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-            Sources so far
+            Connected so far
           </p>
           <ul className="mt-3 flex flex-col gap-2 text-xs">
-            <SourceLine ok={Boolean(website)} label="Website" value={website?.hostname} />
-            <SourceLine ok={hasRepo} label="Repository" value={hasRepo ? `${githubOwner.trim()}/${githubRepo.trim()}` : undefined} />
+            <SourceLine ok={Boolean(website)} label="Application" value={website?.hostname} />
             <li className="mt-1 border-t border-border/60 pt-2 font-mono text-[9px] uppercase tracking-[0.16em] text-muted-foreground">
               Supporting detail
             </li>
@@ -744,18 +558,18 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
               <Minus className="mt-0.5 size-3 shrink-0" />
             )}
             {hasRealSource
-              ? "A real source is connected — Atai has something to read."
-              : "A website or a repository is required to finish."}
+              ? "A live application is connected — Atai has something to read."
+              : "Your live application address is required to finish."}
           </p>
         </div>
 
         <div className="rounded-2xl border border-border/80 bg-card/90 p-5">
           <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-            Read, not rebuilt
+            Connected, not rebuilt
           </p>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Your site stays yours and your repository is never executed. Atai collects evidence, writes an honest
-            first assessment, and you decide what happens next.
+            Your application keeps running where it is. Atai collects evidence, writes an honest first assessment,
+            and you decide what happens next. No build is started for a connected business.
           </p>
         </div>
       </aside>

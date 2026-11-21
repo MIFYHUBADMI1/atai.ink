@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth/session"
 import { isCampaignsEnabledForUser } from "@/lib/marketing/feature-flags"
 import { listCampaigns } from "@/lib/marketing/campaigns/service"
 import { requireOwnedProject } from "@/lib/workspace/require-owned-project"
-import { userHasBuiltBusiness } from "@/lib/dashboard/business-access"
+import { userHasRealBusiness } from "@/lib/dashboard/business-access"
 import { BusinessLockedForProject } from "@/components/workspace/business-locked"
 
 /**
@@ -22,7 +22,7 @@ import { BusinessLockedForProject } from "@/components/workspace/business-locked
 export default async function ProjectCampaignsPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
   const project = await requireOwnedProject(projectId, `/project/${projectId}/campaigns`)
-  if (!(await userHasBuiltBusiness(project.userId))) return <BusinessLockedForProject section="Campaigns" projectId={project.id} />
+  if (!(await userHasRealBusiness(project.userId))) return <BusinessLockedForProject section="Campaigns" projectId={project.id} />
   const user = await getCurrentUser()
 
   if (!user || !isCampaignsEnabledForUser(user.id, user.featurePreferences)) {

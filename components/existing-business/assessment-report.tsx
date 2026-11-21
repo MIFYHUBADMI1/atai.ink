@@ -88,12 +88,6 @@ export function AssessmentReport({ assessment }: { assessment: BusinessAssessmen
               </Badge>
             </li>
             <li className="flex items-center justify-between gap-3 rounded-lg border border-border/70 px-3 py-2">
-              <span className="text-muted-foreground">Repository</span>
-              <Badge variant={evidence.repoAnalysed ? "default" : "secondary"}>
-                {evidence.repoAnalysed ? "Read" : "Not read"}
-              </Badge>
-            </li>
-            <li className="flex items-center justify-between gap-3 rounded-lg border border-border/70 px-3 py-2">
               <span className="text-muted-foreground">Domain ownership</span>
               <Badge variant={evidence.domainVerified ? "default" : "secondary"}>
                 {evidence.domainVerified ? "Verified in Atai" : "Not verified"}

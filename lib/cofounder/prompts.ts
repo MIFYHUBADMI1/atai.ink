@@ -55,7 +55,7 @@ function existingBusinessLines(b: CofounderExistingBusinessBrief): string[] {
     `  - Website: ${b.website.analyzed ? `analyzed${b.website.url ? ` (${b.website.url})` : ""}` : b.website.submitted ? `submitted, not analyzed yet (status: ${b.website.status})` : "not provided"}${b.website.error ? ` — last error: ${b.website.error}` : ""}`,
   )
   lines.push(
-    `  - Repository: ${b.repository.read ? `read (${b.repository.label ?? "connected"})` : b.repository.connected ? `connected, not read yet (status: ${b.repository.status})` : "not connected"}`,
+    `  - Their application: ${b.connection.label}${b.connection.lastSeenAt ? ` (last call ${new Date(b.connection.lastSeenAt).toISOString()})` : ""}. Atai did not build it and cannot read its code.`,
   )
   lines.push(
     `  - Domain ownership: ${b.domainVerified ? "VERIFIED" : "not verified"} (verification is optional and never a blocker; Atai verification is NOT Google Search Console verification)`,

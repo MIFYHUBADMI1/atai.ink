@@ -35,6 +35,12 @@ vi.mock("@/lib/auth/rate-limit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue(undefined),
 }))
 
+// The connected-business handshake writes to Mongo; the route must never fail
+// because of it, and its own behavior is covered by lib/connected-business.
+vi.mock("@/lib/connected-business/service", () => ({
+  recordConnectionSeen: vi.fn().mockResolvedValue(null),
+}))
+
 vi.mock("@/lib/billing/credit-service", () => ({
   consumeCredits: vi.fn(),
   getAvailableCredits: vi.fn().mockResolvedValue(0),

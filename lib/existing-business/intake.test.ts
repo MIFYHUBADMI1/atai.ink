@@ -83,10 +83,6 @@ vi.mock("./website-facts", () => ({
   collectWebsiteFacts: vi.fn(),
   buildWebsiteDigest: () => "website digest",
 }))
-vi.mock("./repo-facts", () => ({
-  collectRepoFacts: vi.fn(),
-  buildRepoDigest: () => "repo digest",
-}))
 vi.mock("./assessment", () => ({
   generateBusinessAssessment: vi.fn(async () => ({
     ok: true,
@@ -105,7 +101,6 @@ import { checkRateLimit } from "@/lib/auth/rate-limit"
 import { chargeScrapeCredits, hasSufficientCredits } from "@/lib/credits/credits"
 import { registerDomain, listProjectDomains } from "@/lib/domain/service"
 import { collectWebsiteFacts } from "./website-facts"
-import { collectRepoFacts } from "./repo-facts"
 import { generateBusinessAssessment } from "./assessment"
 import {
   STALE_RUN_MS,
@@ -122,7 +117,6 @@ const affordableMock = vi.mocked(hasSufficientCredits)
 const registerMock = vi.mocked(registerDomain)
 const domainsMock = vi.mocked(listProjectDomains)
 const websiteMock = vi.mocked(collectWebsiteFacts)
-const repoMock = vi.mocked(collectRepoFacts)
 const assessmentMock = vi.mocked(generateBusinessAssessment)
 
 const websiteFacts = {
@@ -158,7 +152,6 @@ beforeEach(() => {
   vi.clearAllMocks()
   seedProject()
   websiteMock.mockResolvedValue({ facts: websiteFacts } as Awaited<ReturnType<typeof collectWebsiteFacts>>)
-  repoMock.mockResolvedValue({ failure: { code: "REPO_NOT_FOUND", message: "not found" } } as Awaited<ReturnType<typeof collectRepoFacts>>)
   assessmentMock.mockResolvedValue({
     ok: true,
     assessment: { generatedAt: 1, understanding: "u", evidence: {} },
@@ -170,31 +163,27 @@ beforeEach(() => {
 })
 
 describe("buildIntakeRecord", () => {
-  it("seeds pending stages for supplied sources and skipped for absent ones", () => {
+  it("seeds a pending website stage and a pending assessment", () => {
     const record = buildIntakeRecord({
       description: "desc",
       websiteUrl: "https://bakery.example",
-      githubOwner: "owner",
-      githubRepo: "repo",
       objectives: ["acquire_customers", "acquire_customers"],
     })
     expect(record.website).toEqual({ status: "pending", url: "https://bakery.example" })
-    expect(record.repo).toMatchObject({ status: "pending", owner: "owner", repo: "repo" })
     expect(record.assessment.status).toBe("pending")
     expect(record.run).toMatchObject({ status: "idle" })
     expect(record.objectives).toEqual(["acquire_customers"])
   })
 
-  it("skips website and repo when not supplied — the assessment still runs", () => {
+  it("skips the website when not supplied — the assessment still runs", () => {
     const record = buildIntakeRecord({ description: "just words" })
     expect(record.website.status).toBe("skipped")
-    expect(record.repo.status).toBe("skipped")
     expect(record.assessment.status).toBe("pending")
   })
 
-  it("requires BOTH owner and repo name to open the repo stage", () => {
-    expect(buildIntakeRecord({ githubOwner: "owner" }).repo.status).toBe("skipped")
-    expect(buildIntakeRecord({ githubRepo: "repo" }).repo.status).toBe("skipped")
+  it("records no repository stage at all — this path never reads code", () => {
+    const record = buildIntakeRecord({ description: "desc", websiteUrl: "https://bakery.example" })
+    expect(record).not.toHaveProperty("repo")
   })
 
   it("trims and caps founder text", () => {
@@ -216,28 +205,28 @@ describe("intakeProgress", () => {
     expect(intakeProgress(undefined).status).toBe("pending")
   })
 
-  it("is skipped when every source was skipped", () => {
-    const intake = { website: stage("skipped"), repo: stage("skipped"), assessment: stage("skipped") } as BusinessIntake
+  it("is skipped when every stage was skipped", () => {
+    const intake = { website: stage("skipped"), assessment: stage("skipped") } as BusinessIntake
     expect(intakeProgress(intake).status).toBe("skipped")
   })
 
-  it("is completed when everything active completed", () => {
-    const intake = { website: stage("completed"), repo: stage("skipped"), assessment: stage("completed") } as BusinessIntake
-    expect(intakeProgress(intake)).toMatchObject({ status: "completed", completed: 2, skipped: 1 })
+  it("is completed when every stage completed", () => {
+    const intake = { website: stage("completed"), assessment: stage("completed") } as BusinessIntake
+    expect(intakeProgress(intake)).toMatchObject({ status: "completed", completed: 2, skipped: 0 })
   })
 
   it("is partially_completed when something was learned and something failed", () => {
-    const intake = { website: stage("failed"), repo: stage("skipped"), assessment: stage("completed") } as BusinessIntake
+    const intake = { website: stage("failed"), assessment: stage("completed") } as BusinessIntake
     expect(intakeProgress(intake).status).toBe("partially_completed")
   })
 
   it("is processing while any stage is still running, even with completions", () => {
-    const intake = { website: stage("completed"), repo: stage("skipped"), assessment: stage("processing") } as BusinessIntake
+    const intake = { website: stage("completed"), assessment: stage("processing") } as BusinessIntake
     expect(intakeProgress(intake).status).toBe("processing")
   })
 
   it("is failed only when nothing was learned", () => {
-    const intake = { website: stage("failed"), repo: stage("skipped"), assessment: stage("failed") } as BusinessIntake
+    const intake = { website: stage("failed"), assessment: stage("failed") } as BusinessIntake
     expect(intakeProgress(intake).status).toBe("failed")
   })
 })
@@ -305,7 +294,6 @@ describe("runBusinessIntake — gates", () => {
     seedProject({
       ...buildIntakeRecord({ description: "d" }),
       website: { status: "completed" },
-      repo: { status: "skipped" },
       assessment: { status: "completed" },
     } as BusinessIntake)
     const result = await runBusinessIntake("proj-1")
@@ -377,35 +365,14 @@ describe("runBusinessIntake — sources and billing", () => {
     expect(assessmentMock.mock.calls[0][0].evidence.website).toBeUndefined()
   })
 
-  it("a failed repo read keeps the website evidence", async () => {
-    seedProject(buildIntakeRecord({
-      description: "d",
-      websiteUrl: "https://bakery.example",
-      githubOwner: "owner",
-      githubRepo: "repo",
-      objectives: ["acquire_customers"],
-    }))
-    const result = await runBusinessIntake("proj-1")
-    expect(result).toMatchObject({ ok: true, status: "partially_completed" })
-    expect(stages().repo?.status).toBe("failed")
-    expect(stages().repo?.accessVerified).toBe(false)
-    const evidence = assessmentMock.mock.calls[0][0].evidence
-    expect(evidence.website).toBeDefined()
-    expect(evidence.repo).toBeUndefined()
-  })
-
-  it("passes repo evidence and verified-domain truth to the assessment", async () => {
-    seedProject(buildIntakeRecord({ description: "d", githubOwner: "owner", githubRepo: "repo", objectives: [] }))
-    repoMock.mockResolvedValue({
-      facts: { owner: "owner", repo: "repo", filesListed: 9, isPrivate: true, readmeChars: 8, manifests: [] },
-      readme: "# readme",
-    } as Awaited<ReturnType<typeof collectRepoFacts>>)
+  it("passes website evidence and verified-domain truth to the assessment", async () => {
+    seedProject(buildIntakeRecord({ description: "d", websiteUrl: "https://bakery.example", objectives: [] }))
     domainsMock.mockResolvedValue([{ status: "verified" }] as Awaited<ReturnType<typeof listProjectDomains>>)
     await runBusinessIntake("proj-1")
     const evidence = assessmentMock.mock.calls[0][0].evidence
-    expect(evidence.repo).toMatchObject({ label: "owner/repo", filesListed: 9 })
+    expect(evidence.website).toMatchObject({ hostname: "bakery.example" })
+    expect(evidence).not.toHaveProperty("repo")
     expect(evidence.domainVerified).toBe(true)
-    expect(stages().repo?.accessVerified).toBe(true)
   })
 
   it("a taken domain never blocks initialization", async () => {

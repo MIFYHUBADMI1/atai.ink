@@ -1,4 +1,5 @@
 import { authenticateRuntimeRequest } from "@/lib/runtime/auth/authenticate"
+import { recordConnectionSeen } from "@/lib/connected-business/service"
 import { ok, handleRouteError } from "@/lib/api/respond"
 
 /**
@@ -36,6 +37,12 @@ const REQUEST_LIFECYCLE_STAGES = [
 export async function GET(req: Request) {
   try {
     const auth = await authenticateRuntimeRequest(req)
+
+    // A successful authenticated call from an application that runs outside
+    // Atai is the handshake for a connected business. It is recorded as a fact;
+    // it never fails the health check and never affects other projects
+    // (recordConnectionSeen ignores projects that are not connected businesses).
+    await recordConnectionSeen({ projectId: auth.projectId, apiKeyId: auth.apiKeyId }).catch(() => null)
 
     return ok({
       status: "operational" as const,

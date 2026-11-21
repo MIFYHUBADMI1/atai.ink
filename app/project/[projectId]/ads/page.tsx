@@ -27,7 +27,7 @@ import { AdsAnalyticsView } from "@/components/marketing/ads-analytics-view"
 import { capabilityAvailability } from "@/lib/runtime/router/adapters/availability"
 import { getAvailableCredits } from "@/lib/billing/credit-service"
 import { requireOwnedProject } from "@/lib/workspace/require-owned-project"
-import { userHasBuiltBusiness } from "@/lib/dashboard/business-access"
+import { userHasRealBusiness } from "@/lib/dashboard/business-access"
 import { BusinessLockedForProject } from "@/components/workspace/business-locked"
 import { logger } from "@/lib/logging/logger"
 
@@ -65,7 +65,7 @@ export default async function ProjectAdsPage({
   const tab: AdsTab = isAdsTab(rawTab) ? rawTab : requestId ? "requests" : "overview"
 
   const project = await requireOwnedProject(projectId, `/project/${projectId}/ads`)
-  if (!(await userHasBuiltBusiness(project.userId))) return <BusinessLockedForProject section="Ads & Growth" projectId={project.id} />
+  if (!(await userHasRealBusiness(project.userId))) return <BusinessLockedForProject section="Ads & Growth" projectId={project.id} />
   const user = await getCurrentUser()
 
   if (!user || !isMarketStudioEnabled()) {

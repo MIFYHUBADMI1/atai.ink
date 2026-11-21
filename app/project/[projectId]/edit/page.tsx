@@ -6,7 +6,8 @@ import { store } from "@/lib/store/store"
 import { EditWorkspace } from "@/components/edit-workspace"
 import { Badge } from "@/components/ui/badge"
 import { userHasBuiltBusiness } from "@/lib/dashboard/business-access"
-import { BusinessLockedForProject } from "@/components/workspace/business-locked"
+import { isConnectedBusiness } from "@/lib/connected-business/guards"
+import { BusinessLockedForProject, ConnectedBusinessNoBuildPage } from "@/components/workspace/business-locked"
 
 export default async function EditProjectPage({ params }: { params: Promise<{ projectId: string }> }) {
   const user = await getCurrentUser()
@@ -15,6 +16,7 @@ export default async function EditProjectPage({ params }: { params: Promise<{ pr
   const { projectId } = await params
   const project = await store.getProject(projectId)
   if (!project || project.userId !== user.id) notFound()
+  if (isConnectedBusiness(project)) return <ConnectedBusinessNoBuildPage section="App editing" projectId={project.id} />
   if (!(await userHasBuiltBusiness(user.id))) return <BusinessLockedForProject section="App editing" projectId={project.id} />
 
   const stateLabel: Record<string, { text: string; className: string }> = {

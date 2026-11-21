@@ -6,7 +6,8 @@ import { store } from "@/lib/store/store"
 import { EnvManager } from "@/components/env-manager"
 import { EnvPageIcons } from "../env-icons"
 import { userHasBuiltBusiness } from "@/lib/dashboard/business-access"
-import { BusinessLockedForProject } from "@/components/workspace/business-locked"
+import { isConnectedBusiness } from "@/lib/connected-business/guards"
+import { BusinessLockedForProject, ConnectedBusinessNoBuildPage } from "@/components/workspace/business-locked"
 
 export default async function ProjectEnvPage({ params }: { params: Promise<{ projectId: string }> }) {
   const user = await getCurrentUser()
@@ -15,6 +16,7 @@ export default async function ProjectEnvPage({ params }: { params: Promise<{ pro
 
   const project = await store.getProject(projectId)
   if (!project || project.userId !== user.id) notFound()
+  if (isConnectedBusiness(project)) return <ConnectedBusinessNoBuildPage section="Environment" projectId={project.id} />
   if (!(await userHasBuiltBusiness(user.id))) return <BusinessLockedForProject section="Environment" projectId={project.id} />
 
   if (!project.totalumProjectId) {

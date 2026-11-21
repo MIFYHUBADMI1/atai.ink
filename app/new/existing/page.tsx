@@ -6,7 +6,7 @@ import { getCurrentUser } from "@/lib/auth/session"
 import { BUSINESS_OBJECTIVES } from "@/lib/existing-business/objectives"
 
 export const metadata = {
-  title: "Bring your existing business · Atai",
+  title: "Connect your existing business · Atai",
 }
 
 export default async function NewExistingBusinessPage() {
@@ -14,11 +14,11 @@ export default async function NewExistingBusinessPage() {
   if (!user) redirect(`/login?next=${encodeURIComponent("/new/existing")}`)
 
   return (
-    <DashboardShell title="Bring your existing business">
+    <DashboardShell title="Connect your existing business">
       <CreateWorkspaceShell
         kicker="Already running something real"
-        title="Bring your existing business to Atai."
-        description="Keep running what you have. Atai reads what you share — a website or a repository, plus your own words — and your AI co-founder writes an honest first assessment with next steps inside your workspace. No rebuild, no second onboarding."
+        title="Connect the business you already run."
+        description="Your application keeps running where it is. Atai reads its public pages and your own words, then your AI co-founder writes an honest first assessment with next steps inside your workspace. No rebuild, no redeploy, no second onboarding."
         backLabel="All starting points"
         heroTourTarget="existing-business-intro"
       >

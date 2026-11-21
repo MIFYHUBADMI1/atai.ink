@@ -38,7 +38,7 @@ import type { BusinessAssessment, BusinessDomainDoc } from "@/lib/types/business
 function assessmentFixture(overrides: Partial<BusinessAssessment> = {}): BusinessAssessment {
   return {
     generatedAt: 100,
-    evidence: { websiteAnalysed: true, pagesCrawled: 3, repoAnalysed: false, ownerDescription: true, domainVerified: false },
+    evidence: { websiteAnalysed: true, pagesCrawled: 3, ownerDescription: true, domainVerified: false },
     understanding: "A bakery selling online.",
     currentPosition: "Orders arrive by DM.",
     strengths: [],
@@ -80,7 +80,6 @@ function projectFixture(overrides: Record<string, unknown> = {}) {
       targetCustomers: "Local families",
       objectives: ["acquire_customers", "improve_website"],
       website: { status: "completed", url: "https://crumb.example.com", pagesCrawled: 3 },
-      repo: { status: "skipped" },
       assessment: { status: "completed", generatedAt: 100, result: assessmentFixture() },
     },
     ...overrides,
@@ -134,7 +133,7 @@ describe("buildActiveProjectBrief — existing-business digest", () => {
     expect(eb?.displayName).toBe("Crumb & Co Bakery")
     expect(eb?.objectives).toEqual([objectiveLabel("acquire_customers"), objectiveLabel("improve_website")])
     expect(eb?.website).toMatchObject({ submitted: true, analyzed: true, url: "https://crumb.example.com", status: "completed" })
-    expect(eb?.repository).toMatchObject({ connected: false, read: false, status: "skipped" })
+    expect(eb?.connection).toMatchObject({ status: "not_connected", label: "Not connected" })
     expect(eb?.assessment.status).toBe("completed")
     expect(eb?.assessment.understanding).toBe("A bakery selling online.")
     expect(eb?.assessment.priorities).toEqual([{ title: "Add online ordering", priority: "immediate", route: "/project/proj_1/edit" }])

@@ -123,6 +123,7 @@ export const TOUR_TARGETS = {
   "existing-business-status": { label: "Business reading progress", shell: "project", risk: "none", projectScoped: true },
   "existing-business-assessment": { label: "Initial business assessment", shell: "project", risk: "none", projectScoped: true },
   "existing-business-domains": { label: "Domain ownership verification", shell: "project", risk: "settings-write", projectScoped: true },
+  "existing-business-connection": { label: "Application connection", shell: "project", risk: "settings-write", projectScoped: true },
   "project-journey": { label: "Where this business is at", shell: "project", risk: "none", projectScoped: true },
   "project-next-action": {
     label: "Build or launch this business",

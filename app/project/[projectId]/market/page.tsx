@@ -12,7 +12,7 @@ import { getLaunchKitPanelData } from "@/lib/marketing/launch-kit-panel-data"
 import { getSeoAuditAffordability } from "@/lib/marketing/seo/credits"
 import { getLatestSeoAudit } from "@/lib/marketing/seo/service"
 import { requireOwnedProject } from "@/lib/workspace/require-owned-project"
-import { userHasBuiltBusiness } from "@/lib/dashboard/business-access"
+import { userHasRealBusiness } from "@/lib/dashboard/business-access"
 import { BusinessLockedForProject } from "@/components/workspace/business-locked"
 
 /**
@@ -29,7 +29,7 @@ import { BusinessLockedForProject } from "@/components/workspace/business-locked
 export default async function ProjectMarketPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params
   const project = await requireOwnedProject(projectId, `/project/${projectId}/market`)
-  if (!(await userHasBuiltBusiness(project.userId))) return <BusinessLockedForProject section="Market & grow" projectId={project.id} />
+  if (!(await userHasRealBusiness(project.userId))) return <BusinessLockedForProject section="Market & grow" projectId={project.id} />
   const user = await getCurrentUser()
 
   if (!user || !isGrowthOverviewEnabledForUser(user.id)) {

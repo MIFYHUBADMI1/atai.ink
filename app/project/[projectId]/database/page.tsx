@@ -7,7 +7,8 @@ import { DatabaseProvider } from "@/components/database-provider"
 import { DatabaseTablesList } from "@/components/database-tables"
 import { InfrastructureManager } from "@/components/infrastructure-manager"
 import { userHasBuiltBusiness } from "@/lib/dashboard/business-access"
-import { BusinessLockedForProject } from "@/components/workspace/business-locked"
+import { isConnectedBusiness } from "@/lib/connected-business/guards"
+import { BusinessLockedForProject, ConnectedBusinessNoBuildPage } from "@/components/workspace/business-locked"
 
 export default async function DatabasePage({ params }: { params: Promise<{ projectId: string }> }) {
   const user = await getCurrentUser()
@@ -16,6 +17,7 @@ export default async function DatabasePage({ params }: { params: Promise<{ proje
   const { projectId } = await params
   const project = await store.getProject(projectId)
   if (!project || project.userId !== user.id) notFound()
+  if (isConnectedBusiness(project)) return <ConnectedBusinessNoBuildPage section="Database" projectId={project.id} />
   if (!(await userHasBuiltBusiness(user.id))) return <BusinessLockedForProject section="Database" projectId={project.id} />
 
   return (
