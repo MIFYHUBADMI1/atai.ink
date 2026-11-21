@@ -31,6 +31,7 @@ export async function GET() {
           // Needed by the list to resume a build whose page was left.
           totalumProjectId: p.totalumProjectId,
           lastPolledAt: p.lastPolledAt,
+          startingPoint: p.startingPoint,
         })),
       })
     })
