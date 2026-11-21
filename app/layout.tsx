@@ -2,7 +2,6 @@ import { PrivacyAnalytics } from "@/components/privacy-analytics"
 import { AtaiFeedbackLauncher } from "@/components/feedback/atai-feedback-launcher"
 import type { Metadata, Viewport } from "next"
 import localFont from "next/font/local"
-import Script from "next/script"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/components/auth/auth-provider"
 import { CreditGateProvider } from "@/components/billing/credit-gate-provider"
@@ -71,22 +70,6 @@ export const viewport: Viewport = {
     { media: "(prefers-color-scheme: dark)", color: "#252525" },
   ],
 }
-
-// Theme initialisation script — runs before first paint to avoid FOUC.
-// Uses next/script with strategy="beforeInteractive" to ensure the script
-// executes before React hydration. In React 19, raw <script> tags inside
-// components trigger a warning and may not execute reliably during hydration.
-const THEME_INIT_SCRIPT = `(function(){try{
-var T=["system","dark","light","light-blue","glass"];
-var s=localStorage.getItem("atai:theme");
-var t=(s&&T.indexOf(s)!==-1)?s:"system";
-var d=window.matchMedia("(prefers-color-scheme: dark)").matches;
-var r=document.documentElement;
-r.classList.remove("dark","theme-glass","theme-light-blue");
-if(t==="dark"||(t==="system"&&d)){r.classList.add("dark")}
-else if(t==="light-blue"){r.classList.add("theme-light-blue")}
-else if(t==="glass"){r.classList.add("theme-glass")}
-}catch(e){}})();`
 
 const STRUCTURED_DATA = JSON.stringify({
   "@context": "https://schema.org",
@@ -187,16 +170,7 @@ const STRUCTURED_DATA = JSON.stringify({
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html suppressHydrationWarning lang="en" className={`bg-background ${jakarta.variable} ${geistMono.variable}`}>
-      <head suppressHydrationWarning>
-        {/* Theme initialization script - runs before first paint to avoid FOUC */}
-        <Script id="theme-init" strategy="beforeInteractive">
-          {THEME_INIT_SCRIPT}
-        </Script>
-        <script
-          id="structured-data"
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: STRUCTURED_DATA }}
-        />
+      <head>
         {/* Font Awesome — required for database UI icons */}
         <link
           rel="stylesheet"
@@ -206,6 +180,11 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         />
       </head>
       <body className="font-sans antialiased">
+        <script
+          id="structured-data"
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: STRUCTURED_DATA }}
+        />
         <ThemeProvider>
           <AuthProvider>
             <CreditGateProvider>
