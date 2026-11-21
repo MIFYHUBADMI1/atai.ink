@@ -36,10 +36,14 @@ function claimMatches(filter: Record<string, unknown>): boolean {
 }
 
 const projectsColFake = {
+  async findOne(filter: { id: string }) {
+    if (!projectDoc || filter.id !== projectDoc.id) return null
+    return projectDoc
+  },
   async updateOne(filter: { id: string }, update: { $set?: Record<string, unknown> }) {
-    if (!projectDoc || filter.id !== projectDoc.id) return { matchedCount: 0 }
+    if (!projectDoc || filter.id !== projectDoc.id) return { matchedCount: 0, modifiedCount: 0 }
     for (const [path, value] of Object.entries(update.$set ?? {})) setPath(projectDoc, path, value)
-    return { matchedCount: 1 }
+    return { matchedCount: 1, modifiedCount: 1 }
   },
   async findOneAndUpdate(filter: Record<string, unknown>, update: { $set: Record<string, unknown> }) {
     if (!claimMatches(filter)) return null
