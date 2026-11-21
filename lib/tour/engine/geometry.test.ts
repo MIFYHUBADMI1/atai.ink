@@ -54,6 +54,22 @@ describe("the spotlight", () => {
     expect(box.top + box.height).toBeLessThanOrEqual(height - EDGE + box.height * 0)
     expect(box.top + box.height).toBeLessThanOrEqual(height)
   })
+
+  it("rings a control in the app's top bar where the control actually is", () => {
+    // Header controls sit above the sticky-header band. Reserving that band
+    // pushed the ring 40px below the button it was explaining.
+    const control = { top: 24, left: 24, width: 400, height: 34 }
+    const box = computeSpotlight(control, { width: 1440, height: 900 }, 0)!
+    expect(box.top).toBeLessThanOrEqual(control.top)
+    expect(box.top + box.height).toBeGreaterThanOrEqual(control.top + control.height)
+  })
+
+  it("leaves breathing room around a short control", () => {
+    const control = { top: 300, left: 40, width: 160, height: 24 }
+    const box = computeSpotlight(control, { width: 1440, height: 900 })!
+    expect(box.top).toBeLessThan(control.top)
+    expect(box.height).toBeGreaterThan(control.height)
+  })
 })
 
 describe("the explanation card", () => {

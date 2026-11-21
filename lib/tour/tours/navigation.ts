@@ -36,6 +36,7 @@ export const navigationTour: TourDefinition = {
       kind: "info",
       title: "Home — where you start every day",
       text: "Home shows what needs a decision from you right now, across all your businesses. It is a shortlist, not a report: if something is on Home, Atai could not settle it without you.",
+      why: "A shortlist that only shows what needs you is the fastest way back into the work.",
       target: "nav-dashboard",
       route: "dashboard",
     },
@@ -52,6 +53,7 @@ export const navigationTour: TourDefinition = {
       kind: "info",
       title: "Your businesses, as quick links",
       text: "Under the main links sits a short list of the businesses you touched most recently, each with its stage written underneath. Clicking one opens that business's own workspace.",
+      why: "Recent businesses are the ones you are most likely to need, without a search.",
       target: "nav-business-card",
       requiresProject: true,
       instruction: "Notice the two links under the list: View all businesses, and Create new business.",
@@ -69,6 +71,7 @@ export const navigationTour: TourDefinition = {
       kind: "info",
       title: "Finances — your money, all businesses together",
       text: "What came in from customers, and what it cost to run. Each business is kept separate, and your earnings are never added together with credit costs into one flattering number.",
+      why: "Portfolio totals are useful only if each business's numbers stay distinguishable.",
       target: "nav-finances",
       instruction: "If this link reads Locked, it unlocks the first time one of your businesses has a built application. Nothing is wrong with your account.",
     },
@@ -77,6 +80,7 @@ export const navigationTour: TourDefinition = {
       kind: "info",
       title: "Notifications — the full record",
       text: "Everything Atai has told you about your businesses: a build that finished, a problem it could not settle on its own, a reward that landed. This page keeps the history, including things you dismissed.",
+      why: "The page keeps the history, so a dismissed notification is not a lost decision.",
       target: "nav-notifications",
     },
     {
@@ -84,6 +88,7 @@ export const navigationTour: TourDefinition = {
       kind: "info",
       title: "The bell — the few newest ones",
       text: "In the top bar, the bell holds a short list with a count on it. It is a quick check, not the archive: View all notifications at the bottom of it takes you to the page, and anything you dismiss there only lives on that page.",
+      why: "The bell is a glance and the page is the record; knowing which is which prevents missed work.",
       target: "header-inbox",
     },
     {
@@ -99,6 +104,7 @@ export const navigationTour: TourDefinition = {
       kind: "info",
       title: "Explore — what other founders built",
       text: "Businesses their owners chose to publish, with the details of how they are set up. You can start from one of them instead of from a blank page.",
+      why: "Seeing published businesses calibrates what Atai produces before you spend on your own.",
       target: "nav-explore",
     },
     {
@@ -106,6 +112,7 @@ export const navigationTour: TourDefinition = {
       kind: "info",
       title: "Feature requests — ask for what is missing",
       text: "Things people have asked Atai to add, and what other founders said about them. You can add your own. It is a real input into what gets built next, not a suggestion box nobody reads.",
+      why: "Requests are read and prioritised, which is why writing a precise one is worth the time.",
       target: "nav-feature-requests",
     },
     {
@@ -113,6 +120,7 @@ export const navigationTour: TourDefinition = {
       kind: "info",
       title: "Your credit balance",
       text: "Credits are what you spend on Atai's work — planning a business, chatting with your co-founder, building and publishing the application. This counter is what is left. Reading a page never costs anything.",
+      why: "Watching the counter turns a surprise balance into a decision you made.",
       target: "header-credits",
       instruction: "On a phone this counter is not in the bar; the same balance is on Settings, and on the Credits and plan page, which also shows what each action costs.",
     },
@@ -121,6 +129,7 @@ export const navigationTour: TourDefinition = {
       kind: "info",
       title: "Your face in the corner — the account menu",
       text: "Your name and email, then the ways out and the ways in: your account page, referrals, settings, how the interface looks, and signing out. If you are an administrator, the admin area appears here too.",
+      why: "Everything personal and account-wide lives behind your face, not inside a business.",
       target: "header-account",
     },
     {
@@ -128,6 +137,7 @@ export const navigationTour: TourDefinition = {
       kind: "info",
       title: "Settings — how Atai behaves for you",
       text: "Your profile and how you sign in, your plan and credits, the optional parts of Atai you can switch on or off, and how your co-founder answers you. Settings belong to your whole account, not to one business.",
+      why: "These settings follow you across every business, so they are worth getting right once.",
       target: "nav-settings",
     },
     {
@@ -143,6 +153,7 @@ export const navigationTour: TourDefinition = {
       kind: "info",
       title: "Tours — every walkthrough, including this one",
       text: "The list of everything Atai can walk you through, with how long each takes and where you stopped. Leave a tour halfway and it is still here when you come back.",
+      why: "A tour you left is still there, so learning can fit around real work.",
       target: "nav-tours",
       instruction: "In the top bar, not the menu.",
     },
@@ -151,6 +162,7 @@ export const navigationTour: TourDefinition = {
       kind: "info",
       title: "Help & support — the written answers",
       text: "Guides for the things a tour cannot show you, arranged by what you are trying to do, plus the way to report a problem from the page you were already on.",
+      why: "Guides cover what a tour cannot, and the report button reaches a person.",
       target: "nav-help",
       instruction: "It sits at the bottom of the menu, and once on a wide screen in the top bar as well.",
     },
@@ -167,6 +179,7 @@ export const navigationTour: TourDefinition = {
       kind: "info",
       title: "You know the map now",
       text: "Menu on the left for where to go, bar on the top for what you have and who you are, page in the middle for the business you are looking at. One more tour is worth taking next: the menu changes completely once you are inside a single business.",
+      why: "The menu changes inside a business, and knowing that stops you hunting for links that moved.",
       instruction: "Take Inside one business: the menu next, or start creating your first business.",
     },
   ],
@@ -196,6 +209,7 @@ export const projectNavigationTour: TourDefinition = {
       kind: "info",
       title: "Workspace — this business's front page",
       text: "Its stage, what the AI teams are doing, and the one action that moves it forward next, with that action's credit cost written on it before you press anything.",
+      why: "This is the page that always tells you the next move for this business.",
       target: "nav-project-workspace",
     },
     {
@@ -219,6 +233,7 @@ export const projectNavigationTour: TourDefinition = {
       kind: "info",
       title: "Team progress — who is doing what",
       text: "Atai splits the work into named teams — research, build, marketing, finance — and this page shows what each has done, what is still running, and what it could not finish.",
+      why: "Named teams and their output let you tell work in progress from work that stopped.",
       target: "nav-project-progress",
     },
     {
@@ -226,6 +241,7 @@ export const projectNavigationTour: TourDefinition = {
       kind: "info",
       title: "Edit app — the application itself",
       text: "A preview of what your customers would see, its versions and its log, and the way to ask for a change to the software rather than the plan.",
+      why: "The preview and versions are how you judge a change before customers see it.",
       target: "nav-project-edit",
     },
     {
@@ -233,6 +249,7 @@ export const projectNavigationTour: TourDefinition = {
       kind: "info",
       title: "Source — the real files",
       text: "The code the build teams wrote, file by file. You never have to read it. It is here so that nothing about your business is a mystery, and so you can hand it to a developer someday.",
+      why: "The code is visible so nothing about your business is a mystery, even if you never read it.",
       target: "nav-project-source",
     },
     {
@@ -240,6 +257,7 @@ export const projectNavigationTour: TourDefinition = {
       kind: "info",
       title: "Database — the information your app holds",
       text: "The tables your application keeps: the accounts, sign-ups, orders or entries its customers produced. Reading it tells you what is really being stored about the people who used your business.",
+      why: "The tables show what is actually stored about your customers, which is a privacy question as much as a technical one.",
       target: "nav-project-database",
     },
     {
@@ -263,6 +281,7 @@ export const projectNavigationTour: TourDefinition = {
       kind: "info",
       title: "Runtime — what it costs to keep the lights on",
       text: "The machinery the live application runs on: which model answers its requests, how much has been used, what each call costs and where the limits are.",
+      why: "Knowing what each call costs is how you keep a live application affordable.",
       target: "nav-project-runtime",
     },
     {
@@ -270,6 +289,7 @@ export const projectNavigationTour: TourDefinition = {
       kind: "info",
       title: "Intelligence — what customers actually did",
       text: "What people did once they arrived: what they opened, what they paid for, where they stopped. It only reports what was really measured, and says plainly where there is not enough data yet.",
+      why: "Measured behaviour, not guesses, is what tells you which change to make next.",
       target: "nav-project-intelligence",
     },
     {
@@ -285,6 +305,7 @@ export const projectNavigationTour: TourDefinition = {
       kind: "info",
       title: "Market & grow — turning the plan into launch material",
       text: "The pages that get you customers: positioning, who it serves, what makes you different, and the drafts written from your plan. Nothing is posted anywhere by itself.",
+      why: "The plan becomes launch material here, but publishing stays your decision.",
       target: "nav-project-market",
     },
     {
@@ -292,6 +313,7 @@ export const projectNavigationTour: TourDefinition = {
       kind: "info",
       title: "Ads & Growth — advertising, with the price shown",
       text: "Ad drafts you can approve or rewrite, and a place to ask for paid placement. A paid placement is quoted first and is only ever bought by you, on the page, with the money in front of you.",
+      why: "Quotes come before money, so you can plan advertising without risking a budget.",
       target: "nav-project-ads",
     },
     {
@@ -299,6 +321,7 @@ export const projectNavigationTour: TourDefinition = {
       kind: "info",
       title: "Campaigns — the plan over weeks, not one post",
       text: "A sequence laid out with dates: what goes out, to whom, and why at that moment. It is a schedule you run, not something Atai sends on its own.",
+      why: "A dated sequence is a plan you can run; a single post is not a campaign.",
       target: "nav-project-campaigns",
       requiresFeature: "campaigns",
     },
@@ -307,6 +330,7 @@ export const projectNavigationTour: TourDefinition = {
       kind: "info",
       title: "Business finances — this business's money alone",
       text: "What it earned, what it cost, and which figures are measured against which are estimated. Your portfolio total lives in the account-wide Finances page instead.",
+      why: "This business's numbers stay separate so you can judge it on its own.",
       target: "nav-project-finances",
     },
     {
@@ -314,6 +338,7 @@ export const projectNavigationTour: TourDefinition = {
       kind: "info",
       title: "Business lessons — teaching aimed at this business",
       text: "Short written lessons picked for the stage this business is actually at, rather than general advice about startups.",
+      why: "Lessons chosen for this business's stage are more useful than general startup advice.",
       target: "nav-project-lessons",
       requiresFeature: "lessons",
     },
@@ -322,6 +347,7 @@ export const projectNavigationTour: TourDefinition = {
       kind: "info",
       title: "Resources — the reference shelf",
       text: "Templates, checklists and longer reading for the parts of running a business nobody teaches you: pricing, paperwork, first customers, what to do about churn.",
+      why: "The reference shelf covers the operational parts nobody teaches.",
       target: "nav-project-resources",
     },
     {
@@ -329,6 +355,7 @@ export const projectNavigationTour: TourDefinition = {
       kind: "info",
       title: "Competition — who else is serving them",
       text: "The other businesses your customers could choose, what they charge, and where you are genuinely better or worse. Research only runs when you start it, and it costs credits.",
+      why: "Research runs only when you start it, so it never spends credits in the background.",
       target: "nav-project-competition",
     },
     {
@@ -344,6 +371,7 @@ export const projectNavigationTour: TourDefinition = {
       kind: "info",
       title: "The whole business, in one rail",
       text: "Plan it, talk it through, watch the teams build it, put it live, then grow it and read the numbers. That order is the order of the menu, which is not an accident.",
+      why: "The menu order mirrors the life of the business, so you always know which stage you are in.",
       instruction: "Next: the workspace tour walks through what each of these pages is for in use, not just in name.",
     },
   ],

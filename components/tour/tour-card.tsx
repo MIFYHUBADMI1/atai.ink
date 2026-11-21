@@ -231,8 +231,8 @@ export function TourCard({ runtime }: { runtime: TourRuntime }) {
         </span>
       </div>
 
-      {/* On a phone there is no ring to read, and after a drag there is no
-          line of sight between card and highlight — so name the section. */}
+      {/* After a drag, or when the card covers the ring, there is no line of
+          sight between the two — so name the section the step is pointing at. */}
       {targetLabel && !blocked ? (
         <p className="mt-2 flex items-center gap-1.5 rounded-lg bg-muted/60 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
           <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary motion-reduce:animate-none" aria-hidden />
