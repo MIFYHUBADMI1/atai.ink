@@ -5,6 +5,10 @@ import { createUserProject, type CreateProjectInput } from "@/lib/projects/creat
 import { singleFlight } from "@/lib/cache/single-flight"
 import { resolveProjectThumbnail } from "@/lib/media/project-thumbnail"
 
+// The crawl and the model call run after the response; this is the budget
+// that keeps them alive on a serverless platform.
+export const maxDuration = 300
+
 /**
  * Returns the list of projects for the authenticated user.
  *

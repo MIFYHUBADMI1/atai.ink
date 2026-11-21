@@ -68,3 +68,41 @@ describe("buildIntakeView — connection state", () => {
     expect(view).not.toHaveProperty("repository")
   })
 })
+
+describe("buildIntakeView — a failed stage says why", () => {
+  it("carries the recorded reason alongside the sentence", () => {
+    const view = buildIntakeView(
+      project({
+        intake: {
+          collectedAt: 1,
+          objectives: ["acquire_customers"],
+          assessment: {
+            status: "failed",
+            errorCode: "ASSESSMENT_FAILED",
+            errorMessage: "The co-founder could not produce a dependable assessment this time.",
+            errorDetail: "test-model returned HTTP 429 — the provider is rate-limiting Atai",
+          },
+        },
+      } as Partial<MirrorProject>),
+    )
+
+    expect(view.assessment.error).toMatchObject({
+      code: "ASSESSMENT_FAILED",
+      detail: "test-model returned HTTP 429 — the provider is rate-limiting Atai",
+    })
+  })
+
+  it("omits the reason when the stage has none", () => {
+    const view = buildIntakeView(
+      project({
+        intake: {
+          collectedAt: 1,
+          objectives: [],
+          assessment: { status: "failed", errorCode: "ASSESSMENT_FAILED", errorMessage: "It failed." },
+        },
+      } as Partial<MirrorProject>),
+    )
+
+    expect(view.assessment.error).toEqual({ code: "ASSESSMENT_FAILED", message: "It failed." })
+  })
+})

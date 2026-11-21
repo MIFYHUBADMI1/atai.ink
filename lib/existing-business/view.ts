@@ -42,7 +42,7 @@ export interface IntakeView {
     pagesCrawled?: number
     fromCache?: boolean
     status: IntakeStageStatus
-    error?: { code: string; message: string }
+    error?: { code: string; message: string; detail?: string }
   }
   domain: {
     hostname?: string
@@ -63,17 +63,26 @@ export interface IntakeView {
   assessment: {
     status: IntakeStageStatus
     generatedAt?: number
-    error?: { code: string; message: string }
+    error?: { code: string; message: string; detail?: string }
     /** The assessment itself, or null when it has not been produced. */
     result?: BusinessAssessment
   }
 }
 
 /** Only a failure worth showing, and only while the stage is in a failed state. */
-function stageError(stage?: { status: IntakeStageStatus; errorCode?: string | null; errorMessage?: string | null }) {
+function stageError(stage?: {
+  status: IntakeStageStatus
+  errorCode?: string | null
+  errorMessage?: string | null
+  errorDetail?: string | null
+}) {
   if (!stage || (stage.status !== "failed" && stage.status !== "partially_completed")) return undefined
   if (!stage.errorCode || !stage.errorMessage) return undefined
-  return { code: stage.errorCode, message: stage.errorMessage }
+  return {
+    code: stage.errorCode,
+    message: stage.errorMessage,
+    ...(stage.errorDetail ? { detail: stage.errorDetail } : {}),
+  }
 }
 
 export function buildIntakeView(project: MirrorProject, domains: BusinessDomainDoc[] = []): IntakeView {

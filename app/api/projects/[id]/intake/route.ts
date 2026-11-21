@@ -7,6 +7,10 @@ import { listProjectDomains } from "@/lib/domain/service"
 import { buildIntakeView } from "@/lib/existing-business/view"
 import { startIntakeRun } from "@/lib/existing-business/intake"
 
+// The crawl and the model call run after the response; this is the budget
+// that keeps them alive on a serverless platform.
+export const maxDuration = 300
+
 /**
  * Existing-business intake status + run control (Phase 1 Part G/H).
  * GET is the honest progress view the workspace polls; POST starts (or resumes)

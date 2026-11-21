@@ -61,6 +61,9 @@ export interface IntakeStage {
    * failure the founder has already overcome. */
   errorCode?: string | null
   errorMessage?: string | null
+  /** The operator-facing reason behind `errorMessage`: a provider status, a
+   * timeout, a truncated reply. Bounded and scrubbed of secrets. */
+  errorDetail?: string | null
 }
 
 export interface IntakeWebsiteStage extends IntakeStage {

@@ -45,7 +45,10 @@ import {
   type ResolvedAction,
 } from "./objectives"
 
-const MAX_OUTPUT_TOKENS = 6_000
+// A reasoning model spends this budget on its reasoning before it writes the
+// JSON, and a reply cut at the cap parses as nothing. The cap is only a ceiling
+// — unused tokens are not billed — so it is set above what the schema needs.
+const MAX_OUTPUT_TOKENS = 12_000
 const TIMEOUT_MS = 90_000
 const MAX_PRIORITIES = 6
 const MAX_FINDINGS_PER_SECTION = 6
@@ -509,10 +512,64 @@ export function buildAssessment(
 
 export type AssessmentOutcome =
   | { ok: true; assessment: BusinessAssessment; charged: boolean }
-  | { ok: false; code: string; message: string }
+  /** `detail` is the reason for the operator: a status code, a timeout, a
+   * truncation. It is shown next to the founder-facing sentence so a failure
+   * can be acted on instead of retried blindly. */
+  | { ok: false; code: string; message: string; detail?: string }
 
 export function isAssessmentConfigured(): boolean {
   return Boolean(process.env.OPENROUTER_API_KEY)
+}
+
+/**
+ * Why the call failed, in words a human can act on. Provider text is clipped
+ * and anything shaped like a key is removed: the reason is shown to the founder
+ * and written to the log, so it must carry no secret and no stack.
+ */
+function failureDetail(error: unknown, elapsedMs: number): { detail: string; retryable: boolean } {
+  const asError = error as {
+    name?: string
+    message?: string
+    statusCode?: number
+    status?: number
+    cause?: { message?: string }
+  } | null
+  const name = asError?.name ?? ""
+  const raw = (asError?.message ?? String(error)).replace(/\s+/g, " ").trim()
+  const cause = (asError?.cause?.message ?? "").replace(/\s+/g, " ").trim()
+  const status = typeof asError?.statusCode === "number" ? asError.statusCode : asError?.status
+  const scrub = (text: string) => text.replace(/sk-or-[A-Za-z0-9-]+/g, "[redacted]").slice(0, 180)
+
+  if (name === "AbortError" || name === "TimeoutError" || /abort|timed? ?out/i.test(raw)) {
+    return { detail: `No reply from ${MODEL_ID} after ${Math.round(elapsedMs / 1000)}s (timeout).`, retryable: true }
+  }
+  if (typeof status === "number") {
+    const hint =
+      status === 401 || status === 403
+        ? " — the provider rejected the API key"
+        : status === 402
+          ? " — the provider account is out of credit"
+          : status === 404
+            ? " — that model id is not available"
+            : status === 429
+              ? " — the provider is rate-limiting Atai"
+              : status >= 500
+                ? " — the provider is failing"
+                : ""
+    return {
+      detail: scrub(`${MODEL_ID} returned HTTP ${status}${hint}${raw ? `: ${raw}` : ""}`),
+      // A rejected key, an empty provider balance or a missing model id will
+      // answer the same way however many times the founder presses retry.
+      retryable: status !== 401 && status !== 402 && status !== 403 && status !== 404,
+    }
+  }
+  if (error instanceof AssessmentFormatError) {
+    return { detail: scrub(`${error.message} (model: ${MODEL_ID})`), retryable: true }
+  }
+  return {
+    detail: scrub(`${raw || name || "unknown error"}${cause ? ` — ${cause}` : ""} (model: ${MODEL_ID})`),
+    retryable: true,
+  }
 }
 
 /**
@@ -609,8 +666,10 @@ export async function generateBusinessAssessment(
       abortSignal: aiSignal(AbortSignal.timeout(Math.max(5_000, deadline - Date.now()))),
     })
 
+  const startedAt = Date.now()
   try {
-    let text = (await call(prompt)).text ?? ""
+    let reply = await call(prompt)
+    let text = reply.text ?? ""
     let assessment: BusinessAssessment
     try {
       assessment = buildAssessment(text, input, actions)
@@ -618,14 +677,23 @@ export async function generateBusinessAssessment(
       if (!(error instanceof AssessmentFormatError)) throw error
       // The charge already happened; asking once more is cheaper than making
       // the founder pay for a second run because the model wrapped its JSON.
+      // A reply that ran out of output budget is a size problem, not a wording
+      // problem, so the second ask is smaller instead of identical.
+      const truncated = reply.finishReason === "length" || text.trim().length === 0
       logger.warn("intake.assessment", "output rejected, asking once more", {
         projectId: input.projectId,
         reason: error.message,
         chars: text.length,
+        finishReason: reply.finishReason,
+        truncated,
+        head: text.slice(0, 200),
       })
-      text = (await call(
-        `${prompt}\n\nYOUR PREVIOUS REPLY WAS REJECTED: ${error.message}. Return only the JSON object, with every key shown in the shape above.`,
-      )).text ?? ""
+      reply = await call(
+        truncated
+          ? `${prompt}\n\nYOUR PREVIOUS REPLY WAS CUT SHORT BEFORE THE JSON CLOSED. Return the same JSON object, complete, with at most 3 findings per section, at most 4 priorities, and no string longer than 200 characters.`
+          : `${prompt}\n\nYOUR PREVIOUS REPLY WAS REJECTED: ${error.message}. Return only the JSON object, with every key shown in the shape above.`,
+      )
+      text = reply.text ?? ""
       assessment = buildAssessment(text, input, actions)
     }
 
@@ -634,21 +702,31 @@ export async function generateBusinessAssessment(
       websiteAnalysed: assessment.evidence.websiteAnalysed,
       priorities: assessment.priorities.length,
       charged,
+      finishReason: reply.finishReason,
+      elapsedMs: Date.now() - startedAt,
     })
     return { ok: true, assessment, charged }
   } catch (error) {
     await refund()
-    const message = error instanceof Error ? error.message : String(error)
-    // Provider detail stays in the log; the founder gets a code and a sentence.
+    const { detail, retryable } = failureDetail(error, Date.now() - startedAt)
+    // The founder gets a code, a sentence, and the reason — a retry with no
+    // visible cause is the thing that made this failure expensive to chase.
     logger.warn("intake.assessment", "generation failed", {
       projectId: input.projectId,
-      reason: message,
+      detail,
+      retryable,
       model: MODEL_ID,
+      elapsedMs: Date.now() - startedAt,
     })
     return {
       ok: false,
       code: "ASSESSMENT_FAILED",
-      message: "The co-founder could not produce a dependable assessment this time. Nothing was invented for you — the evidence Atai collected is saved and you can retry.",
+      // Sending someone to retry a failure that cannot succeed on retry is its
+      // own kind of dishonesty: say whose problem it is.
+      message: retryable
+        ? "The co-founder could not produce a dependable assessment this time. Nothing was invented for you — the evidence Atai collected is saved and you can retry."
+        : "The co-founder could not run this time: the AI provider rejected Atai's request, so this is on our side, not yours. Nothing was invented for you and your evidence is saved — retrying will not help until that is fixed.",
+      detail,
     }
   }
 }

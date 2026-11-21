@@ -21,6 +21,7 @@ import "server-only"
  *    (a cache hit is free), so a retry cannot double-bill.
  */
 
+import { after } from "next/server"
 import { store, cryptoId } from "@/lib/store/store"
 import { projectsCol, usersCol } from "@/lib/db/collections"
 import { checkRateLimit } from "@/lib/auth/rate-limit"
@@ -322,6 +323,7 @@ async function runAssessment(
         attemptedAt: Date.now(),
         errorCode: outcome.code,
         errorMessage: outcome.message,
+        errorDetail: outcome.detail ?? null,
       }),
     })
     await store.appendEvent(project.id, event("intake", outcome.message, "warn"))
@@ -337,6 +339,7 @@ async function runAssessment(
       result: outcome.assessment,
       errorCode: null,
       errorMessage: null,
+      errorDetail: null,
     },
   })
   await store.appendEvent(project.id, event("intake", "Your co-founder's initial read of the business is ready."))
@@ -482,6 +485,21 @@ export async function runBusinessIntake(
  * tell "started" from "refused" without holding the request open for the whole
  * crawl and model call.
  */
+/**
+ * Keep a fire-and-forget run alive past the response. Serverless platforms
+ * freeze an idle function the moment it answers, which killed the crawl and
+ * the model call halfway and left the stage stuck or failed. `after` extends
+ * the function to its `maxDuration`; outside a request scope (tests, scripts)
+ * there is nothing to attach to and the promise simply runs.
+ */
+function keepAlive(work: Promise<unknown>) {
+  try {
+    after(() => work)
+  } catch {
+    // Not in a request scope — the caller owns the promise.
+  }
+}
+
 export async function startIntakeRun(
   projectId: string,
   options: { userId?: string; allowReassessment?: boolean } = {},
@@ -497,12 +515,14 @@ export async function startIntakeRun(
       assessmentCompleted: prepared.intake.assessment?.status === "completed",
     }
   }
-  void executeIntakeRun(prepared.project, prepared.intake).catch((error) => {
+  const run = executeIntakeRun(prepared.project, prepared.intake).catch((error) => {
     logger.error("intake.start", "background run threw", {
       projectId,
       message: error instanceof Error ? error.message : String(error),
     })
   })
+  void run
+  keepAlive(run)
   return { ok: true, projectId, started: true, status: "processing", assessmentCompleted: false }
 }
 
@@ -511,12 +531,14 @@ export async function startIntakeRun(
  * the house style: the client polls the intake view for honest progress.
  */
 export function startBusinessIntake(projectId: string): void {
-  void runBusinessIntake(projectId).catch((error) => {
+  const run = runBusinessIntake(projectId).catch((error) => {
     logger.error("intake.start", "background run threw", {
       projectId,
       message: error instanceof Error ? error.message : String(error),
     })
   })
+  void run
+  keepAlive(run)
 }
 
 /** The founder's own feature switches, so an action plan can only ever point

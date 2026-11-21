@@ -114,6 +114,24 @@ describe("BusinessProfile", () => {
     expect(html).toContain("See what was read")
   })
 
+  it("shows why the read failed instead of only that it failed", () => {
+    const html = render(
+      view({
+        assessment: {
+          status: "failed",
+          error: {
+            code: "ASSESSMENT_FAILED",
+            message: "The co-founder could not produce a dependable assessment this time.",
+            detail: "test-model returned HTTP 429 — the provider is rate-limiting Atai",
+          },
+        },
+      }),
+    )
+
+    expect(html).toContain("Why:")
+    expect(html).toContain("HTTP 429")
+  })
+
   it("offers no preview when the website was not read", () => {
     const html = render(
       view({

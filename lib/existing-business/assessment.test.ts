@@ -445,6 +445,55 @@ describe("generateBusinessAssessment — billing and failure honesty", () => {
     expect(grantMock).toHaveBeenCalledTimes(1)
   })
 
+  it("names the provider status in the reason, and keeps it out of the sentence", async () => {
+    textMock.mockReset()
+    textMock.mockRejectedValue(Object.assign(new Error("rate limited"), { statusCode: 429 }))
+    const outcome = await generateBusinessAssessment(input, { actions })
+    expect(outcome).toMatchObject({ ok: false, code: "ASSESSMENT_FAILED" })
+    if (!outcome.ok) {
+      expect(outcome.detail).toContain("HTTP 429")
+      expect(outcome.detail).toContain("rate-limiting")
+      expect(outcome.message).not.toContain("429")
+    }
+  })
+
+  it("does not tell the founder to retry a request the provider will always reject", async () => {
+    textMock.mockReset()
+    textMock.mockRejectedValue(Object.assign(new Error("Payment Required"), { statusCode: 402 }))
+    const outcome = await generateBusinessAssessment(input, { actions })
+    if (!outcome.ok) {
+      expect(outcome.detail).toContain("out of credit")
+      expect(outcome.message).toContain("retrying will not help")
+      expect(outcome.message).not.toContain("you can retry.")
+    }
+  })
+
+  it("calls an aborted call a timeout instead of a generic failure", async () => {
+    textMock.mockReset()
+    textMock.mockRejectedValue(Object.assign(new Error("The operation was aborted"), { name: "AbortError" }))
+    const outcome = await generateBusinessAssessment(input, { actions })
+    if (!outcome.ok) expect(outcome.detail).toMatch(/No reply from .* \(timeout\)/)
+  })
+
+  it("explains an unusable reply by naming the parse problem", async () => {
+    textMock.mockReset()
+    textMock.mockResolvedValue({ text: "not json at all" } as Awaited<ReturnType<typeof generateText>>)
+    const outcome = await generateBusinessAssessment(input, { actions })
+    if (!outcome.ok) expect(outcome.detail).toMatch(/JSON|json/)
+  })
+
+  it("asks for a smaller reply when the first one ran out of output budget", async () => {
+    textMock.mockReset()
+    textMock
+      .mockResolvedValueOnce({ text: "{\"understanding\": \"A local bak", finishReason: "length" } as Awaited<ReturnType<typeof generateText>>)
+      .mockResolvedValueOnce({ text: JSON.stringify(validPayload()), finishReason: "stop" } as Awaited<ReturnType<typeof generateText>>)
+    const outcome = await generateBusinessAssessment(input, { actions })
+    expect(outcome.ok).toBe(true)
+    const secondPrompt = textMock.mock.calls[1][0].prompt as string
+    expect(secondPrompt).toContain("CUT SHORT")
+    expect(secondPrompt).not.toContain("WAS REJECTED")
+  })
+
   it("skips billing entirely when the configured cost is zero", async () => {
     costsMock.mockResolvedValue({ planAnalysisCost: 0 } as Awaited<ReturnType<typeof getCollaborateCosts>>)
     textMock.mockResolvedValue({ text: JSON.stringify(validPayload()) } as Awaited<ReturnType<typeof generateText>>)

@@ -512,6 +512,7 @@ function AssessmentStep({
           label="Writing your first read"
           status={assessment.status}
           detail={assessment.status === "processing" ? "Your co-founder is writing it now" : assessment.error?.message}
+          reason={assessment.status === "failed" ? assessment.error?.detail : undefined}
         />
       </ul>
     </div>
@@ -533,11 +534,15 @@ function StageLine({
   label,
   status,
   detail,
+  reason,
   action,
 }: {
   label: string
   status: IntakeView["assessment"]["status"]
   detail?: string
+  /** The operator-facing cause. Shown so a failing step can be diagnosed
+   * instead of retried blindly. */
+  reason?: string
   action?: React.ReactNode
 }) {
   return (
@@ -545,6 +550,11 @@ function StageLine({
       <span className="min-w-0">
         <span className="block truncate text-sm font-medium">{label}</span>
         {detail ? <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">{detail}</span> : null}
+        {reason ? (
+          <span className="mt-1 block font-mono text-[10px] leading-relaxed text-muted-foreground/80">
+            Why: {reason}
+          </span>
+        ) : null}
         {action ? <span className="mt-2 block">{action}</span> : null}
       </span>
       <span
