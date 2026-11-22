@@ -127,6 +127,48 @@ function domainState({ mismatch = false, waiting = false } = {}): IntakeView {
   })
 }
 
+/** The connection step: the domain is proved and the key is issued, so the
+ * only thing left is the customer's own call. */
+function connectionState(): IntakeView {
+  return view({
+    assessment: { status: "completed", result: ASSESSMENT as never, generatedAt: 1 },
+    domain: {
+      verified: true,
+      records: [
+        {
+          id: "dom-preview",
+          hostname: "study-iota-lime.vercel.app",
+          registrableDomain: "vercel.app",
+          submittedUrl: "https://study-iota-lime.vercel.app",
+          status: "verified",
+          method: "html_file",
+          token: null,
+          metaSnippet: null,
+          fileName: null,
+          tokenExpiresAt: null,
+          attempts: 1,
+          lastAttemptAt: Date.now() - 600_000,
+          lastCheckedAt: Date.now() - 600_000,
+          claimExpiresAt: null,
+          verifiedAt: Date.now() - 600_000,
+          verifiedMethod: "html_file",
+          needsAttention: false,
+          lastFailure: null,
+          matchesRead: true,
+          history: [],
+          createdAt: Date.now() - 3_600_000,
+          updatedAt: Date.now() - 600_000,
+        },
+      ],
+    },
+    connection: {
+      status: "awaiting_app",
+      label: "Waiting for your app",
+      guideIssuedAt: Date.now() - 300_000,
+    },
+  })
+}
+
 export default async function PreviewPage({ searchParams }: { searchParams: Promise<{ state?: string }> }) {
   if (process.env.NODE_ENV === "production") notFound()
   const { state } = await searchParams
@@ -137,9 +179,11 @@ export default async function PreviewPage({ searchParams }: { searchParams: Prom
         ? domainState({ mismatch: true })
         : state === "domain-waiting"
           ? domainState({ waiting: true })
-        : state === "unread"
-        ? view({ website: { submitted: true, analyzed: false, status: "failed", url: "https://cornerbakery.com" } })
-        : view()
+          : state === "connection"
+            ? connectionState()
+            : state === "unread"
+              ? view({ website: { submitted: true, analyzed: false, status: "failed", url: "https://cornerbakery.com" } })
+              : view()
   return (
     <div className="mx-auto w-full max-w-6xl px-4 pb-16 pt-6 sm:py-8 lg:px-8">
       <BusinessProfile projectId="preview" initialView={v} />

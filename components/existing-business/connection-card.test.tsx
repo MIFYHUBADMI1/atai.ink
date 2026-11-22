@@ -53,6 +53,10 @@ describe("ConnectionCard", () => {
     expect(html).toContain(CONNECTION_STATUS_LABEL.awaiting_app)
     expect(html).toContain("That first authenticated call is the handshake Atai records.")
     expect(html).not.toContain("Disconnect")
+    // The call happens outside this page, so the founder needs a way to ask
+    // again without reloading the tab.
+    expect(html).toContain("Check now")
+    expect(html).toContain("no need to reload the page")
   })
 
   it("reports Connected only once a call was recorded, and states Atai builds nothing", () => {
@@ -69,5 +73,7 @@ describe("ConnectionCard", () => {
     expect(html).toContain(CONNECTION_STATUS_LABEL.verified)
     expect(html).toContain("Recorded — this is the proof Atai trusts.")
     expect(html).toContain("Disconnect")
+    // Nothing is left to check once the handshake is recorded.
+    expect(html).not.toContain("Check now")
   })
 })
