@@ -58,6 +58,29 @@ export const ONBOARDING_HOURS = [
   { id: "9+", label: "9+ hours / day" },
 ] as const
 
+/**
+ * The one decision that changes the whole journey: build, import, or connect.
+ * Asking here is what stops a founder who already runs a business from being
+ * walked into a rebuild they never wanted.
+ */
+export const ONBOARDING_PATHS = [
+  {
+    id: "build",
+    label: "Build something new",
+    hint: "Start from an idea or a blank slate. Atai plans it, then builds it.",
+  },
+  {
+    id: "import",
+    label: "Bring an existing codebase",
+    hint: "Connect a GitHub repository and keep building what already exists.",
+  },
+  {
+    id: "connect",
+    label: "Connect a business you already run",
+    hint: "Your app stays live. Atai reads it and works with what you already have.",
+  },
+] as const
+
 export const ONBOARDING_INTENTS = [
   { id: "ai_builder_only", label: "Build the product", hint: "I want Atai to generate and ship the app." },
   { id: "full_business_help", label: "Product and business", hint: "Help me with the product and how it should grow." },
@@ -70,6 +93,7 @@ export type OnboardingRevenueId = (typeof ONBOARDING_REVENUE_TARGETS)[number]["i
 export type OnboardingUserTargetId = (typeof ONBOARDING_USER_TARGETS)[number]["id"]
 export type OnboardingHoursId = (typeof ONBOARDING_HOURS)[number]["id"]
 export type OnboardingIntentId = (typeof ONBOARDING_INTENTS)[number]["id"]
+export type OnboardingPathId = (typeof ONBOARDING_PATHS)[number]["id"]
 
 export type OnboardingProfileInput = {
   source?: string

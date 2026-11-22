@@ -1,3 +1,4 @@
+import type { OnboardingPathId } from "@/lib/onboarding/profile"
 import type { StartMode } from "@/lib/start/detect-input"
 
 export const FIRST_MISSION_DRAFT_KEY = "atai:first-mission-draft"
@@ -18,6 +19,7 @@ export type FirstMissionSurface = "hide" | "redirect-pending" | "mission" | "emp
 
 export const MISSION_BEATS = [
   "theme",
+  "path",
   "vision",
   "tour",
   "verify",
@@ -39,6 +41,7 @@ export type FirstMissionDraft = {
   mode?: StartMode
   modeTouched?: boolean
   beat?: MissionBeat
+  path?: OnboardingPathId
   source?: string
   role?: string
   building?: "url" | "idea" | ""
@@ -52,7 +55,7 @@ export type FirstMissionDraft = {
 }
 
 export function missionBeatList(includeContext: boolean, includeVerify = false, includeVideo = false): MissionBeat[] {
-  const beats: MissionBeat[] = ["theme", "vision"]
+  const beats: MissionBeat[] = ["theme", "path", "vision"]
   if (includeVideo) beats.push("tour")
   if (includeVerify) beats.push("verify")
   if (includeContext) beats.push("context")
@@ -68,6 +71,16 @@ export function missionProgress(beat: MissionBeat, includeContext: boolean, incl
     total: beats.length,
     percent: Math.round(((index + 1) / beats.length) * 100),
   }
+}
+
+/**
+ * Where a starting point leaves the onboarding overlay. `null` means "stay":
+ * building from an idea continues the same mission.
+ */
+export function destinationForPath(path: OnboardingPathId): string | null {
+  if (path === "connect") return "/new/existing"
+  if (path === "import") return "/new/github"
+  return null
 }
 
 export function pathWithoutMissionParam(pathname: string, search: string): string {

@@ -6,6 +6,7 @@ import { BrandMark } from "@/components/brand-logo"
 import { Button } from "@/components/ui/button"
 import { ChoiceGrid } from "@/components/onboarding/choice-grid"
 import { OnboardingPlanStep } from "@/components/onboarding/plan-step"
+import { OnboardingPathStep } from "@/components/onboarding/path-step"
 import { OnboardingThemePicker } from "@/components/onboarding/theme-picker"
 import { LandingComposer } from "@/components/landing/composer"
 import {
@@ -27,10 +28,12 @@ import {
   ONBOARDING_ROLES,
   ONBOARDING_SOURCES,
   ONBOARDING_USER_TARGETS,
+  type OnboardingPathId,
 } from "@/lib/onboarding/profile"
 import {
   FIRST_MISSION_DRAFT_KEY,
   composeVision,
+  destinationForPath,
   followUpPrompt,
   missionBeatList,
   missionProgress,
@@ -56,6 +59,10 @@ const BEAT_TITLE: Record<MissionBeat, { heading: string; description: string }> 
   theme: {
     heading: "Make Atai feel like yours",
     description: "Pick a theme for your workspace. You can change it anytime in Settings → Appearance.",
+  },
+  path: {
+    heading: "How do you want to use Atai?",
+    description: "Pick your starting point. The other two stay open from your dashboard.",
   },
   vision: { heading: ONBOARDING_COPY.visionHeading, description: ONBOARDING_COPY.visionDescription },
   tour: {
@@ -117,6 +124,7 @@ function FirstMissionInner() {
   const [modeTouched, setModeTouched] = useState(false)
   const [followUp, setFollowUp] = useState("")
   const [beat, setBeat] = useState<MissionBeat>("theme")
+  const [path, setPath] = useState<OnboardingPathId | "">("")
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [source, setSource] = useState("")
@@ -164,6 +172,7 @@ function FirstMissionInner() {
       if (draft?.mode) setMode(draft.mode)
       if (draft?.modeTouched) setModeTouched(true)
       if (draft?.beat) setBeat(draft.beat === "vision" && draft.flowVersion !== 2 ? "theme" : draft.beat)
+      if (draft?.path) setPath(draft.path)
       if (draft?.source) setSource(draft.source)
       if (draft?.role) setRole(draft.role)
       if (draft?.building) setBuilding(draft.building)
@@ -236,6 +245,7 @@ function FirstMissionInner() {
           mode: effectiveMode,
           modeTouched,
           beat,
+          path,
           source,
           role,
           building,
@@ -257,6 +267,7 @@ function FirstMissionInner() {
     effectiveMode,
     modeTouched,
     beat,
+    path,
     source,
     role,
     building,
@@ -381,6 +392,22 @@ function FirstMissionInner() {
     })
   }
 
+  /**
+   * The starting point decides the rest of the journey, so it is asked before
+   * anything is written or built. "Build" continues onboarding; the other two
+   * hand the founder to the flow that already exists for them.
+   */
+  function choosePath(next: OnboardingPathId) {
+    setPath(next)
+    persistQuiet()
+    const destination = destinationForPath(next)
+    if (!destination) {
+      go("vision")
+      return
+    }
+    router.push(destination)
+  }
+
   function goToCreate() {
     persistStartIntent()
     router.push("/start")
@@ -437,6 +464,12 @@ function FirstMissionInner() {
             <p className="text-xs leading-5 text-muted-foreground">
               The preview updates as you choose. You can change it anytime in Settings → Appearance.
             </p>
+          </BeatShell>
+        ) : null}
+
+        {beat === "path" ? (
+          <BeatShell title={title} description={description}>
+            <OnboardingPathStep value={path} onChoose={choosePath} disabled={busy} />
           </BeatShell>
         ) : null}
 

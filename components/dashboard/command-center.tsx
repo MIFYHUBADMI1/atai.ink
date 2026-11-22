@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Compass,
   Globe,
+  Building2,
   Lightbulb,
   MessageSquare,
   Sparkles,
@@ -200,6 +201,10 @@ function DashboardEmpty() {
         <Link href="/new/github" className={cn(buttonVariants({ variant: "outline" }))}>
           <GitHubIcon className="size-4" />
           Continue from GitHub
+        </Link>
+        <Link href="/new/existing" className={cn(buttonVariants({ variant: "outline" }))}>
+          <Building2 className="size-4" />
+          Connect an existing business
         </Link>
       </div>
     </section>
