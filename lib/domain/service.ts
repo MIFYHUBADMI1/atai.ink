@@ -691,7 +691,12 @@ export async function verifyDomainOwnership(input: {
       const page = await safeFetchDocument(
         doc.submittedUrl,
         path,
-        { allowHostnameChange: false, acceptContentTypes: ["text/html", "text/plain", "application/octet-stream"], ...input.limits },
+        {
+          allowHostnameChange: false,
+          allowSameSiteRedirects: true,
+          acceptContentTypes: ["text/html", "text/plain", "application/octet-stream"],
+          ...input.limits,
+        },
       )
       const expected = fileContentForToken(token)
       const got = page.body
@@ -702,7 +707,15 @@ export async function verifyDomainOwnership(input: {
           ? { ok: false, code: "FILE_MISSING", message: "We couldn't find your verification file at the expected website location. Make sure it is uploaded to your website's root directory." }
           : { ok: false, code: "TOKEN_MISMATCH", message: "The verification file was found, but its token did not match this verification request." }
     } else {
-      const page = await safeFetchDocument(doc.submittedUrl, META_PATH, { acceptContentTypes: ["text/html"], ...input.limits })
+      // A tag served on the same site (apex↔www, a sibling subdomain) still
+      // proves this business. A tag that only appears after a hop to another
+      // site proves control of that site, not this one.
+      const page = await safeFetchDocument(doc.submittedUrl, META_PATH, {
+        acceptContentTypes: ["text/html"],
+        allowHostnameChange: false,
+        allowSameSiteRedirects: true,
+        ...input.limits,
+      })
       const diagnosis = diagnoseVerificationMeta(page.body, token)
       outcome =
         diagnosis === "match"
@@ -879,7 +892,7 @@ function fetchFailureMessage(code: string): string {
     case "CONTENT_TYPE":
       return "Your website did not return a web page we could read at that address."
     case "REDIRECT_HOST":
-      return "Your website redirected the verification file to a different domain. Keep the file on the exact domain you are verifying."
+      return "This address redirects to a different domain, so a token found there would not prove you own this one. Connect the address that actually serves the page."
     case "DNS_NOT_FOUND":
     case "DNS_FAILED":
       return "We could not look up that website address. Check the spelling and try again."

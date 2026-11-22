@@ -135,6 +135,63 @@ function isPublicSuffixOnly(host: string): boolean {
 }
 
 /**
+ * Hosting platforms where every subdomain is a different business.
+ *
+ * `registrableDomainOf` groups by the last two labels, which is right for
+ * `shop.example.com` and `example.com`, and wrong for `a.vercel.app` and
+ * `b.vercel.app` — those are two unrelated sites on a shared platform. Callers
+ * that are about to treat two hosts as "the same site" must ask this first.
+ */
+const SHARED_HOSTING_SUFFIXES: readonly string[] = [
+  "vercel.app",
+  "netlify.app",
+  "pages.dev",
+  "workers.dev",
+  "web.app",
+  "firebaseapp.com",
+  "github.io",
+  "gitlab.io",
+  "herokuapp.com",
+  "onrender.com",
+  "fly.dev",
+  "railway.app",
+  "replit.app",
+  "repl.co",
+  "glitch.me",
+  "webflow.io",
+  "wixsite.com",
+  "blogspot.com",
+  "wordpress.com",
+  "myshopify.com",
+  "squarespace.com",
+  "notion.site",
+  "substack.com",
+  "medium.com",
+  "tumblr.com",
+  "weebly.com",
+  "carrd.co",
+  "framer.app",
+  "surge.sh",
+  "now.sh",
+  "azurewebsites.net",
+  "cloudfront.net",
+  "appspot.com",
+  "run.app",
+  "deno.dev",
+  "val.town",
+  "bubbleapps.io",
+  "softr.app",
+]
+
+/** `true` when the hostname lives on a platform where a sibling subdomain is a
+ * different business, not the same site. */
+export function isSharedHostingHost(hostname: string): boolean {
+  const host = (hostname ?? "").trim().toLowerCase().replace(/\.$/, "")
+  if (!host) return false
+  return SHARED_HOSTING_SUFFIXES.some((suffix) => host === suffix || host.endsWith(`.${suffix}`))
+}
+
+/**
  * The key that decides "this is the same business", used ONLY for uniqueness and
  * conflict checks. It is deliberately NOT a verification target: a challenge is
  * always verified against the exact hostname the founder submitted (see the file

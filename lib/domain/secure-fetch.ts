@@ -23,7 +23,15 @@
 import http from "node:http"
 import https from "node:https"
 import { assertPublicHttpUrl, isPrivateIpv4, isPrivateIpv6 } from "@/lib/runtime/router/adapters/shared/ssrf"
-import { assertSiteUrl, formatHostForUrl, isIpLiteralHost, normalizeHostname, type SiteTarget } from "./host"
+import {
+  assertSiteUrl,
+  formatHostForUrl,
+  isIpLiteralHost,
+  isSharedHostingHost,
+  normalizeHostname,
+  registrableDomainOf,
+  type SiteTarget,
+} from "./host"
 
 export class DomainFetchError extends Error {
   code: string
@@ -40,9 +48,14 @@ export interface FetchLimits {
   maxRedirects: number
   /** Substrings matched case-insensitively against the Content-Type header. */
   acceptContentTypes: string[]
-  /** Default true (a www→apex redirect is normal). File verification sets it
-   * false: the token file must be found on the exact hostname claimed. */
+  /** Default true (a www→apex redirect is normal). Verification sets it false:
+   * the token must be found for the hostname that was claimed. */
   allowHostnameChange: boolean
+  /** When `allowHostnameChange` is false, still permit a hop to another host on
+   * the same registrable domain (apex↔www, or a sibling subdomain of the same
+   * business). A hop to a different site is always refused, and shared hosting
+   * platforms (`a.vercel.app` → `b.vercel.app`) are treated as different sites. */
+  allowSameSiteRedirects?: boolean
   userAgent?: string
 }
 
@@ -271,7 +284,17 @@ export async function safeFetchDocument(
         throw new DomainFetchError("BAD_REDIRECT", "That website returned a redirect we could not follow.")
       }
       if (!limits.allowHostnameChange && normalizeHostname(nextUrl.hostname) !== originHostname) {
-        throw new DomainFetchError("REDIRECT_HOST", "That address redirected to a different website, so verification stopped.")
+        const nextHost = normalizeHostname(nextUrl.hostname)
+        const sameSite =
+          limits.allowSameSiteRedirects === true &&
+          !isIpLiteralHost(originHostname) &&
+          !isIpLiteralHost(nextHost) &&
+          !isSharedHostingHost(originHostname) &&
+          !isSharedHostingHost(nextHost) &&
+          registrableDomainOf(nextHost) === registrableDomainOf(originHostname)
+        if (!sameSite) {
+          throw new DomainFetchError("REDIRECT_HOST", "That address redirected to a different website, so verification stopped.")
+        }
       }
       redirects += 1
       // The path must survive the hop: a redirect that drops the verification

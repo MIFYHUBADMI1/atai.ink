@@ -519,9 +519,11 @@ describe("runBusinessIntake — sources and billing", () => {
     expect(stages().claim).toMatchObject({ state: "held_by_other" })
   })
 
-  it("never fails the run when only the redirect target is held by another account", async () => {
+  it("never fails the run when only the same-site redirect target is held by another account", async () => {
     websiteMock.mockResolvedValue({
-      facts: { ...websiteFacts, normalizedUrl: "https://platform.example/landing" },
+      // A sibling subdomain: the same site under another name, unlike a
+      // www alias, which `registerDomain` already folds into the primary.
+      facts: { ...websiteFacts, normalizedUrl: "https://shop.bakery.example/" },
     } as Awaited<ReturnType<typeof collectWebsiteFacts>>)
     registerMock
       .mockResolvedValueOnce({
@@ -536,6 +538,20 @@ describe("runBusinessIntake — sources and billing", () => {
     expect(registerMock).toHaveBeenCalledTimes(2)
     expect(assessmentMock).toHaveBeenCalled()
     expect(stages().claim).toMatchObject({ state: "yours", hostname: "bakery.example" })
+  })
+
+  it("reads a cross-site redirect but never claims the site it redirects to", async () => {
+    websiteMock.mockResolvedValue({
+      facts: { ...websiteFacts, hostname: "platform.example", normalizedUrl: "https://platform.example/landing", redirectedFrom: "https://bakery.example" },
+    } as Awaited<ReturnType<typeof collectWebsiteFacts>>)
+
+    const result = await runBusinessIntake("proj-1")
+
+    expect(result).toMatchObject({ ok: true })
+    // Only the address the founder typed is claimed.
+    expect(registerMock).toHaveBeenCalledTimes(1)
+    expect(registerMock).toHaveBeenCalledWith(expect.objectContaining({ rawUrl: "https://bakery.example" }))
+    expect(assessmentMock).toHaveBeenCalled()
   })
 
   it("refuses before the crawl when another account holds the business", async () => {

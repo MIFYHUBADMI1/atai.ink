@@ -234,6 +234,44 @@ describe("safeFetchDocument — redirect policy", () => {
     )
   })
 
+  it("allows a same-site hop when only same-site redirects are permitted", async () => {
+    const { deps, calls } = scriptedDeps([redirect("https://www.example.com/"), htmlResponse()])
+    const doc = await safeFetchDocument(
+      "https://example.com/",
+      "/",
+      { allowHostnameChange: false, allowSameSiteRedirects: true },
+      deps,
+    )
+    expect(doc.hostname).toBe("www.example.com")
+    expect(calls).toHaveLength(2)
+  })
+
+  it("refuses a hop to a different registrable domain even when same-site redirects are permitted", async () => {
+    const { deps } = scriptedDeps([redirect("https://other-site.com/"), htmlResponse()])
+    await expectFetchError(
+      safeFetchDocument(
+        "https://example.com/",
+        "/",
+        { allowHostnameChange: false, allowSameSiteRedirects: true },
+        deps,
+      ),
+      "REDIRECT_HOST",
+    )
+  })
+
+  it("refuses a hop between two shared-hosting subdomains", async () => {
+    const { deps } = scriptedDeps([redirect("https://victim.vercel.app/"), htmlResponse()])
+    await expectFetchError(
+      safeFetchDocument(
+        "https://attacker.vercel.app/",
+        "/",
+        { allowHostnameChange: false, allowSameSiteRedirects: true },
+        deps,
+      ),
+      "REDIRECT_HOST",
+    )
+  })
+
   it("allows a www→apex hop by default", async () => {
     const { deps, calls } = scriptedDeps([redirect("https://example.com/"), htmlResponse()])
     const doc = await safeFetchDocument("https://www.example.com/", "/", {}, deps)

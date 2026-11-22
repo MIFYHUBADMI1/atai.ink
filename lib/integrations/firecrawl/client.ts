@@ -196,10 +196,19 @@ export async function searchWeb(
 }
 
 /** POST /v2/scrape — single page with rich formats. */
-export function scrapeUrl(url: string, screenshot: boolean, timeoutMs: number) {
+export function scrapeUrl(
+  url: string,
+  screenshot: boolean,
+  timeoutMs: number,
+  options: { onlyMainContent?: boolean } = {},
+) {
   const formats: unknown[] = ["markdown", "links"]
   if (screenshot) formats.push({ type: "screenshot", fullPage: false })
-  return firecrawlFetch<{ data?: Record<string, unknown> }>("/v2/scrape", { url, formats, onlyMainContent: false }, timeoutMs)
+  return firecrawlFetch<{ data?: Record<string, unknown> }>(
+    "/v2/scrape",
+    { url, formats, onlyMainContent: options.onlyMainContent === true },
+    timeoutMs,
+  )
 }
 
 /** POST /v2/map — discover the site's URLs cheaply before deciding what to scrape. */

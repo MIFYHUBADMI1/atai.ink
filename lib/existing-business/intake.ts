@@ -38,6 +38,7 @@ import {
   registerDomain,
   reserveBusinessClaim,
 } from "@/lib/domain/service"
+import { isSharedHostingHost, registrableDomainOf } from "@/lib/domain/host"
 import {
   businessStartingPointOf,
   type BusinessDomainDoc,
@@ -275,6 +276,15 @@ async function readWebsite(project: MirrorProject, intake: BusinessIntake): Prom
     project.id,
     event("intake", `Read ${result.facts.pagesCrawled} page(s) of ${result.facts.hostname || "your website"}.`),
   )
+  if (result.facts.redirectedFrom) {
+    await store.appendEvent(
+      project.id,
+      event(
+        "intake",
+        `${hostLabel(result.facts.redirectedFrom)} redirects to ${result.facts.hostname}. We read the live site there.`,
+      ),
+    )
+  }
   return result.facts
 }
 
@@ -285,6 +295,25 @@ async function readWebsite(project: MirrorProject, intake: BusinessIntake): Prom
  */
 /** A refusal the run must honour, or `ok` to carry on. */
 type DomainClaimOutcome = { ok: true } | { ok: false; code: string; message: string }
+
+/** Two hosts that are the same site under another name: apex↔www, or a
+ * sibling subdomain of one business. Never true across a shared hosting
+ * platform, where every subdomain is a different owner. */
+function isSameSite(a: string, b: string): boolean {
+  if (!a || !b) return false
+  if (a === b) return true
+  if (isSharedHostingHost(a) || isSharedHostingHost(b)) return false
+  return registrableDomainOf(a) === registrableDomainOf(b)
+}
+
+/** A URL reduced to its host, for a sentence a founder reads. */
+function hostLabel(url: string): string {
+  try {
+    return new URL(url).host
+  } catch {
+    return url
+  }
+}
 
 function claimRecord(hostname: string | undefined, state: "yours" | "held_by_other") {
   return {
@@ -369,13 +398,24 @@ async function registerIntakeDomain(
     ),
   )
 
-  // The site redirected to another host: an alias on the same business, if it
-  // is free. A refusal here is not the founder's problem and never stops the run.
-  if (target && canonicalHostFromInput(target) !== (primary.doc.canonicalHostname ?? canonicalHostFromInput(primaryUrl))) {
+  // The site redirected to another host. Claim it as an alias ONLY when it is
+  // the same site under another name (apex↔www, a sibling subdomain). A
+  // redirect to a different domain is not evidence that the founder owns that
+  // domain — claiming it would squat a host they never proved control of.
+  const primaryHost = primary.doc.hostname
+  const targetHost = target ? canonicalHostFromInput(target) : null
+  if (
+    target &&
+    targetHost &&
+    targetHost !== (primary.doc.canonicalHostname ?? canonicalHostFromInput(primaryUrl)) &&
+    isSameSite(primaryHost, targetHost)
+  ) {
     const alias = await claimOneDomain(project, target)
     if (!alias.ok) {
       logger.info("intake.domain", "redirect target not claimed", { projectId: project.id, code: alias.code })
     }
+  } else if (target && targetHost && !isSameSite(primaryHost, targetHost)) {
+    logger.info("intake.domain", "cross-site redirect left unclaimed", { projectId: project.id, primaryHost, targetHost })
   }
   return { ok: true }
 }

@@ -3,6 +3,7 @@ import { logger } from "@/lib/logging/logger"
 import { scrapeUrl, mapUrl, crawlSiteUrl, isFirecrawlConfigured, searchWeb, type FirecrawlSearchResult } from "./client"
 import type { FirecrawlOptions, FirecrawlPageEvidence, WebsiteEvidence } from "./types"
 import { firecrawlCacheCol } from "@/lib/db/collections"
+import { isSharedHostingHost, registrableDomainOf } from "@/lib/domain/host"
 
 export { isFirecrawlConfigured }
 
@@ -188,6 +189,18 @@ async function supplementWithWebSearch(url: string, appName: string): Promise<Fi
   return allResults
 }
 
+/** The URL the site actually served, after its own redirects. */
+function finalUrlFrom(data: Record<string, unknown> | undefined, fallback: string): string {
+  const meta = (data?.metadata ?? {}) as Record<string, unknown>
+  const raw = typeof meta.sourceURL === "string" ? meta.sourceURL : typeof meta.url === "string" ? meta.url : undefined
+  if (!raw) return fallback
+  try {
+    return normalizeUrl(raw)
+  } catch {
+    return fallback
+  }
+}
+
 function toPageEvidence(url: string, data: Record<string, unknown> | undefined): FirecrawlPageEvidence {
   const meta = (data?.metadata ?? {}) as Record<string, unknown>
   const links = Array.isArray(data?.links) ? (data!.links as string[]).slice(0, 60) : []
@@ -253,7 +266,18 @@ function scorePageUrl(pathname: string): number {
 
 /** Select the most relevant subpages to scrape, ranked by usefulness. */
 function selectRelevantPages(root: string, discovered: string[], max: number): string[] {
-  const rootHost = new URL(root).host
+  const rootUrl = new URL(root)
+  const rootHost = rootUrl.host
+  // A site that redirects apex↔www (or serves pages from a sibling subdomain)
+  // still belongs to one business. On a shared platform it does not: every
+  // subdomain there is somebody else's site.
+  const rootSite = registrableDomainOf(rootUrl.hostname)
+  const allowSiblings = !isSharedHostingHost(rootUrl.hostname)
+  const isSameSite = (url: URL): boolean => {
+    if (url.host === rootHost) return true
+    if (!allowSiblings) return false
+    return registrableDomainOf(url.hostname) === rootSite
+  }
   const seen = new Set<string>([normalizeUrl(root)])
   const candidates: { url: string; score: number }[] = []
 
@@ -261,7 +285,7 @@ function selectRelevantPages(root: string, discovered: string[], max: number): s
     try {
       const n = normalizeUrl(raw)
       if (seen.has(n)) continue
-      if (new URL(n).host !== rootHost) continue
+      if (!isSameSite(new URL(n))) continue
       seen.add(n)
       candidates.push({ url: n, score: scorePageUrl(new URL(n).pathname) })
     } catch {
@@ -299,15 +323,25 @@ export async function crawlWebsite(inputUrl: string, options: FirecrawlOptions =
   logger.info("firecrawl.crawl", "starting", { root, maxPages: opts.maxPages })
 
   // 1. Scrape the root page (with screenshot).
-  const rootRes = await scrapeUrl(root, opts.includeScreenshots, opts.timeoutMs)
-  const rootPage = toPageEvidence(root, rootRes.data)
-  console.log("[v0] firecrawl.crawl: step 1/3 root page scraped", { root, hasScreenshot: Boolean(rootPage.screenshot) })
+  const rootRes = await scrapeUrl(root, opts.includeScreenshots, opts.timeoutMs, {
+    onlyMainContent: opts.mainContentOnly,
+  })
+  // A preview URL often redirects to the real site. Discovery and link
+  // filtering must use the host the site actually serves, or every internal
+  // link looks external and the read collapses to a single page.
+  const finalRoot = finalUrlFrom(rootRes.data, root)
+  const rootPage = toPageEvidence(finalRoot, rootRes.data)
+  console.log("[v0] firecrawl.crawl: step 1/3 root page scraped", {
+    root,
+    finalRoot,
+    hasScreenshot: Boolean(rootPage.screenshot),
+  })
 
   // 2. Discover subpages cheaply and pick a relevant, deduped subset.
-  console.log("[v0] firecrawl.crawl: step 2/3 discovering subpages via mapUrl", { root })
+  console.log("[v0] firecrawl.crawl: step 2/3 discovering subpages via mapUrl", { finalRoot })
   let discovered: string[] = []
   try {
-    const mapRes = await mapUrl(root, 40, Math.min(opts.timeoutMs, 20_000))
+    const mapRes = await mapUrl(finalRoot, 40, Math.min(opts.timeoutMs, 20_000))
     discovered = (mapRes.links ?? []).map((l) => (typeof l === "string" ? l : l.url)).filter(Boolean)
     console.log("[v0] firecrawl.crawl: step 2/3 mapUrl discovered links", { root, count: discovered.length })
   } catch (e) {
@@ -317,7 +351,7 @@ export async function crawlWebsite(inputUrl: string, options: FirecrawlOptions =
     })
     logger.warn("firecrawl.map", "map failed, continuing with root only", { message: (e as Error).message })
   }
-  const targets = selectRelevantPages(root, discovered, opts.maxPages)
+  const targets = selectRelevantPages(finalRoot, discovered, opts.maxPages)
   console.log("[v0] firecrawl.crawl: step 3/3 scraping selected subpages", { root, targets })
 
   // 3. Scrape selected subpages (screenshots only up to maxScreenshots total).
@@ -343,6 +377,7 @@ export async function crawlWebsite(inputUrl: string, options: FirecrawlOptions =
 
   const evidence: WebsiteEvidence = {
     sourceUrl: root,
+    ...(finalRoot !== root ? { finalUrl: finalRoot } : {}),
     title: rootPage.title,
     description: rootPage.description,
     pages,

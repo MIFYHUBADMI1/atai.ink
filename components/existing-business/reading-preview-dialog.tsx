@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { FileText, Globe, Loader2, ShieldCheck } from "lucide-react"
+import { ArrowRight, FileText, Globe, Loader2, ShieldCheck } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { jsonFetcher } from "@/lib/client/api"
 import { relativeTime } from "@/lib/client/format"
@@ -55,6 +55,8 @@ export function ReadingPreviewDialog({
 
   const reading = payload?.reading ?? null
   const host = payload?.url?.replace(/^https?:\/\//, "").replace(/\/$/, "") ?? "your website"
+  const servedHost = reading?.finalUrl?.replace(/^https?:\/\//, "").replace(/\/$/, "")
+  const redirected = Boolean(reading?.redirectedFrom && servedHost && servedHost !== host)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -67,6 +69,14 @@ export function ReadingPreviewDialog({
               ? `${reading.pagesRead} page${reading.pagesRead === 1 ? "" : "s"} · ${reading.charsRead.toLocaleString()} characters of text · read ${relativeTime(reading.capturedAt)}${payload?.fromCache ? " (cached)" : ""}`
               : "Public pages only. Nothing was copied into your application."}
           </p>
+          {redirected ? (
+            <p className="flex flex-wrap items-center gap-1.5 rounded-lg bg-secondary/60 px-2.5 py-1.5 text-[11px] leading-relaxed text-muted-foreground">
+              <span className="font-mono">{host}</span>
+              <ArrowRight className="size-3 shrink-0" />
+              <span className="font-mono text-foreground">{servedHost}</span>
+              <span>— this address redirects, so Atai read the live site at the second address.</span>
+            </p>
+          ) : null}
         </DialogHeader>
 
         <div className="-mr-2 flex-1 overflow-y-auto pr-2">
@@ -79,10 +89,15 @@ export function ReadingPreviewDialog({
               {error}
             </p>
           ) : !reading ? (
-            <p className="rounded-xl border border-dashed border-border bg-secondary/30 px-4 py-6 text-sm leading-relaxed text-muted-foreground">
-              This read happened before Atai started keeping a copy of it, so there is nothing to show. Read the site
-              again and this view will fill in.
-            </p>
+            <div className="flex flex-col gap-2 rounded-xl border border-dashed border-border bg-secondary/30 px-4 py-6">
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                Atai did not keep a copy of this particular read — it ran before we started saving one. The read still
+                informed your co-founder; there is simply nothing stored to show you now.
+              </p>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Every read from now on keeps its copy, so this view fills in next time the site is read.
+              </p>
+            </div>
           ) : (
             <div className="flex flex-col gap-5">
               <section className="flex flex-col gap-3">
@@ -117,7 +132,10 @@ export function ReadingPreviewDialog({
                     ) : null}
                     {page.excerpt ? (
                       <>
-                        <p className="mt-3 max-h-40 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-secondary/40 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+                        <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                          Text Atai read
+                        </p>
+                        <p className="mt-1 max-h-56 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-secondary/40 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
                           {page.excerpt}
                           {page.chars > page.excerpt.length ? "…" : ""}
                         </p>

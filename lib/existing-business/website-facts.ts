@@ -24,7 +24,11 @@ export const INTAKE_MAX_PAGES = 6
 /** How much of the read we keep for the founder to inspect. Enough to judge the
  * reading, far short of mirroring the site into our database. */
 export const READING_PAGE_LIMIT = 8
-export const READING_EXCERPT_CHARS = 700
+export const READING_EXCERPT_CHARS = 1_600
+/** Page text carried into the co-founder's evidence block. Headings alone told
+ * the model what a page was titled, never what the business actually says. */
+export const DIGEST_PAGE_TEXT_CHARS = 1_600
+export const DIGEST_TEXT_BUDGET = 8_000
 
 const SOCIAL_HOSTS: Array<[string, string]> = [
   ["facebook.com", "Facebook"],
@@ -41,11 +45,14 @@ const SOCIAL_HOSTS: Array<[string, string]> = [
 
 export interface WebsiteFacts {
   submittedUrl: string
+  /** The address the site actually served, after redirects. */
   normalizedUrl: string
   hostname: string
+  /** The address the founder typed, when it redirected somewhere else. */
+  redirectedFrom?: string
   title?: string
   description?: string
-  pages: Array<{ url: string; title?: string; headings: string[] }>
+  pages: Array<{ url: string; title?: string; headings: string[]; text?: string }>
   navigation: string[]
   /** External presences we could actually see in the links. */
   socialLinks: string[]
@@ -68,6 +75,24 @@ function hostnameOf(url: string): string {
   } catch {
     return ""
   }
+}
+
+/**
+ * Crawl markdown is written for a renderer, not a reader: every navigation item
+ * arrives as `[Label](https://site/page)`, every image as `![alt](url)`. Turn it
+ * into the prose a person would have read, so an excerpt is worth showing and
+ * the evidence block is worth reasoning from.
+ */
+export function toReadableText(markdown: string): string {
+  return markdown
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+\.)\s+/gm, "")
+    .replace(/`{1,3}/g, "")
+    .replace(/https?:\/\/\S+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
 }
 
 function collectContactHints(evidence: WebsiteEvidence): string[] {
@@ -130,21 +155,36 @@ export async function collectWebsiteFacts(
     const evidence = await crawlWebsite(normalized, {
       maxPages: options.maxPages ?? INTAKE_MAX_PAGES,
       includeScreenshots: false,
+      // Navigation and footers are the same on every page; the founder's read
+      // is about what each page says.
+      mainContentOnly: true,
     })
+
+    // The site may answer on a different host than the address typed (a
+    // preview URL redirecting to the live domain). Everything below is about
+    // the site that actually answered, and the founder is told when the two
+    // differ.
+    const servedUrl = evidence.finalUrl || evidence.sourceUrl || normalized
+    const submittedHost = hostnameOf(normalized)
+    const servedHost = hostnameOf(servedUrl)
 
     const audit = auditWebsiteEvidence(evidence)
     return {
       evidence,
       facts: {
         submittedUrl: rawUrl.trim(),
-        normalizedUrl: evidence.sourceUrl || normalized,
-        hostname: hostnameOf(evidence.sourceUrl || normalized),
+        normalizedUrl: servedUrl,
+        hostname: servedHost,
+        ...(servedHost && submittedHost && servedHost !== submittedHost
+          ? { redirectedFrom: normalized }
+          : {}),
         ...(evidence.title ? { title: evidence.title } : {}),
         ...(evidence.description ? { description: evidence.description } : {}),
         pages: (evidence.pages ?? []).slice(0, 10).map((page) => ({
           url: page.url,
           ...(page.title ? { title: page.title } : {}),
           headings: (page.headings ?? []).slice(0, 12),
+          ...(page.markdown ? { text: toReadableText(page.markdown).slice(0, DIGEST_PAGE_TEXT_CHARS) } : {}),
         })),
         navigation: (evidence.navigation ?? []).slice(0, 25),
         socialLinks: collectSocialLinks(evidence),
@@ -185,7 +225,10 @@ export async function collectWebsiteFacts(
 export function buildReadingSnapshot(facts: WebsiteFacts, evidence?: WebsiteEvidence): IntakeWebsiteReading {
   const textByUrl = new Map((evidence?.pages ?? []).map((page) => [page.url, page.markdown ?? ""]))
   const pages = facts.pages.slice(0, READING_PAGE_LIMIT).map((page) => {
-    const text = (textByUrl.get(page.url) ?? "").replace(/\s+/g, " ").trim()
+    // Prefer the fuller text from the crawl; fall back to the bounded copy in
+    // the facts (the cache-hit path, where evidence is absent).
+    const source = textByUrl.get(page.url) ?? page.text ?? ""
+    const text = toReadableText(source)
     return {
       url: page.url,
       ...(page.title ? { title: page.title } : {}),
@@ -200,6 +243,8 @@ export function buildReadingSnapshot(facts: WebsiteFacts, evidence?: WebsiteEvid
     pages,
     pagesRead: facts.pagesCrawled,
     charsRead: pages.reduce((total, page) => total + page.chars, 0),
+    finalUrl: facts.normalizedUrl,
+    ...(facts.redirectedFrom ? { redirectedFrom: facts.redirectedFrom } : {}),
   }
 }
 
@@ -212,15 +257,22 @@ export function buildWebsiteDigest(facts: WebsiteFacts, maxChars = 12_000): stri
   const lines: string[] = []
   lines.push(`URL: ${facts.normalizedUrl}`)
   lines.push(`Hostname: ${facts.hostname}`)
+  if (facts.redirectedFrom) lines.push(`Requested address (redirects to the URL above): ${facts.redirectedFrom}`)
   if (facts.title) lines.push(`Document title: ${facts.title}`)
   if (facts.description) lines.push(`Meta description: ${facts.description}`)
   lines.push(`Pages read: ${facts.pagesCrawled}`)
   if (facts.navigation.length) lines.push(`Navigation labels: ${facts.navigation.join(" | ")}`)
   if (facts.socialLinks.length) lines.push(`Social profiles linked: ${facts.socialLinks.join(", ")}`)
   if (facts.contactHints.length) lines.push(`Contact links found: ${facts.contactHints.join(", ")}`)
+  let textBudget = DIGEST_TEXT_BUDGET
   for (const page of facts.pages) {
     lines.push(`\nPAGE: ${page.url}${page.title ? ` — ${page.title}` : ""}`)
     if (page.headings.length) lines.push(`Headings: ${page.headings.join(" / ")}`)
+    if (page.text && textBudget > 0) {
+      const take = Math.min(DIGEST_PAGE_TEXT_CHARS, textBudget)
+      lines.push(`Text: ${page.text.slice(0, take)}${page.text.length > take ? " …" : ""}`)
+      textBudget -= Math.min(take, page.text.length)
+    }
   }
   if (facts.seoFindings.length) {
     lines.push("\nON-PAGE CHECKS (observed, deterministic):")

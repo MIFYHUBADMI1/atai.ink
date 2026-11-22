@@ -14,7 +14,11 @@ export interface FirecrawlPageEvidence {
 }
 
 export interface WebsiteEvidence {
+  /** The address that was asked for. */
   sourceUrl: string
+  /** The address the site actually served, after redirects. Present when the
+   * provider reports it; equal to `sourceUrl` when there was no redirect. */
+  finalUrl?: string
   title?: string
   description?: string
   pages: FirecrawlPageEvidence[]
@@ -34,4 +38,8 @@ export interface FirecrawlOptions {
   maxPages?: number
   includeScreenshots?: boolean
   timeoutMs?: number
+  /** Drop navigation, footers and sidebars from the markdown. Off by default
+   * because the SEO auditor wants the whole document; the business read turns
+   * it on so the founder (and the model) get the page's actual content. */
+  mainContentOnly?: boolean
 }

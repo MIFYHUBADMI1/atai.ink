@@ -81,6 +81,10 @@ export interface IntakeWebsiteReading {
   capturedAt: number
   /** Exactly the evidence block the co-founder's prompt contained. */
   digest: string
+  /** The address the site actually served, after redirects. */
+  finalUrl?: string
+  /** The address the founder typed, when it redirected somewhere else. */
+  redirectedFrom?: string
   pages: Array<{
     url: string
     title?: string
