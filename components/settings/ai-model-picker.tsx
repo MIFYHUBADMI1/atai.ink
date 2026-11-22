@@ -67,7 +67,7 @@ export function AiModelPicker({ tiers, currentTierId, envTierId }: Props) {
       ) : null}
       {saved ? (
         <p className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm text-foreground">
-          Engine switched — your next co-founder message uses it.
+          Engine switched — your next co-founder message and your next read use it.
         </p>
       ) : null}
 

@@ -575,6 +575,27 @@ describe("runBusinessIntake — sources and billing", () => {
     expect(stages().claim).toMatchObject({ state: "yours" })
   })
 
+  it("records which engine ran the read, and why it failed", async () => {
+    assessmentMock.mockResolvedValue({
+      ok: false,
+      code: "ASSESSMENT_FAILED",
+      message: "The co-founder could not produce a dependable assessment this time.",
+      detail: "No reply from nvidia/nemotron-3-ultra-550b-a55b:free after 91s (timeout).",
+      reason: "timeout",
+    } as Awaited<ReturnType<typeof generateBusinessAssessment>>)
+
+    await runBusinessIntake("proj-1")
+
+    // The read runs on the founder's engine, so the failure can name it.
+    const passed = assessmentMock.mock.calls[0][0].engine
+    expect(passed).toMatchObject({ tierId: expect.any(String), tierName: expect.any(String), modelId: expect.any(String) })
+    expect(stages().assessment).toMatchObject({
+      status: "failed",
+      errorReason: "timeout",
+      engine: { tierId: passed?.tierId, tierName: passed?.tierName, modelId: passed?.modelId },
+    })
+  })
+
   it("an assessment failure keeps the collected evidence and reports partial completion", async () => {
     assessmentMock.mockResolvedValue({ ok: false, code: "AI_UNAVAILABLE", message: "no key" } as Awaited<ReturnType<typeof generateBusinessAssessment>>)
     const result = await runBusinessIntake("proj-1")

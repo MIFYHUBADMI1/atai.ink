@@ -31,6 +31,7 @@ import { trackConnectCompleted, trackConnectReadCompleted } from "@/lib/analytic
 import { ConnectionCard } from "./connection-card"
 import { DomainVerification } from "./domain-verification"
 import { ReadingPreviewButton, ReadingPreviewDialog } from "./reading-preview-dialog"
+import { EngineTroublePanel } from "./engine-trouble-panel"
 import { CreditsShortfallDialog, type JourneyCost } from "./credits-shortfall-dialog"
 
 const POLL_MS = 4000
@@ -313,6 +314,7 @@ export function BusinessProfile({ projectId, initialView }: { projectId: string;
             <div className="mt-5 border-t border-border/70 pt-5">
               {active.id === "assessment" ? (
                 <AssessmentStep
+                  projectId={projectId}
                   view={view}
                   cost={cost}
                   running={running || watching}
@@ -536,6 +538,7 @@ function ClaimHeld({ hostname }: { hostname?: string }) {
 }
 
 function AssessmentStep({
+  projectId,
   view,
   cost,
   running,
@@ -545,6 +548,7 @@ function AssessmentStep({
   onShowReading,
   blocked,
 }: {
+  projectId: string
   view: IntakeView
   cost: JourneyCost | null
   running: boolean
@@ -557,6 +561,9 @@ function AssessmentStep({
 }) {
   const assessment = view.assessment
   const website = view.website
+  // A failed write whose cause is the engine gets the engine panel: the founder
+  // can switch engines and retry in place instead of retrying a dead model.
+  const engineTrouble = assessment.status === "failed" && assessment.error?.code === "ASSESSMENT_FAILED"
 
   if (assessment.result) {
     return (
@@ -590,6 +597,15 @@ function AssessmentStep({
           <Loader2 className="size-4 shrink-0 animate-spin" />
           <span className="min-w-0 flex-1">Your co-founder is writing the first read. This page updates itself.</span>
         </div>
+      ) : engineTrouble ? (
+        <EngineTroublePanel
+          projectId={projectId}
+          failedEngine={assessment.engine}
+          reason={assessment.error?.reason}
+          onRetry={() => onStart()}
+          retrying={busy === "retry"}
+          blocked={blocked}
+        />
       ) : (
         <div className="flex flex-wrap items-center gap-3">
           <Button type="button" onClick={() => onStart()} disabled={busy !== null || blocked}>

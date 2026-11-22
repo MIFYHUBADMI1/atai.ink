@@ -52,6 +52,25 @@ export type IntakeStageStatus =
   | "failed"
   | "skipped"
 
+/** Why an AI stage failed, in terms the UI can act on. `format` means the
+ * engine answered but not in a shape Atai could trust — still an engine
+ * problem, and still worth switching engines over. */
+export type AssessmentFailureReason =
+  | "timeout"
+  | "model_unavailable"
+  | "rate_limited"
+  | "provider_error"
+  | "rejected"
+  | "format"
+  | "unknown"
+
+/** Which co-founder engine (the /settings/ai pick) answered a stage. */
+export interface IntakeEngineRef {
+  tierId: string
+  tierName: string
+  modelId: string
+}
+
 export interface IntakeStage {
   status: IntakeStageStatus
   attemptedAt?: number
@@ -171,7 +190,15 @@ export interface BusinessIntake {
   additionalContext?: string
   objectives: BusinessObjectiveId[]
   website?: IntakeWebsiteStage
-  assessment?: IntakeStage & { generatedAt?: number; result?: BusinessAssessment }
+  assessment?: IntakeStage & {
+    generatedAt?: number
+    result?: BusinessAssessment
+    /** The engine that ran this attempt, kept even on failure so the founder
+     * can be told which one to change instead of being offered a blind retry. */
+    engine?: IntakeEngineRef
+    /** Machine-readable cause of `errorCode`, for the engine-failure panel. */
+    errorReason?: AssessmentFailureReason | null
+  }
   /** The business-claim outcome of the last run, persisted so a refusal
    * survives a reload instead of existing only as an activity event. */
   claim?: {

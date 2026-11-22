@@ -39,6 +39,7 @@ import {
   reserveBusinessClaim,
 } from "@/lib/domain/service"
 import { isSharedHostingHost, registrableDomainOf } from "@/lib/domain/host"
+import { resolveCofounderModel } from "@/lib/cofounder/model"
 import {
   businessStartingPointOf,
   type BusinessDomainDoc,
@@ -49,7 +50,7 @@ import {
 import type { FeaturePreferences } from "@/lib/types/db"
 import type { MirrorProject } from "@/lib/types/project"
 import { buildReadingSnapshot, buildWebsiteDigest, collectWebsiteFacts, type WebsiteFacts } from "./website-facts"
-import { generateBusinessAssessment, type AssessmentEvidence } from "./assessment"
+import { generateBusinessAssessment, type AssessmentEngine, type AssessmentEvidence } from "./assessment"
 import { isBusinessObjectiveId, resolveObjectiveActions, type ResolvedAction } from "./objectives"
 
 /** A `processing` stamp older than this belongs to a run that died quietly. */
@@ -420,15 +421,56 @@ async function registerIntakeDomain(
   return { ok: true }
 }
 
+/**
+ * The engine this read runs on: the founder's own /settings/ai pick, the same
+ * one that answers their co-founder chat. Fail-soft — an unreadable tier
+ * catalog falls back to the shared analysis model rather than refusing a read
+ * the founder has already paid for.
+ */
+async function resolveAssessmentEngine(userId: string): Promise<AssessmentEngine | undefined> {
+  try {
+    const resolved = await resolveCofounderModel(userId)
+    return {
+      tierId: resolved.tier.id,
+      tierName: resolved.tier.name,
+      modelId: resolved.modelId,
+      model: resolved.model,
+    }
+  } catch (error) {
+    logger.warn("intake.assessment", "engine resolution failed; using the shared model", {
+      userId,
+      message: error instanceof Error ? error.message : String(error),
+    })
+    return undefined
+  }
+}
+
 async function runAssessment(
   project: MirrorProject,
   intake: BusinessIntake,
   evidence: AssessmentEvidence,
   actions: ResolvedAction[],
 ): Promise<boolean> {
-  await patchIntake(project.id, { "intake.assessment": { status: "processing", attemptedAt: Date.now() } })
+  const engine = await resolveAssessmentEngine(project.userId)
+  const engineRef = engine
+    ? { tierId: engine.tierId, tierName: engine.tierName, modelId: engine.modelId }
+    : undefined
+  await patchIntake(project.id, {
+    "intake.assessment": compact({
+      ...intake.assessment,
+      status: "processing",
+      attemptedAt: Date.now(),
+      ...(engineRef ? { engine: engineRef } : {}),
+    }),
+  })
   const outcome = await generateBusinessAssessment(
-    { projectId: project.id, userId: project.userId, displayName: intake.displayName || project.name, evidence },
+    {
+      projectId: project.id,
+      userId: project.userId,
+      displayName: intake.displayName || project.name,
+      evidence,
+      ...(engine ? { engine } : {}),
+    },
     { actions },
   )
 
@@ -441,6 +483,8 @@ async function runAssessment(
         errorCode: outcome.code,
         errorMessage: outcome.message,
         errorDetail: outcome.detail ?? null,
+        errorReason: outcome.reason ?? null,
+        ...(engineRef ? { engine: engineRef } : {}),
       }),
     })
     await store.appendEvent(project.id, event("intake", outcome.message, "warn"))
@@ -448,7 +492,7 @@ async function runAssessment(
   }
 
   await patchIntake(project.id, {
-    "intake.assessment": {
+    "intake.assessment": compact({
       status: "completed",
       attemptedAt: intake.assessment?.attemptedAt ?? Date.now(),
       completedAt: Date.now(),
@@ -457,7 +501,9 @@ async function runAssessment(
       errorCode: null,
       errorMessage: null,
       errorDetail: null,
-    },
+      errorReason: null,
+      ...(engineRef ? { engine: engineRef } : {}),
+    }),
   })
   await store.appendEvent(project.id, event("intake", "Your co-founder's initial read of the business is ready."))
   return true

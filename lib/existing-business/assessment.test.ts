@@ -463,7 +463,8 @@ describe("generateBusinessAssessment — billing and failure honesty", () => {
     const outcome = await generateBusinessAssessment(input, { actions })
     if (!outcome.ok) {
       expect(outcome.detail).toContain("out of credit")
-      expect(outcome.message).toContain("retrying will not help")
+      expect(outcome.message).toContain("retrying the same engine will not help")
+      expect(outcome.message).toContain("switching engines")
       expect(outcome.message).not.toContain("you can retry.")
     }
   })
@@ -473,6 +474,58 @@ describe("generateBusinessAssessment — billing and failure honesty", () => {
     textMock.mockRejectedValue(Object.assign(new Error("The operation was aborted"), { name: "AbortError" }))
     const outcome = await generateBusinessAssessment(input, { actions })
     if (!outcome.ok) expect(outcome.detail).toMatch(/No reply from .* \(timeout\)/)
+  })
+
+  it("runs on the founder's engine, not the deployment default", async () => {
+    textMock.mockReset()
+    textMock.mockResolvedValue({ text: JSON.stringify(validPayload()) } as Awaited<ReturnType<typeof generateText>>)
+    await generateBusinessAssessment(
+      {
+        ...input,
+        engine: {
+          tierId: "north",
+          tierName: "North",
+          modelId: "cohere/north-mini-code:free",
+          model: "north-handle" as never,
+        },
+      },
+      { actions },
+    )
+    expect(textMock.mock.calls[0][0]).toMatchObject({ model: "north-handle" })
+  })
+
+  it("names the engine that timed out, so the founder knows which one to change", async () => {
+    textMock.mockReset()
+    textMock.mockRejectedValue(Object.assign(new Error("The operation was aborted"), { name: "AbortError" }))
+    const outcome = await generateBusinessAssessment(
+      {
+        ...input,
+        engine: {
+          tierId: "north",
+          tierName: "North",
+          modelId: "cohere/north-mini-code:free",
+          model: "north-handle" as never,
+        },
+      },
+      { actions },
+    )
+    expect(outcome).toMatchObject({ ok: false, reason: "timeout" })
+    if (!outcome.ok) expect(outcome.detail).toContain("cohere/north-mini-code:free")
+  })
+
+  it("calls a retired model id unavailable and points at switching engines", async () => {
+    textMock.mockReset()
+    textMock.mockRejectedValue(Object.assign(new Error("No such model"), { statusCode: 404 }))
+    const outcome = await generateBusinessAssessment(input, { actions })
+    expect(outcome).toMatchObject({ ok: false, reason: "model_unavailable" })
+    if (!outcome.ok) expect(outcome.message).toContain("switching engines")
+  })
+
+  it("treats an unusable reply as an engine problem, not a silent retry", async () => {
+    textMock.mockReset()
+    textMock.mockResolvedValue({ text: "no json at all" } as Awaited<ReturnType<typeof generateText>>)
+    const outcome = await generateBusinessAssessment(input, { actions })
+    expect(outcome).toMatchObject({ ok: false, reason: "format" })
   })
 
   it("explains an unusable reply by naming the parse problem", async () => {

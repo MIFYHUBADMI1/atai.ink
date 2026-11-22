@@ -23,7 +23,7 @@ import "server-only"
  *    stage, never a fabricated one.
  */
 
-import { generateText } from "ai"
+import { generateText, type LanguageModel } from "ai"
 import { MODEL, MODEL_ID } from "@/lib/analysis/model"
 import { aiSignal } from "@/lib/api/ai-context"
 import { logger } from "@/lib/logging/logger"
@@ -38,6 +38,7 @@ import {
   type BusinessObjectiveId,
   type AssessmentFinding,
   type AssessmentRecommendation,
+  type AssessmentFailureReason,
 } from "@/lib/types/business-intake"
 import {
   objectiveDefinition,
@@ -286,11 +287,25 @@ export interface AssessmentEvidence {
   domainVerified: boolean
 }
 
+/**
+ * The co-founder engine the founder picked in /settings/ai, resolved by the
+ * caller. This read is the co-founder's first act, so it runs on the engine the
+ * founder chose rather than a deployment-wide default they cannot see or
+ * change. Absent → `MODEL` (the shared analysis model).
+ */
+export interface AssessmentEngine {
+  tierId: string
+  tierName: string
+  modelId: string
+  model: LanguageModel
+}
+
 export interface AssessmentInput {
   projectId: string
   userId: string
   displayName: string
   evidence: AssessmentEvidence
+  engine?: AssessmentEngine
 }
 
 /** Which sources really back this run. Everything the honesty filters key off. */
@@ -514,8 +529,9 @@ export type AssessmentOutcome =
   | { ok: true; assessment: BusinessAssessment; charged: boolean }
   /** `detail` is the reason for the operator: a status code, a timeout, a
    * truncation. It is shown next to the founder-facing sentence so a failure
-   * can be acted on instead of retried blindly. */
-  | { ok: false; code: string; message: string; detail?: string }
+   * can be acted on instead of retried blindly. `reason` is the same cause in
+   * machine terms, so the UI can name the engine and offer to switch it. */
+  | { ok: false; code: string; message: string; detail?: string; reason?: AssessmentFailureReason }
 
 export function isAssessmentConfigured(): boolean {
   return Boolean(process.env.OPENROUTER_API_KEY)
@@ -526,7 +542,11 @@ export function isAssessmentConfigured(): boolean {
  * and anything shaped like a key is removed: the reason is shown to the founder
  * and written to the log, so it must carry no secret and no stack.
  */
-function failureDetail(error: unknown, elapsedMs: number): { detail: string; retryable: boolean } {
+function failureDetail(
+  error: unknown,
+  elapsedMs: number,
+  modelId: string,
+): { detail: string; retryable: boolean; reason: AssessmentFailureReason } {
   const asError = error as {
     name?: string
     message?: string
@@ -541,7 +561,11 @@ function failureDetail(error: unknown, elapsedMs: number): { detail: string; ret
   const scrub = (text: string) => text.replace(/sk-or-[A-Za-z0-9-]+/g, "[redacted]").slice(0, 180)
 
   if (name === "AbortError" || name === "TimeoutError" || /abort|timed? ?out/i.test(raw)) {
-    return { detail: `No reply from ${MODEL_ID} after ${Math.round(elapsedMs / 1000)}s (timeout).`, retryable: true }
+    return {
+      detail: `No reply from ${modelId} after ${Math.round(elapsedMs / 1000)}s (timeout).`,
+      retryable: true,
+      reason: "timeout",
+    }
   }
   if (typeof status === "number") {
     const hint =
@@ -557,18 +581,28 @@ function failureDetail(error: unknown, elapsedMs: number): { detail: string; ret
                 ? " — the provider is failing"
                 : ""
     return {
-      detail: scrub(`${MODEL_ID} returned HTTP ${status}${hint}${raw ? `: ${raw}` : ""}`),
+      detail: scrub(`${modelId} returned HTTP ${status}${hint}${raw ? `: ${raw}` : ""}`),
       // A rejected key, an empty provider balance or a missing model id will
-      // answer the same way however many times the founder presses retry.
+      // answer the same way however many times the founder presses retry —
+      // switching engines is the move, not retrying.
       retryable: status !== 401 && status !== 402 && status !== 403 && status !== 404,
+      reason:
+        status === 404
+          ? "model_unavailable"
+          : status === 429
+            ? "rate_limited"
+            : status >= 500
+              ? "provider_error"
+              : "rejected",
     }
   }
   if (error instanceof AssessmentFormatError) {
-    return { detail: scrub(`${error.message} (model: ${MODEL_ID})`), retryable: true }
+    return { detail: scrub(`${error.message} (model: ${modelId})`), retryable: true, reason: "format" }
   }
   return {
-    detail: scrub(`${raw || name || "unknown error"}${cause ? ` — ${cause}` : ""} (model: ${MODEL_ID})`),
+    detail: scrub(`${raw || name || "unknown error"}${cause ? ` — ${cause}` : ""} (model: ${modelId})`),
     retryable: true,
+    reason: "unknown",
   }
 }
 
@@ -654,11 +688,13 @@ export async function generateBusinessAssessment(
   }
 
   const { system, prompt } = buildAssessmentMessages(input)
+  const model = input.engine?.model ?? MODEL
+  const modelId = input.engine?.modelId ?? MODEL_ID
   // One budget for the whole stage: a repair attempt must not double the wait.
   const deadline = Date.now() + TIMEOUT_MS
   const call = (promptText: string) =>
     generateText({
-      model: MODEL,
+      model,
       system,
       prompt: promptText,
       maxOutputTokens: MAX_OUTPUT_TOKENS,
@@ -708,14 +744,16 @@ export async function generateBusinessAssessment(
     return { ok: true, assessment, charged }
   } catch (error) {
     await refund()
-    const { detail, retryable } = failureDetail(error, Date.now() - startedAt)
+    const { detail, retryable, reason } = failureDetail(error, Date.now() - startedAt, modelId)
     // The founder gets a code, a sentence, and the reason — a retry with no
     // visible cause is the thing that made this failure expensive to chase.
     logger.warn("intake.assessment", "generation failed", {
       projectId: input.projectId,
       detail,
+      reason,
       retryable,
-      model: MODEL_ID,
+      model: modelId,
+      tier: input.engine?.tierId,
       elapsedMs: Date.now() - startedAt,
     })
     return {
@@ -725,8 +763,9 @@ export async function generateBusinessAssessment(
       // own kind of dishonesty: say whose problem it is.
       message: retryable
         ? "The co-founder could not produce a dependable assessment this time. Nothing was invented for you — the evidence Atai collected is saved and you can retry."
-        : "The co-founder could not run this time: the AI provider rejected Atai's request, so this is on our side, not yours. Nothing was invented for you and your evidence is saved — retrying will not help until that is fixed.",
+        : "The co-founder could not run this time: the AI provider rejected Atai's request for this engine. Nothing was invented for you and your evidence is saved — retrying the same engine will not help, but switching engines will.",
       detail,
+      reason,
     }
   }
 }

@@ -14,9 +14,11 @@ import "server-only"
 import { toDomainView, type DomainView } from "@/lib/domain/service"
 import {
   businessStartingPointOf,
+  type AssessmentFailureReason,
   type BusinessAssessment,
   type BusinessConnectionStatus,
   type BusinessDomainDoc,
+  type IntakeEngineRef,
   type IntakeStageStatus,
 } from "@/lib/types/business-intake"
 import { CONNECTION_STATUS_LABEL, businessConnectionStatus } from "@/lib/connected-business/status"
@@ -68,7 +70,9 @@ export interface IntakeView {
   assessment: {
     status: IntakeStageStatus
     generatedAt?: number
-    error?: { code: string; message: string; detail?: string }
+    /** The engine that ran (or failed to run) this read. */
+    engine?: IntakeEngineRef
+    error?: { code: string; message: string; detail?: string; reason?: AssessmentFailureReason }
     /** The assessment itself, or null when it has not been produced. */
     result?: BusinessAssessment
   }
@@ -80,6 +84,7 @@ function stageError(stage?: {
   errorCode?: string | null
   errorMessage?: string | null
   errorDetail?: string | null
+  errorReason?: AssessmentFailureReason | null
 }) {
   if (!stage || (stage.status !== "failed" && stage.status !== "partially_completed")) return undefined
   if (!stage.errorCode || !stage.errorMessage) return undefined
@@ -87,6 +92,7 @@ function stageError(stage?: {
     code: stage.errorCode,
     message: stage.errorMessage,
     ...(stage.errorDetail ? { detail: stage.errorDetail } : {}),
+    ...(stage.errorReason ? { reason: stage.errorReason } : {}),
   }
 }
 
@@ -142,6 +148,7 @@ export function buildIntakeView(project: MirrorProject, domains: BusinessDomainD
     assessment: {
       status: intake?.assessment?.status ?? "pending",
       ...(intake?.assessment?.generatedAt ? { generatedAt: intake.assessment.generatedAt } : {}),
+      ...(intake?.assessment?.engine ? { engine: intake.assessment.engine } : {}),
       ...(stageError(intake?.assessment) ? { error: stageError(intake?.assessment) } : {}),
       ...(intake?.assessment?.result ? { result: intake.assessment.result } : {}),
     },

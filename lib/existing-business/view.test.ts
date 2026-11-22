@@ -92,6 +92,31 @@ describe("buildIntakeView — a failed stage says why", () => {
     })
   })
 
+  it("carries the engine and the failure reason so the UI can name the engine", () => {
+    const view = buildIntakeView(
+      project({
+        intake: {
+          collectedAt: 1,
+          objectives: [],
+          assessment: {
+            status: "failed",
+            errorCode: "ASSESSMENT_FAILED",
+            errorMessage: "The co-founder could not produce a dependable assessment this time.",
+            errorReason: "timeout",
+            engine: { tierId: "spark", tierName: "Spark", modelId: "nvidia/nemotron-3-ultra-550b-a55b:free" },
+          },
+        },
+      } as Partial<MirrorProject>),
+    )
+
+    expect(view.assessment.engine).toEqual({
+      tierId: "spark",
+      tierName: "Spark",
+      modelId: "nvidia/nemotron-3-ultra-550b-a55b:free",
+    })
+    expect(view.assessment.error).toMatchObject({ code: "ASSESSMENT_FAILED", reason: "timeout" })
+  })
+
   it("omits the reason when the stage has none", () => {
     const view = buildIntakeView(
       project({

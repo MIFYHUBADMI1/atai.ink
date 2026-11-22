@@ -17,13 +17,19 @@ function view(overrides: Partial<IntakeView> = {}): IntakeView {
       url: "https://cornerbakery.com",
       pagesCrawled: 3,
     },
+    claim: { state: "unclaimed" },
     domain: { records: [], verified: false },
     connection: { status: "not_connected", label: "Not connected" },
-    assessment: { status: "failed", error: {
+    assessment: {
+      status: "failed",
+      engine: { tierId: "spark", tierName: "Spark", modelId: "nvidia/nemotron-3-ultra-550b-a55b:free" },
+      error: {
         code: "ASSESSMENT_FAILED",
         message: "The co-founder could not produce a dependable assessment this time.",
-        detail: "openrouter/auto returned HTTP 402 — the provider account is out of credit",
-      } },
+        detail: "No reply from nvidia/nemotron-3-ultra-550b-a55b:free after 91s (timeout).",
+        reason: "timeout",
+      },
+    },
     ...overrides,
   } as IntakeView
 }

@@ -133,6 +133,44 @@ describe("BusinessProfile", () => {
     expect(html).toContain("HTTP 429")
   })
 
+  it("blames the engine, names it, and offers the switch when the engine failed", () => {
+    const html = render(
+      view({
+        assessment: {
+          status: "failed",
+          engine: { tierId: "spark", tierName: "Spark", modelId: "nvidia/nemotron-3-ultra-550b-a55b:free" },
+          error: {
+            code: "ASSESSMENT_FAILED",
+            message: "The co-founder could not produce a dependable assessment this time.",
+            detail: "No reply from nvidia/nemotron-3-ultra-550b-a55b:free after 91s (timeout).",
+            reason: "timeout",
+          },
+        },
+      }),
+    )
+
+    expect(html).toContain("engine couldn")
+    expect(html).toContain("Spark")
+    expect(html).toContain("did not reply in time")
+    expect(html).toContain("Fix the issue")
+    expect(html).toContain("Try again")
+    expect(html).toContain("/settings/ai?next=%2Fproject%2Fp1%2Fbusiness")
+  })
+
+  it("does not blame the engine when Atai itself could not run", () => {
+    const html = render(
+      view({
+        assessment: {
+          status: "failed",
+          error: { code: "AI_UNAVAILABLE", message: "The AI co-founder could not run this time." },
+        },
+      }),
+    )
+
+    expect(html).not.toContain("Fix the issue")
+    expect(html).toContain("Try again")
+  })
+
   it("offers no preview when the website was not read", () => {
     const html = render(
       view({
