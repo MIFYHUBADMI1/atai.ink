@@ -199,12 +199,18 @@ function websiteStageFields(intake: BusinessIntake, patch: Record<string, unknow
  * Website evidence, or the reason we could not get it. Credits are charged only
  * for a crawl that was not served from the 7-day cache, so a retry of a failed
  * assessment does not pay for the same pages twice.
+ *
+ * The read always bills the standard rate: it fetches a handful of pages, never
+ * the crawl-and-rebuild volume the heavy rate pays for, whatever mode the
+ * project was created with.
  */
+const READ_PIPELINE_MODE = "legacy" as const
+
 async function readWebsite(project: MirrorProject, intake: BusinessIntake): Promise<WebsiteFacts | null> {
   const url = intake.website?.url
   if (!url || intake.website?.status === "skipped") return null
 
-  const scrapeCost = await getScrapeCost(project.pipelineMode)
+  const scrapeCost = await getScrapeCost(READ_PIPELINE_MODE)
   const affordable = await hasSufficientCredits(project.userId, scrapeCost)
   if (!affordable) {
     await patchIntake(project.id, websiteStageFields(intake, {
@@ -235,7 +241,7 @@ async function readWebsite(project: MirrorProject, intake: BusinessIntake): Prom
 
   if (!result.facts.fromCache) {
     try {
-      await chargeScrapeCredits(project.userId, project.id, project.pipelineMode)
+      await chargeScrapeCredits(project.userId, project.id, READ_PIPELINE_MODE)
     } catch (error) {
       // A failed ledger write must not discard evidence the founder paid for.
       logger.error("intake.credits", "scrape charge failed", {

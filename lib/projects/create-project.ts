@@ -110,6 +110,19 @@ async function stageAttachments(projectId: string, userId: string, attachments: 
   }
 }
 
+/**
+ * Heavy mode is the crawl-and-rebuild rate. An existing business is only ever
+ * read — a handful of pages, capped in `readWebsite` — so it must not inherit
+ * that rate from a client that defaults to "heavy".
+ */
+export function resolvePipelineMode(
+  startingPoint: BusinessStartingPoint | undefined,
+  requested: unknown,
+): UserPipelineMode {
+  if (startingPoint === "existing_business") return "legacy"
+  return requested === "heavy" ? "heavy" : requested === "legacy" ? "legacy" : "heavy"
+}
+
 export async function createUserProject(userId: string, body: CreateProjectInput) {
   const idempotencyKey = typeof body.idempotencyKey === "string" ? body.idempotencyKey.trim().slice(0, 80) : ""
   if (idempotencyKey) {
@@ -151,7 +164,7 @@ export async function createUserProject(userId: string, body: CreateProjectInput
     ? "scratch"
     : body.mode === "scratch" ? "scratch" : body.mode === "github" ? "github" : "website"
   const crawlMode = body.crawlMode === "deep" ? "deep" : "relevant"
-  const pipelineMode: UserPipelineMode = body.pipelineMode === "heavy" ? "heavy" : body.pipelineMode === "legacy" ? "legacy" : "heavy"
+  const pipelineMode = resolvePipelineMode(startingPoint, body.pipelineMode)
   const originalIntent = (body.idea ?? body.userRequest ?? "").trim() || undefined
 
   if (mode === "github") {

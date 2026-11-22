@@ -401,6 +401,12 @@ describe("runBusinessIntake — sources and billing", () => {
     })
   })
 
+  it("bills a read at the standard rate even when the project was created heavy", async () => {
+    projectDoc = { ...projectDoc!, pipelineMode: "heavy" }
+    await runBusinessIntake("proj-1")
+    expect(chargeMock).toHaveBeenCalledWith("user-1", "proj-1", "legacy")
+  })
+
   it("never pays for a crawl served from the cache", async () => {
     websiteMock.mockResolvedValue({ facts: { ...websiteFacts, fromCache: true } } as Awaited<ReturnType<typeof collectWebsiteFacts>>)
     await runBusinessIntake("proj-1")
