@@ -21,6 +21,7 @@ import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { jsonFetcher, postJson, type ApiError } from "@/lib/client/api"
+import { BUSINESS_CLAIM_SUPPORT_HREF } from "@/lib/domain/claim-copy"
 import type { IntakeView } from "@/lib/existing-business/view"
 import { businessSteps, type BusinessStep, type BusinessStepId } from "@/lib/existing-business/steps"
 import { intakeStatusLabel } from "@/lib/existing-business/stage-labels"
@@ -172,6 +173,10 @@ export function BusinessProfile({ projectId, initialView }: { projectId: string;
   }
 
   const { steps, current } = businessSteps(view)
+  // A business that belongs to another account gets no verification controls:
+  // there is nothing to verify, and a token here would invite tag-pasting on a
+  // site this account does not own.
+  const claimHeld = view.claim.state === "held_by_other"
   const doneCount = steps.filter((step) => step.done).length
   const allDone = current === -1
   const activeIndex = pinned ?? (allDone ? steps.length - 1 : current)
@@ -297,15 +302,20 @@ export function BusinessProfile({ projectId, initialView }: { projectId: string;
                   error={error}
                   onStart={startRun}
                   onShowReading={() => setReadingOpen(true)}
+                  blocked={claimHeld}
                 />
               ) : null}
               {active.id === "domain" ? (
-                <DomainVerification
-                  projectId={projectId}
-                  initialDomains={view.domain.records}
-                  defaultUrl={view.website.url}
-                  onChanged={refresh}
-                />
+                claimHeld ? (
+                  <ClaimHeld hostname={view.claim.hostname} />
+                ) : (
+                  <DomainVerification
+                    projectId={projectId}
+                    initialDomains={view.domain.records}
+                    defaultUrl={view.website.url}
+                    onChanged={refresh}
+                  />
+                )
               ) : null}
               {active.id === "connection" ? (
                 <ConnectionCard
@@ -478,6 +488,30 @@ function NextBestActions({ projectId }: { projectId: string }) {
   )
 }
 
+/** Shown instead of verification controls when another account holds the site.
+ * It never names the holder — only what this founder can do next. */
+function ClaimHeld({ hostname }: { hostname?: string }) {
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm leading-relaxed text-amber-800 dark:text-amber-300">
+      <p className="flex items-center gap-2 font-medium">
+        <Lock className="size-4 shrink-0" />
+        {hostname ? `${hostname} is connected to another Atai account` : "This website is connected to another Atai account"}
+      </p>
+      <p>
+        Only that account can disconnect it. If this is the business you own,{" "}
+        <a href={BUSINESS_CLAIM_SUPPORT_HREF} className="underline underline-offset-2">
+          contact support
+        </a>{" "}
+        to recover it. If you connected it with another account of your own, sign in to that account and delete the
+        business there.
+      </p>
+      <p className="text-xs opacity-90">
+        Verification is paused for this business until the claim is released, so no tag or file is issued here.
+      </p>
+    </div>
+  )
+}
+
 function AssessmentStep({
   view,
   cost,
@@ -486,6 +520,7 @@ function AssessmentStep({
   error,
   onStart,
   onShowReading,
+  blocked,
 }: {
   view: IntakeView
   cost: JourneyCost | null
@@ -494,6 +529,8 @@ function AssessmentStep({
   error: string | null
   onStart: (action?: "reassess") => void
   onShowReading: () => void
+  /** Another account holds this business: a run would be refused, so offer none. */
+  blocked?: boolean
 }) {
   const assessment = view.assessment
   const website = view.website
@@ -503,7 +540,12 @@ function AssessmentStep({
       <div className="flex flex-col gap-5">
         <AssessmentReport assessment={assessment.result} onShowReading={onShowReading} />
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" variant="outline" onClick={() => onStart("reassess")} disabled={busy !== null || running}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onStart("reassess")}
+            disabled={busy !== null || running || blocked}
+          >
             {busy === "reassess" ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
             Write it again
           </Button>
@@ -527,14 +569,16 @@ function AssessmentStep({
         </div>
       ) : (
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" onClick={() => onStart()} disabled={busy !== null}>
+          <Button type="button" onClick={() => onStart()} disabled={busy !== null || blocked}>
             {busy === "retry" ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
             {assessment.status === "failed" ? "Try again" : "Write my first read"}
           </Button>
           <p className="text-xs text-muted-foreground">
-            {assessment.status === "failed"
-              ? "The last attempt did not produce a usable read. Nothing was invented, and the charge was refunded."
-              : "One read, written from your own words and your live pages."}
+            {blocked
+              ? "Paused: this website is connected to another Atai account."
+              : assessment.status === "failed"
+                ? "The last attempt did not produce a usable read. Nothing was invented, and the charge was refunded."
+                : "One read, written from your own words and your live pages."}
           </p>
         </div>
       )}

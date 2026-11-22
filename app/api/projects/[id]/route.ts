@@ -283,7 +283,9 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
       deleted: true,
       runtimeKeysRevoked: true,
       externalResourcesRemoved: false,
-      warning: "Hosted apps, external files, domains and subscriptions are not removed or cancelled. Shut them down separately. Financial and audit records are retained.",
+      businessClaimReleased: true,
+      warning:
+        "The Atai ownership claim on this business's website is released, so it can be connected to an Atai account again. Hosted apps, external files, DNS, domains and subscriptions are not removed or cancelled — shut them down separately. Financial and audit records are retained.",
     })
   } catch (e) {
     return handleRouteError("api.projects.delete", e)

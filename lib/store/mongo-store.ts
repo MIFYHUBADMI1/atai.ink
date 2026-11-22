@@ -557,6 +557,26 @@ export class MongoStore implements DataStore {
           { $set: { status: "revoked", revokedAt: Date.now(), revokedReason: "project_deleted" } },
           { session },
         )
+        // Free the business. A deleted business must be connectable again by
+        // its owner (or, after support, by whoever really owns the site).
+        const { businessDomainsCol } = await import("@/lib/db/collections")
+        const { MAX_DOMAIN_HISTORY } = await import("@/lib/domain/service")
+        const claimsResult = await (await businessDomainsCol()).updateMany(
+          { projectId: id, releasedAt: { $exists: false } },
+          {
+            $set: { status: "revoked", releasedAt: Date.now(), updatedAt: Date.now() },
+            $unset: { token: "", tokenHash: "", claimExpiresAt: "" },
+            $push: {
+              history: {
+                $each: [{ status: "revoked", at: Date.now(), detail: "project deleted" }],
+                $position: 0,
+                $slice: MAX_DOMAIN_HISTORY,
+              },
+            },
+          },
+          { session },
+        )
+        logger.info("store.deleteProject", "released business claims", { id, released: claimsResult.modifiedCount })
         const runsResult = await runsCol.deleteMany({ mirrorProjectId: id }, { session })
         logger.info("store.deleteProject", "cascaded build run delete", { id, deletedBuildRuns: runsResult.deletedCount })
         const attachmentsCol = await projectAttachmentsCol()

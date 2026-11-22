@@ -7,6 +7,11 @@ import { authorizeProjectCreation, ENTITLEMENT_ENFORCEMENT_ENABLED } from "@/lib
 import { normalizeUrl } from "@/lib/integrations/firecrawl/service"
 import { buildIntakeRecord, sanitizeIntakeInput, startBusinessIntake, type IntakeInput } from "@/lib/existing-business/intake"
 import { INTAKE_SOURCE_ERROR, hasIntakeSource } from "@/lib/existing-business/source-rule"
+import {
+  BUSINESS_ALREADY_CONNECTED_MESSAGE,
+  releaseProjectClaims,
+  reserveBusinessClaim,
+} from "@/lib/domain/service"
 import type { BusinessStartingPoint } from "@/lib/types/business-intake"
 import type { MirrorProject, ProjectPreferences, UserPipelineMode } from "@/lib/types/project"
 
@@ -58,7 +63,7 @@ function newProject(
 ): MirrorProject {
   const now = Date.now()
   return {
-    id: cryptoId(),
+    id: partial.id ?? cryptoId(),
     userId,
     workspaceId: partial.workspaceId,
     mode: partial.mode,
@@ -281,8 +286,33 @@ export async function createUserProject(userId: string, body: CreateProjectInput
   } else if (idea.length < 8) {
     return { error: fail("VALIDATION", "Please describe your app idea in a bit more detail.", 422) }
   }
-  const existing = await findRecentDuplicate(userId, { idea })
-  if (existing) return { project: existing, reused: true }
+  // A business belongs to exactly one account. The claim is taken before the
+  // project row exists and before any credits are spent, so a second attempt
+  // either lands on the business the founder already has or is refused.
+  let reservedProjectId: string | undefined
+  if (isExistingBusiness) {
+    const projectId = cryptoId()
+    const claim = await reserveBusinessClaim({ userId, projectId, rawUrl: intake?.websiteUrl ?? "" })
+    if (claim.state === "refused") return { error: fail(claim.code, claim.message, claim.status) }
+    if (claim.state === "reuse") {
+      const owned = await store.getProject(claim.projectId)
+      if (owned && owned.userId === userId) return { project: owned, reused: true }
+      // The claim points at a project that is gone: free it and reserve again.
+      await releaseProjectClaims(claim.projectId, "orphaned claim reclaimed at creation")
+      const retry = await reserveBusinessClaim({ userId, projectId, rawUrl: intake?.websiteUrl ?? "" })
+      if (retry.state !== "reserved") {
+        return { error: fail("BUSINESS_ALREADY_CONNECTED", BUSINESS_ALREADY_CONNECTED_MESSAGE, 409) }
+      }
+    }
+    reservedProjectId = projectId
+  }
+
+  // The claim is the duplicate check for an existing business; the prose
+  // comparison only makes sense for the build-from-idea journey.
+  if (!isExistingBusiness) {
+    const existing = await findRecentDuplicate(userId, { idea })
+    if (existing) return { project: existing, reused: true }
+  }
 
   const preferences = body.preferences
   const projectName =
@@ -291,6 +321,7 @@ export async function createUserProject(userId: string, body: CreateProjectInput
     preferences?.appName ||
     titleFromIntent(idea, isExistingBusiness ? "Existing business" : "New app")
   const project = newProject(userId, {
+    ...(reservedProjectId ? { id: reservedProjectId } : {}),
     mode,
     idea: idea || undefined,
     name: projectName,
@@ -304,7 +335,13 @@ export async function createUserProject(userId: string, body: CreateProjectInput
         }
       : {}),
   })
-  await store.createProject(project)
+  try {
+    await store.createProject(project)
+  } catch (error) {
+    // Never leave a business reserved for a project that does not exist.
+    if (reservedProjectId) await releaseProjectClaims(reservedProjectId, "project creation failed")
+    throw error
+  }
   if (idempotencyKey) {
     const { saveCreateIdempotency } = await import("@/lib/start/pending-store")
     await saveCreateIdempotency(userId, idempotencyKey, project.id)

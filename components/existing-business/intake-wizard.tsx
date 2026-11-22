@@ -24,6 +24,7 @@ import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { jsonFetcher, postJson } from "@/lib/client/api"
 import { INTAKE_SOURCE_ERROR, parseIntakeWebsite } from "@/lib/existing-business/source-rule"
+import { BUSINESS_ALREADY_CONNECTED_MESSAGE, BUSINESS_CLAIM_SUPPORT_HREF } from "@/lib/domain/claim-copy"
 import { cn } from "@/lib/utils"
 import { CreditsShortfallDialog, TOP_UP_HREF, type JourneyCost } from "./credits-shortfall-dialog"
 
@@ -95,6 +96,9 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
   // it before the founder presses Connect.
   const [journeyCost, setJourneyCost] = useState<JourneyCost | null>(null)
   const [shortfall, setShortfall] = useState<JourneyCost | null>(null)
+  // Whether another account already holds this business. Checked before the
+  // founder invests time in the rest of the wizard, not after they press Connect.
+  const [claimHeld, setClaimHeld] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -109,6 +113,30 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
   }, [])
 
   const website = useMemo(() => parseIntakeWebsite(websiteUrl), [websiteUrl])
+
+  useEffect(() => {
+    if (!website) {
+      setClaimHeld(null)
+      return
+    }
+    let cancelled = false
+    const timer = setTimeout(() => {
+      jsonFetcher<{ hostname?: string; available: boolean }>(
+        `/api/business/availability?url=${encodeURIComponent(website.url)}`,
+      )
+        .then((data) => {
+          if (!cancelled) setClaimHeld(data.available ? null : (data.hostname ?? website.hostname))
+        })
+        .catch(() => {
+          // A failed preflight must not block a founder: creation still checks.
+          if (!cancelled) setClaimHeld(null)
+        })
+    }, 500)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [website])
   const websiteTypedButUnusable = websiteUrl.trim().length > 0 && !website
   const hasDescription = description.trim().length > 0
   /** The gate: a business only exists for Atai once its live application is known. */
@@ -135,6 +163,10 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
       setError(INTAKE_SOURCE_ERROR)
       return
     }
+    if (step === 0 && claimHeld) {
+      setError(BUSINESS_ALREADY_CONNECTED_MESSAGE)
+      return
+    }
     goTo(step + 1)
   }
 
@@ -142,6 +174,10 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
     if (busy) return
     if (!hasRealSource) {
       setError(INTAKE_SOURCE_ERROR)
+      return
+    }
+    if (claimHeld) {
+      setError(BUSINESS_ALREADY_CONNECTED_MESSAGE)
       return
     }
     setBusy(true)
@@ -256,6 +292,16 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
                       Reading uses Atai credits, and a retry within 7 days reuses the cached read at no extra cost.
                     </p>
                   )}
+                  {claimHeld ? (
+                    <p role="alert" className="text-[11px] leading-relaxed text-destructive">
+                      {claimHeld} is connected to another Atai account. Only that account can disconnect it. If this
+                      is the business you own,{" "}
+                      <a href={BUSINESS_CLAIM_SUPPORT_HREF} className="underline underline-offset-2">
+                        contact support
+                      </a>{" "}
+                      to recover it — or continue with a different address.
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="rounded-xl border border-border/80 bg-secondary/40 p-4">
@@ -515,7 +561,7 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
                 : `Step ${step + 1} of ${STEPS.length}`}
             </p>
             {step < STEPS.length - 1 ? (
-              <Button type="button" onClick={next} className="h-10">
+              <Button type="button" onClick={next} className="h-10" disabled={step === 0 && Boolean(claimHeld)}>
                 Continue
                 <ArrowRight className="size-4" />
               </Button>

@@ -44,6 +44,11 @@ export interface IntakeView {
     status: IntakeStageStatus
     error?: { code: string; message: string; detail?: string }
   }
+  /** Who holds this business, as far as this account is allowed to know. */
+  claim: {
+    hostname?: string
+    state: "unclaimed" | "yours" | "held_by_other"
+  }
   domain: {
     hostname?: string
     /** Only the domains belonging to this business, tokens included because
@@ -118,6 +123,16 @@ export function buildIntakeView(project: MirrorProject, domains: BusinessDomainD
       ...(project.connection?.firstSeenAt ? { firstSeenAt: project.connection.firstSeenAt } : {}),
       ...(project.connection?.lastSeenAt ? { lastSeenAt: project.connection.lastSeenAt } : {}),
       ...(project.connection?.guideIssuedAt ? { guideIssuedAt: project.connection.guideIssuedAt } : {}),
+    },
+    claim: {
+      ...(intake?.claim?.hostname
+        ? { hostname: intake.claim.hostname }
+        : (verifiedRecord ?? views[0])
+          ? { hostname: (verifiedRecord ?? views[0]).hostname }
+          : {}),
+      // A record of our own is proof of ownership; a persisted refusal is the
+      // only other state worth showing, and it never names the other account.
+      state: views.length > 0 ? "yours" : (intake?.claim?.state ?? "unclaimed"),
     },
     domain: {
       ...(intake?.domain?.hostname ? { hostname: intake.domain.hostname } : verifiedRecord ? { hostname: verifiedRecord.hostname } : {}),

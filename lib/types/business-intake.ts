@@ -168,6 +168,13 @@ export interface BusinessIntake {
   objectives: BusinessObjectiveId[]
   website?: IntakeWebsiteStage
   assessment?: IntakeStage & { generatedAt?: number; result?: BusinessAssessment }
+  /** The business-claim outcome of the last run, persisted so a refusal
+   * survives a reload instead of existing only as an activity event. */
+  claim?: {
+    hostname?: string
+    state: "unclaimed" | "yours" | "held_by_other"
+    at?: number
+  }
   /** Domain ownership verification summary, kept in sync with the domain
    * records (which are authoritative — this is a projection for display). */
   domain?: {
@@ -244,6 +251,17 @@ export interface BusinessDomainDoc {
   userId: string
   /** Exact hostname being verified — the verification target, lowercased, no port. */
   hostname: string
+  /** The business identity used for uniqueness only: the exact hostname with a
+   * safe leading `www.` removed (`canonicalBusinessHost`). Optional because
+   * records written before this field existed fall back to computing it. */
+  canonicalHostname?: string
+  /** Set on an additional exact-host record that belongs to the same project as
+   * the primary claim — it lets the founder verify apex and `www` separately
+   * without either one becoming a second business. */
+  aliasOf?: string
+  /** When an unverified claim stops blocking other accounts. Cleared once the
+   * domain is verified: a verified business is held until it is released. */
+  claimExpiresAt?: number
   /** Registrable domain (eTLD+1) for display only. Never a verification target. */
   registrableDomain: string
   submittedUrl: string

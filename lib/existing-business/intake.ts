@@ -30,8 +30,21 @@ import { logger } from "@/lib/logging/logger"
 import { chargeBusinessReadCredits, getBusinessReadCost, hasSufficientCredits } from "@/lib/credits/credits"
 import { getExistingBusinessCosts } from "@/lib/billing/runtime-config"
 import { getAvailableCredits } from "@/lib/billing/credit-service"
-import { listProjectDomains, registerDomain } from "@/lib/domain/service"
-import { businessStartingPointOf, type BusinessIntake, type BusinessObjectiveId, type IntakeStageStatus } from "@/lib/types/business-intake"
+import {
+  BUSINESS_ALREADY_CONNECTED_MESSAGE,
+  canonicalClaimFor,
+  canonicalHostFromInput,
+  listProjectDomains,
+  registerDomain,
+  reserveBusinessClaim,
+} from "@/lib/domain/service"
+import {
+  businessStartingPointOf,
+  type BusinessDomainDoc,
+  type BusinessIntake,
+  type BusinessObjectiveId,
+  type IntakeStageStatus,
+} from "@/lib/types/business-intake"
 import type { FeaturePreferences } from "@/lib/types/db"
 import type { MirrorProject } from "@/lib/types/project"
 import { buildReadingSnapshot, buildWebsiteDigest, collectWebsiteFacts, type WebsiteFacts } from "./website-facts"
@@ -270,39 +283,101 @@ async function readWebsite(project: MirrorProject, intake: BusinessIntake): Prom
  * blocks initialization: a taken or malformed domain is recorded and reported,
  * and the business profile still gets built.
  */
-async function registerIntakeDomain(project: MirrorProject, intake: BusinessIntake, facts: WebsiteFacts | null) {
-  const candidate = facts?.normalizedUrl || intake.website?.url
-  if (!candidate || intake.website?.status !== "completed") return
+/** A refusal the run must honour, or `ok` to carry on. */
+type DomainClaimOutcome = { ok: true } | { ok: false; code: string; message: string }
 
-  let hostname: string
+function claimRecord(hostname: string | undefined, state: "yours" | "held_by_other") {
+  return {
+    ...(hostname ? { hostname } : {}),
+    state,
+    at: Date.now(),
+  }
+}
+
+/** Register one exact host. A business held elsewhere is reported separately so
+ * the caller can decide whether it blocks the run. */
+async function claimOneDomain(
+  project: MirrorProject,
+  rawUrl: string,
+): Promise<{ ok: true; doc: BusinessDomainDoc } | { ok: false; code: string; message: string }> {
   try {
-    const registered = await registerDomain({ userId: project.userId, projectId: project.id, rawUrl: candidate })
-    hostname = registered.doc.hostname
-    const verified = registered.doc.status === "verified"
-    // A projection only — the domain records collection stays authoritative.
-    await patchIntake(project.id, {
-      "intake.domain": {
-        hostname,
-        verificationStatus: registered.doc.status,
-        ...(registered.doc.method ? { method: registered.doc.method } : {}),
-        ...(registered.doc.verifiedAt ? { verifiedAt: registered.doc.verifiedAt } : {}),
-      },
-    })
-    await store.appendEvent(
-      project.id,
-      event(
-        "intake",
-        verified
-          ? `Domain ${hostname} is verified as yours.`
-          : `Domain ${hostname} is registered. Verify ownership when you want domain-level features to use it.`,
-      ),
-    )
+    const { doc } = await registerDomain({ userId: project.userId, projectId: project.id, rawUrl })
+    return { ok: true, doc }
   } catch (error) {
     const code = (error as { code?: string })?.code ?? "DOMAIN_UNAVAILABLE"
-    // An address we cannot claim is not a reason to lose the business profile.
-    await store.appendEvent(project.id, event("intake", `Domain registration unavailable (${code}).`, "warn"))
-    logger.info("intake.domain", "registration skipped", { projectId: project.id, code })
+    if (code === "BUSINESS_ALREADY_CONNECTED" || code === "DOMAIN_TAKEN") {
+      return { ok: false, code: "BUSINESS_ALREADY_CONNECTED", message: BUSINESS_ALREADY_CONNECTED_MESSAGE }
+    }
+    return { ok: false, code, message: `Domain registration unavailable (${code}).` }
   }
+}
+
+/**
+ * Claim the address the founder submitted, and only then the redirect target.
+ *
+ * A business held by another account is the one failure that stops the run:
+ * reading it would disclose someone else's business and end with a business
+ * that can never be verified. A redirect target held elsewhere is only a
+ * missing extra alias — never a reason to drop a business the founder holds.
+ * Everything else (malformed host, network) stays non-blocking too.
+ */
+async function registerIntakeDomain(
+  project: MirrorProject,
+  intake: BusinessIntake,
+  facts: WebsiteFacts | null,
+): Promise<DomainClaimOutcome> {
+  const submitted = intake.website?.url
+  const target = facts?.normalizedUrl
+  const primaryUrl = submitted || target
+  if (!primaryUrl || intake.website?.status !== "completed") return { ok: true }
+
+  const primary = await claimOneDomain(project, primaryUrl)
+  if (!primary.ok) {
+    if (primary.code === "BUSINESS_ALREADY_CONNECTED") {
+      await patchIntake(project.id, {
+        "intake.claim": claimRecord(canonicalHostFromInput(primaryUrl), "held_by_other"),
+      })
+      await store.appendEvent(project.id, event("intake", BUSINESS_ALREADY_CONNECTED_MESSAGE, "error"))
+      logger.info("intake.domain", "claim refused", { projectId: project.id, code: primary.code })
+      return { ok: false, code: "BUSINESS_ALREADY_CONNECTED", message: BUSINESS_ALREADY_CONNECTED_MESSAGE }
+    }
+    // An address we cannot claim is not a reason to lose the business profile.
+    await store.appendEvent(project.id, event("intake", primary.message, "warn"))
+    logger.info("intake.domain", "registration skipped", { projectId: project.id, code: primary.code })
+    return { ok: true }
+  }
+
+  const hostname = primary.doc.hostname
+  const verified = primary.doc.status === "verified"
+  // A projection only — the domain records collection stays authoritative.
+  await patchIntake(project.id, {
+    "intake.domain": {
+      hostname,
+      verificationStatus: primary.doc.status,
+      ...(primary.doc.method ? { method: primary.doc.method } : {}),
+      ...(primary.doc.verifiedAt ? { verifiedAt: primary.doc.verifiedAt } : {}),
+    },
+    "intake.claim": claimRecord(primary.doc.canonicalHostname ?? canonicalHostFromInput(primaryUrl), "yours"),
+  })
+  await store.appendEvent(
+    project.id,
+    event(
+      "intake",
+      verified
+        ? `Domain ${hostname} is verified as yours.`
+        : `Domain ${hostname} is registered. Verify ownership when you want domain-level features to use it.`,
+    ),
+  )
+
+  // The site redirected to another host: an alias on the same business, if it
+  // is free. A refusal here is not the founder's problem and never stops the run.
+  if (target && canonicalHostFromInput(target) !== (primary.doc.canonicalHostname ?? canonicalHostFromInput(primaryUrl))) {
+    const alias = await claimOneDomain(project, target)
+    if (!alias.ok) {
+      logger.info("intake.domain", "redirect target not claimed", { projectId: project.id, code: alias.code })
+    }
+  }
+  return { ok: true }
 }
 
 async function runAssessment(
@@ -402,6 +477,47 @@ export async function businessJourneyCost(project: MirrorProject, intake: Busine
  * the previous fire-and-forget POST could not, so a refused retry looked
  * exactly like a working one.
  */
+/**
+ * A business is readable only by the account that holds it. This runs before
+ * the credit check, the rate limit and the crawl, so a taken business costs the
+ * founder nothing and the refusal is persisted for the profile to show.
+ */
+async function ensureBusinessClaim(
+  project: MirrorProject,
+  intake: BusinessIntake,
+): Promise<{ ok: true } | { ok: false; code: string; message: string }> {
+  const websiteUrl = intake.website?.url
+  if (!websiteUrl) return { ok: true }
+
+  const held = await canonicalClaimFor(websiteUrl)
+  if (held && held.doc.userId !== project.userId) {
+    await patchIntake(project.id, { "intake.claim": claimRecord(held.canonicalHostname, "held_by_other") })
+    await store.appendEvent(project.id, event("intake", BUSINESS_ALREADY_CONNECTED_MESSAGE, "error"))
+    logger.info("business.claim", "intake refused", {
+      projectId: project.id,
+      userId: project.userId,
+      hostname: held.canonicalHostname,
+    })
+    return { ok: false, code: "BUSINESS_ALREADY_CONNECTED", message: BUSINESS_ALREADY_CONNECTED_MESSAGE }
+  }
+
+  if (!held) {
+    // A project created before claims existed reserves on its first run.
+    const reserved = await reserveBusinessClaim({ userId: project.userId, projectId: project.id, rawUrl: websiteUrl })
+    if (reserved.state === "refused") {
+      await patchIntake(project.id, { "intake.claim": claimRecord(canonicalHostFromInput(websiteUrl), "held_by_other") })
+      await store.appendEvent(project.id, event("intake", reserved.message, "error"))
+      return { ok: false, code: reserved.code, message: reserved.message }
+    }
+    const hostname = reserved.state === "reserved" ? reserved.canonicalHostname : canonicalHostFromInput(websiteUrl)
+    await patchIntake(project.id, { "intake.claim": claimRecord(hostname, "yours") })
+    return { ok: true }
+  }
+
+  await patchIntake(project.id, { "intake.claim": claimRecord(held.canonicalHostname, "yours") })
+  return { ok: true }
+}
+
 async function prepareIntakeRun(
   projectId: string,
   options: { userId?: string; allowReassessment?: boolean },
@@ -419,6 +535,9 @@ async function prepareIntakeRun(
   if (intakeProgress(intake).status === "completed" && !options.allowReassessment) {
     return { ok: true, project, intake, alreadyDone: true }
   }
+
+  const claim = await ensureBusinessClaim(project, intake)
+  if (!claim.ok) return claim
 
   const cost = await businessJourneyCost(project, intake)
   if (cost.shortfall > 0) {
@@ -466,7 +585,13 @@ async function executeIntakeRun(project: MirrorProject, intake: BusinessIntake):
     // a domain can be claimed were just written by the source reads.
     const refreshed = await store.getProject(projectId)
     const current = refreshed?.intake ?? intake
-    await registerIntakeDomain(project, current, websiteFacts)
+    const domainClaim = await registerIntakeDomain(project, current, websiteFacts)
+    if (!domainClaim.ok) {
+      // Stop before the assessment: no credits for a business that cannot be
+      // connected, and no assessment that would describe someone else's site.
+      await releaseIntakeRun(projectId, "failed")
+      return { ok: false, code: domainClaim.code, message: domainClaim.message }
+    }
 
     const evidence: AssessmentEvidence = {
       ownerDescription: current.description ?? "",

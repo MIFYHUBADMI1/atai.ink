@@ -128,7 +128,9 @@ export function DomainVerification({
       const data = await patchJson<{ domain: DomainView }>(`${base}/${domain.id}`, { action: "release" })
       setDomains((current) => current.map((d) => (d.id === domain.id ? data.domain : d)))
       setConfirmRelease(null)
-      setNotice(`${domain.hostname} was released. The hostname is no longer claimed by this business.`)
+      setNotice(
+        `${domain.hostname} was released. The website is no longer claimed by this business, so another Atai account can connect it.`,
+      )
       onChanged?.()
     })
   }
@@ -368,7 +370,9 @@ export function DomainVerification({
               </Button>
               {confirmRelease === domain.id ? (
                 <span className="inline-flex items-center gap-2 text-xs">
-                  <span className="text-muted-foreground">Release this claim?</span>
+                  <span className="text-muted-foreground">
+                    Release this claim? The website becomes connectable by any Atai account.
+                  </span>
                   <Button type="button" size="sm" variant="destructive" onClick={() => release(domain)} disabled={busy === `release-${domain.id}`}>
                     Yes, release
                   </Button>

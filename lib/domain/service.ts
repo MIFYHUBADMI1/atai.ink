@@ -18,18 +18,32 @@
  * limitations" in the engineering report for the encryption-at-rest follow-up.
  */
 import { timingSafeEqual, createHash } from "node:crypto"
-import { ObjectId } from "mongodb"
+import { ObjectId, type ClientSession } from "mongodb"
 import { businessDomainsCol } from "@/lib/db/collections"
 import { cryptoId, store } from "@/lib/store/store"
 import { generateToken } from "@/lib/auth/crypto"
 import { checkRateLimit } from "@/lib/auth/rate-limit"
 import { logger } from "@/lib/logging/logger"
-import { DomainInputError, assertSiteUrl, normalizeHostname, registrableDomainOf } from "./host"
+import { DomainInputError, assertSiteUrl, canonicalBusinessHost, normalizeHostname, registrableDomainOf } from "./host"
+import {
+  BUSINESS_ALREADY_CONNECTED_MESSAGE,
+  BUSINESS_ALREADY_CONNECTED_MESSAGE_SAME_ACCOUNT,
+  type BusinessClaimState,
+} from "./claim-copy"
 import { DomainFetchError, safeFetchDocument } from "./secure-fetch"
 import { buildMetaTagSnippet, diagnoseVerificationMeta } from "./html-meta"
 import type { BusinessDomainDoc, BusinessDomainMethod, BusinessDomainStatus } from "@/lib/types/business-intake"
 
 export const DOMAIN_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000
+/** How long an unverified claim keeps a business out of other accounts' reach.
+ * Anti-squatting: reserve, then prove it. A verified claim never expires. */
+export const CLAIM_RESERVATION_TTL_MS = 72 * 60 * 60 * 1000
+
+export {
+  BUSINESS_ALREADY_CONNECTED_MESSAGE,
+  BUSINESS_ALREADY_CONNECTED_MESSAGE_SAME_ACCOUNT,
+  type BusinessClaimState,
+} from "./claim-copy"
 export const MAX_DOMAIN_HISTORY = 20
 /** Consecutive failed checks on an already-verified domain before we stop
  * calling it verified. The first failure only raises an attention flag — a
@@ -153,20 +167,36 @@ export async function registerDomain(input: {
   }
   const col = await businessDomainsCol()
   const now = Date.now()
+  const canonicalHostname = canonicalBusinessHost(target.hostname)
+  await expireStaleClaims(canonicalHostname, now)
 
-  const existing = await col.findOne({ hostname: target.hostname, projectId: input.projectId })
+  // A reservation made at creation time becomes a challenge here, so a founder
+  // who never opened the domain step still gets a token when they do.
+  const existing = (await col.findOne({
+    projectId: input.projectId,
+    hostname: target.hostname,
+    releasedAt: { $exists: false },
+  })) as BusinessDomainDoc | null
   if (existing) {
-    return { doc: existing as BusinessDomainDoc, created: false }
+    return { doc: await ensureChallenge(existing, canonicalHostname, now), created: false }
   }
 
-  const holder = await col.findOne({ hostname: target.hostname, releasedAt: { $exists: false } })
-  if (holder) {
-    // Never reveal who owns it, or that a business by that name exists.
-    throw new DomainServiceError(
-      "DOMAIN_TAKEN",
-      "That domain is already associated with another Atai business. Contact support if you believe this is a mistake.",
-      409,
-    )
+  // The canonical host decides "same business" — apex and `www` are one claim.
+  const holder = await findActiveClaim(canonicalHostname, now)
+  if (holder && holder.projectId !== input.projectId) {
+    if (holder.userId === input.userId) {
+      throw new DomainServiceError("BUSINESS_ALREADY_CONNECTED", BUSINESS_ALREADY_CONNECTED_MESSAGE_SAME_ACCOUNT, 409)
+    }
+    // Exact-host conflicts keep the historical code; an alias conflict is the
+    // canonical case. Both are the same refusal to the founder.
+    if (holder.hostname === target.hostname) {
+      throw new DomainServiceError(
+        "DOMAIN_TAKEN",
+        "That domain is already associated with another Atai business. Contact support if you believe this is a mistake.",
+        409,
+      )
+    }
+    throw new DomainServiceError("BUSINESS_ALREADY_CONNECTED", BUSINESS_ALREADY_CONNECTED_MESSAGE, 409)
   }
 
   const token = generateToken()
@@ -177,6 +207,9 @@ export async function registerDomain(input: {
     projectId: input.projectId,
     userId: input.userId,
     hostname: target.hostname,
+    canonicalHostname,
+    // Same project, second exact host: an alias of the same business.
+    ...(holder ? { aliasOf: holder.id } : {}),
     registrableDomain: registrableDomainOf(target.hostname),
     submittedUrl: target.homepageUrl,
     status: "pending",
@@ -187,6 +220,7 @@ export async function registerDomain(input: {
     tokenGeneration: 1,
     tokenCreatedAt: now,
     tokenExpiresAt: now + DOMAIN_TOKEN_TTL_MS,
+    claimExpiresAt: now + CLAIM_RESERVATION_TTL_MS,
     attempts: 0,
     history: [{ status: "pending" as BusinessDomainStatus, at: now, detail: "challenge created" }],
     createdAt: now,
@@ -196,24 +230,325 @@ export async function registerDomain(input: {
   try {
     await col.insertOne(doc)
   } catch (error) {
-    // The unique hostname index is the authority on conflicts; a race lands
-    // here rather than in the pre-check above.
+    // The unique indexes are the authority on conflicts; a race lands here
+    // rather than in the pre-check above.
     if (isDuplicateKeyError(error)) {
-      throw new DomainServiceError(
-        "DOMAIN_TAKEN",
-        "That domain is already associated with another Atai business. Contact support if you believe this is a mistake.",
-        409,
-      )
+      const own = (await col.findOne({
+        projectId: input.projectId,
+        hostname: target.hostname,
+        releasedAt: { $exists: false },
+      })) as BusinessDomainDoc | null
+      if (own) return { doc: own, created: false }
+      const raced = await findActiveClaim(canonicalHostname, now)
+      if (raced && raced.hostname === target.hostname) {
+        throw new DomainServiceError(
+          "DOMAIN_TAKEN",
+          "That domain is already associated with another Atai business. Contact support if you believe this is a mistake.",
+          409,
+        )
+      }
+      throw new DomainServiceError("BUSINESS_ALREADY_CONNECTED", BUSINESS_ALREADY_CONNECTED_MESSAGE, 409)
     }
     throw error
   }
-  logger.info("domain.register", "hostname claimed", { projectId: input.projectId, hostname: target.hostname })
+  logger.info("domain.register", "hostname claimed", {
+    projectId: input.projectId,
+    hostname: target.hostname,
+    alias: Boolean(holder),
+  })
   return { doc, created: true }
+}
+
+/** Mint (or restore) the verification challenge on an existing claim without
+ * ever weakening a verified one. */
+async function ensureChallenge(doc: BusinessDomainDoc, canonicalHostname: string, now: number): Promise<BusinessDomainDoc> {
+  const col = await businessDomainsCol()
+  const setCanonical = doc.canonicalHostname ? {} : { canonicalHostname }
+  const hasUsableToken = Boolean(doc.token) && doc.status !== "expired"
+  if (hasUsableToken) {
+    if (Object.keys(setCanonical).length) {
+      await col.updateOne({ id: doc.id }, { $set: { ...setCanonical, updatedAt: now } })
+    }
+    return { ...doc, ...setCanonical } as BusinessDomainDoc
+  }
+  const token = generateToken()
+  const next = {
+    ...setCanonical,
+    token,
+    tokenHash: hashDomainToken(token),
+    fileName: fileNameForToken(token),
+    tokenGeneration: (doc.tokenGeneration ?? 1) + 1,
+    tokenCreatedAt: now,
+    tokenExpiresAt: now + DOMAIN_TOKEN_TTL_MS,
+    status: (doc.verifiedAt ? doc.status : "pending") as BusinessDomainStatus,
+    attempts: 0,
+    claimExpiresAt: doc.claimExpiresAt ?? now + CLAIM_RESERVATION_TTL_MS,
+    updatedAt: now,
+  }
+  await col.updateOne({ id: doc.id }, { $set: next, $push: historyPush("pending", "challenge created") })
+  logger.info("domain.register", "challenge restored on an existing claim", { projectId: doc.projectId, hostname: doc.hostname })
+  return { ...doc, ...next } as BusinessDomainDoc
 }
 
 function isDuplicateKeyError(error: unknown): boolean {
   const code = (error as { code?: number })?.code
   return code === 11000 || String((error as Error)?.message ?? "").includes("E11000")
+}
+
+// ── Business claims ─────────────────────────────────────────────────────────
+// "One business belongs to one account." A claim is the `business_domains`
+// record itself — there is no second registry. The exact hostname stays the
+// verification target; the canonical host is only the uniqueness key.
+
+/** Canonical host for anything a founder can type: a URL, an origin or a bare
+ * host. Returns "" when the input cannot be understood as a website. */
+export function canonicalHostFromInput(rawUrlOrHost: string): string {
+  const value = (rawUrlOrHost ?? "").trim()
+  if (!value) return ""
+  try {
+    return canonicalBusinessHost(assertSiteUrl(value).hostname)
+  } catch {
+    try {
+      return canonicalBusinessHost(normalizeHostname(value))
+    } catch {
+      return ""
+    }
+  }
+}
+
+/**
+ * An active claim blocks other accounts. Verified claims never expire; an
+ * unverified reservation stops blocking after its window (anti-squatting), and
+ * a record written before `claimExpiresAt` existed falls back to its challenge
+ * expiry so nothing blocks forever.
+ */
+export function claimIsActive(doc: BusinessDomainDoc, now = Date.now()): boolean {
+  if (doc.releasedAt !== undefined) return false
+  if (doc.verifiedAt !== undefined) return true
+  if (doc.claimExpiresAt !== undefined) return doc.claimExpiresAt > now
+  if (doc.tokenExpiresAt !== undefined) return doc.tokenExpiresAt > now
+  return true
+}
+
+/** The active claim for a canonical business host, if any. Never returns who
+ * holds it to a caller outside the service — callers decide what to disclose. */
+export async function findActiveClaim(canonicalHostname: string, now = Date.now()): Promise<BusinessDomainDoc | null> {
+  if (!canonicalHostname) return null
+  const col = await businessDomainsCol()
+  const candidates = (await col
+    .find({
+      releasedAt: { $exists: false },
+      hostname: { $in: [canonicalHostname, `www.${canonicalHostname}`] },
+    })
+    .sort({ createdAt: 1 })
+    .toArray()) as BusinessDomainDoc[]
+  const active = candidates.filter(
+    (doc) => canonicalBusinessHost(doc.hostname) === canonicalHostname && claimIsActive(doc, now),
+  )
+  // A primary claim is the authority; an alias only matters if its primary is gone.
+  return active.find((doc) => !doc.aliasOf) ?? active[0] ?? null
+}
+
+/**
+ * Release reservations whose window passed without verification. The unique
+ * index knows nothing about time, so an expired reservation would otherwise
+ * keep occupying the business forever — exactly the squatting the window exists
+ * to prevent. Verified claims are never touched.
+ */
+async function expireStaleClaims(canonicalHostname: string, now: number): Promise<void> {
+  if (!canonicalHostname) return
+  const col = await businessDomainsCol()
+  const candidates = (await col
+    .find({
+      releasedAt: { $exists: false },
+      hostname: { $in: [canonicalHostname, `www.${canonicalHostname}`] },
+    })
+    .toArray()) as BusinessDomainDoc[]
+  for (const doc of candidates) {
+    if (doc.verifiedAt !== undefined || claimIsActive(doc, now)) continue
+    await col.updateOne(
+      { id: doc.id },
+      {
+        $set: { status: "revoked" as BusinessDomainStatus, releasedAt: now, updatedAt: now },
+        $unset: { token: "", tokenHash: "", claimExpiresAt: "" },
+        $push: historyPush("revoked", "reservation expired without verification"),
+      },
+    )
+    logger.info("business.claim", "expired reservation released", { projectId: doc.projectId, hostname: doc.hostname })
+  }
+}
+
+export async function canonicalClaimFor(
+  rawUrlOrHost: string,
+  now = Date.now(),
+): Promise<{ doc: BusinessDomainDoc; canonicalHostname: string } | null> {
+  const canonicalHostname = canonicalHostFromInput(rawUrlOrHost)
+  if (!canonicalHostname) return null
+  const doc = await findActiveClaim(canonicalHostname, now)
+  return doc ? { doc, canonicalHostname } : null
+}
+
+export type ReserveClaimResult =
+  | { state: "reserved"; doc: BusinessDomainDoc; created: boolean; canonicalHostname: string }
+  | { state: "reuse"; projectId: string }
+  | { state: "refused"; code: string; message: string; status: number }
+
+function claimDoc(input: {
+  userId: string
+  projectId: string
+  target: { hostname: string; homepageUrl: string }
+  canonicalHostname: string
+  now: number
+  aliasOf?: string
+}): BusinessDomainDoc & { _id: ObjectId } {
+  return {
+    _id: new ObjectId(),
+    id: cryptoId(),
+    projectId: input.projectId,
+    userId: input.userId,
+    hostname: input.target.hostname,
+    canonicalHostname: input.canonicalHostname,
+    ...(input.aliasOf ? { aliasOf: input.aliasOf } : {}),
+    registrableDomain: registrableDomainOf(input.target.hostname),
+    submittedUrl: input.target.homepageUrl,
+    // No token yet: this is a reservation, not a challenge. `registerDomain`
+    // mints the challenge when the founder actually reaches verification.
+    status: "pending",
+    attempts: 0,
+    claimExpiresAt: input.now + CLAIM_RESERVATION_TTL_MS,
+    history: [
+      {
+        status: "pending" as BusinessDomainStatus,
+        at: input.now,
+        detail: input.aliasOf ? "reserved as an alias of the same business" : "business reserved",
+      },
+    ],
+    createdAt: input.now,
+    updatedAt: input.now,
+  }
+}
+
+/**
+ * Reserve a business for a project before anything is created or charged.
+ *
+ * - Already reserved by this project for this exact host → idempotent.
+ * - Held by another project of the same account → `reuse`, so the founder lands
+ *   on the business they already have instead of a second one.
+ * - Held by another account → `refused`; nothing about the holder is returned.
+ */
+export async function reserveBusinessClaim(input: {
+  userId: string
+  projectId: string
+  rawUrl: string
+  now?: number
+}): Promise<ReserveClaimResult> {
+  const now = input.now ?? Date.now()
+  let target
+  try {
+    target = assertSiteUrl(input.rawUrl)
+  } catch (error) {
+    const code = error instanceof DomainInputError ? error.code : "DOMAIN_INVALID"
+    const message = error instanceof DomainInputError ? error.message : "That does not look like a website address."
+    return { state: "refused", code, message, status: 422 }
+  }
+  const canonicalHostname = canonicalBusinessHost(target.hostname)
+  const col = await businessDomainsCol()
+  await expireStaleClaims(canonicalHostname, now)
+
+  const mine = (await col.findOne({
+    projectId: input.projectId,
+    hostname: target.hostname,
+    releasedAt: { $exists: false },
+  })) as BusinessDomainDoc | null
+  if (mine) {
+    if (!mine.canonicalHostname) {
+      await col.updateOne({ id: mine.id }, { $set: { canonicalHostname, updatedAt: now } })
+    }
+    return { state: "reserved", doc: { ...mine, canonicalHostname }, created: false, canonicalHostname }
+  }
+
+  const holder = await findActiveClaim(canonicalHostname, now)
+  if (holder && holder.projectId !== input.projectId) {
+    if (holder.userId === input.userId) return { state: "reuse", projectId: holder.projectId }
+    logger.info("business.claim", "refused", { projectId: input.projectId, userId: input.userId, hostname: target.hostname, reason: "held_by_other" })
+    return { state: "refused", code: "BUSINESS_ALREADY_CONNECTED", message: BUSINESS_ALREADY_CONNECTED_MESSAGE, status: 409 }
+  }
+
+  try {
+    const doc = claimDoc({
+      userId: input.userId,
+      projectId: input.projectId,
+      target,
+      canonicalHostname,
+      now,
+      // Same project, second exact host (apex + www): an alias, never a second business.
+      ...(holder ? { aliasOf: holder.id } : {}),
+    })
+    await col.insertOne(doc)
+    logger.info("business.claim", "reserved", {
+      projectId: input.projectId,
+      userId: input.userId,
+      hostname: target.hostname,
+      alias: Boolean(holder),
+    })
+    return { state: "reserved", doc, created: true, canonicalHostname }
+  } catch (error) {
+    if (!isDuplicateKeyError(error)) throw error
+    // The unique index settled the race. Read back who won.
+    const own = (await col.findOne({
+      projectId: input.projectId,
+      hostname: target.hostname,
+      releasedAt: { $exists: false },
+    })) as BusinessDomainDoc | null
+    if (own) return { state: "reserved", doc: own, created: false, canonicalHostname }
+    const raced = await findActiveClaim(canonicalHostname, now)
+    if (raced && raced.userId === input.userId) return { state: "reuse", projectId: raced.projectId }
+    logger.info("business.claim", "refused", { projectId: input.projectId, userId: input.userId, hostname: target.hostname, reason: "race" })
+    return { state: "refused", code: "BUSINESS_ALREADY_CONNECTED", message: BUSINESS_ALREADY_CONNECTED_MESSAGE, status: 409 }
+  }
+}
+
+/** Founder-facing claim state for a website, with no disclosure of the holder. */
+export async function claimStateFor(input: {
+  userId: string
+  projectId?: string
+  rawUrl?: string
+  now?: number
+}): Promise<{ hostname?: string; state: BusinessClaimState }> {
+  const canonicalHostname = canonicalHostFromInput(input.rawUrl ?? "")
+  if (!canonicalHostname) return { state: "unclaimed" }
+  const holder = await findActiveClaim(canonicalHostname, input.now ?? Date.now())
+  if (!holder) return { hostname: canonicalHostname, state: "unclaimed" }
+  if (holder.userId !== input.userId) return { hostname: canonicalHostname, state: "held_by_other" }
+  return { hostname: canonicalHostname, state: "yours" }
+}
+
+/**
+ * Release every claim a project holds. Used by project deletion (inside its
+ * transaction) and by support tooling. Released records keep their audit trail
+ * and stop participating in the unique index.
+ */
+export async function releaseProjectClaims(
+  projectId: string,
+  reason: string,
+  options: { session?: ClientSession; now?: number } = {},
+): Promise<number> {
+  const col = await businessDomainsCol()
+  const now = options.now ?? Date.now()
+  const result = await col.updateMany(
+    { projectId, releasedAt: { $exists: false } },
+    {
+      $set: { status: "revoked" as BusinessDomainStatus, releasedAt: now, updatedAt: now },
+      $unset: { token: "", tokenHash: "", claimExpiresAt: "" },
+      $push: historyPush("revoked", reason),
+    },
+    options.session ? { session: options.session } : {},
+  )
+  const released = result.modifiedCount ?? 0
+  if (released > 0) {
+    logger.info("business.claim", "released", { projectId, count: released, reason })
+  }
+  return released
 }
 
 export async function listProjectDomains(projectId: string): Promise<BusinessDomainDoc[]> {
@@ -492,12 +827,23 @@ export async function releaseDomain(input: { userId: string; projectId: string; 
     { id: doc.id },
     {
       $set: { status: "revoked", releasedAt: now, updatedAt: now },
-      // A released claim keeps no usable secret, not even a display copy.
-      $unset: { tokenHash: "", token: "" },
+      // A released claim keeps no usable secret, not even a display copy — and
+      // no reservation window, because the hostname is free again immediately.
+      $unset: { tokenHash: "", token: "", claimExpiresAt: "" },
       $push: historyPush("revoked", input.reason ?? "released by owner"),
     },
   )
   logger.info("domain.release", "claim released", { domainId: doc.id, hostname: doc.hostname })
+  // Releasing the last verified domain must drop a cached "connected" status.
+  try {
+    const { refreshConnectionStatus } = await import("@/lib/connected-business/service")
+    await refreshConnectionStatus(input.projectId)
+  } catch (error) {
+    logger.warn("domain.release", "connection status not refreshed", {
+      projectId: input.projectId,
+      message: error instanceof Error ? error.message : String(error),
+    })
+  }
   return next
 }
 

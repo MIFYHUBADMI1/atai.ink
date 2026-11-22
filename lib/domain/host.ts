@@ -126,6 +126,44 @@ export function registrableDomainOf(hostname: string): string {
   return lastTwo
 }
 
+/** `true` when the host is a bare public suffix (`com`, `co.uk`) — such a host
+ * can never be a business on its own, so `www.` in front of it is not an alias. */
+function isPublicSuffixOnly(host: string): boolean {
+  const labels = host.split(".")
+  if (labels.length === 1) return true
+  return labels.length === 2 && KNOWN_SECOND_LEVEL_SUFFIXES.has(host)
+}
+
+/**
+ * The key that decides "this is the same business", used ONLY for uniqueness and
+ * conflict checks. It is deliberately NOT a verification target: a challenge is
+ * always verified against the exact hostname the founder submitted (see the file
+ * header), so collapsing `www.example.com` to `example.com` here can never let
+ * one site's tag verify another site.
+ *
+ * Rules: `www.example.com` and `example.com` are one business; subdomains
+ * (`shop.example.com`) stay distinct; IP literals are left alone; `www.co.uk`
+ * keeps its `www.` because `co.uk` is a public suffix, not a business.
+ */
+export function canonicalBusinessHost(hostname: string): string {
+  let host: string
+  try {
+    host = normalizeHostname(hostname)
+  } catch {
+    return (hostname ?? "").trim().toLowerCase()
+  }
+  if (isIpLiteralHost(host)) return host
+  if (!host.startsWith("www.")) return host
+  const remainder = host.slice("www.".length)
+  if (!remainder.includes(".") || isPublicSuffixOnly(remainder)) return host
+  return remainder
+}
+
+/** Do two hostnames point at the same business, ignoring a safe `www.` alias? */
+export function sameBusinessHost(a: string, b: string): boolean {
+  return canonicalBusinessHost(a) === canonicalBusinessHost(b)
+}
+
 /**
  * Parse a submitted website address into the exact origin we will verify.
  * Only http/https, no credentials, no path/query, and only the default web

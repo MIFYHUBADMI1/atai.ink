@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest"
 import {
   DomainInputError,
   assertSiteUrl,
+  canonicalBusinessHost,
+  sameBusinessHost,
   formatHostForUrl,
   isIpLiteralHost,
   normalizeHostname,
@@ -129,5 +131,42 @@ describe("helpers", () => {
     expect(sameHost("WWW.Example.com", "www.example.com")).toBe(true)
     expect(sameHost("example.com", "shop.example.com")).toBe(false)
     expect(sameHost("example.com", "")).toBe(false)
+  })
+})
+
+describe("canonicalBusinessHost", () => {
+  it("treats www and the apex as one business", () => {
+    expect(canonicalBusinessHost("www.example.com")).toBe("example.com")
+    expect(canonicalBusinessHost("example.com")).toBe("example.com")
+    expect(sameBusinessHost("https://www.example.com", "https://example.com")).toBe(true)
+    expect(canonicalBusinessHost("WWW.Example.COM")).toBe("example.com")
+  })
+
+  it("keeps multi-label public suffixes intact", () => {
+    expect(canonicalBusinessHost("www.example.co.uk")).toBe("example.co.uk")
+    expect(canonicalBusinessHost("www.co.uk")).toBe("www.co.uk")
+    expect(canonicalBusinessHost("co.uk")).toBe("co.uk")
+  })
+
+  it("keeps subdomains distinct from the apex", () => {
+    expect(canonicalBusinessHost("shop.example.com")).toBe("shop.example.com")
+    expect(sameBusinessHost("shop.example.com", "example.com")).toBe(false)
+  })
+
+  it("leaves IP literals alone", () => {
+    expect(canonicalBusinessHost("192.168.0.1")).toBe("192.168.0.1")
+    expect(canonicalBusinessHost("[::1]")).toContain("::1")
+    expect(canonicalBusinessHost("[::1]")).not.toBe("")
+  })
+
+  it("punycodes IDN hosts the same way verification does", () => {
+    expect(canonicalBusinessHost("www.例え.jp")).toBe(canonicalBusinessHost("例え.jp"))
+    expect(canonicalBusinessHost("www.例え.jp")).toBe("xn--r8jz45g.jp")
+  })
+
+  it("never throws on junk, so a conflict check cannot fail the request", () => {
+    expect(typeof canonicalBusinessHost("not a host")).toBe("string")
+    expect(canonicalBusinessHost("")).toBe("")
+    expect(sameBusinessHost("", "example.com")).toBe(false)
   })
 })

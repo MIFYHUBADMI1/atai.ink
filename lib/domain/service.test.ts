@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { BusinessDomainDoc } from "@/lib/types/business-intake"
+import { canonicalBusinessHost } from "./host"
 
 // The dev database is a shared remote cluster; these tests run against an
 // in-memory collection that emulates the unique-hostname index and the
@@ -14,6 +15,9 @@ function makeCol() {
       if (cond && typeof cond === "object" && "$exists" in (cond as Doc)) {
         return (cond as { $exists: boolean }).$exists ? doc[key] !== undefined : doc[key] === undefined
       }
+      if (cond && typeof cond === "object" && "$in" in (cond as Doc)) {
+        return (cond as { $in: unknown[] }).$in.includes(doc[key])
+      }
       return doc[key] === cond
     })
   return {
@@ -22,7 +26,16 @@ function makeCol() {
       return docs.find((d) => matches(d, filter)) ?? null
     },
     async insertOne(doc: Doc) {
-      if (docs.some((d) => d.hostname === doc.hostname && d.releasedAt === undefined)) {
+      const canonical = (d: Doc) =>
+        (d.canonicalHostname as string | undefined) ?? canonicalBusinessHost(String(d.hostname))
+      if (
+        docs.some(
+          (d) =>
+            d.releasedAt === undefined &&
+            (d.hostname === doc.hostname ||
+              (!d.aliasOf && !doc.aliasOf && canonical(d) === canonical(doc))),
+        )
+      ) {
         throw Object.assign(new Error("E11000 duplicate key error"), { code: 11000 })
       }
       docs.push({ ...doc })
@@ -46,8 +59,25 @@ function makeCol() {
       }
       return { matchedCount: 1 }
     },
+    async updateMany(filter: Doc, update: Doc) {
+      const hits = docs.filter((d) => matches(d, filter))
+      for (const doc of hits) {
+        if (update.$set) Object.assign(doc, update.$set)
+        if (update.$unset) for (const key of Object.keys(update.$unset as Doc)) delete doc[key]
+        if (update.$push) {
+          for (const [key, raw] of Object.entries(update.$push as Record<string, Doc>)) {
+            const spec = raw as { $each?: unknown[]; $position?: number; $slice?: number }
+            const arr = ((doc[key] as unknown[] | undefined) ?? []).slice()
+            arr.splice(spec.$position ?? arr.length, 0, ...(spec.$each ?? [raw]))
+            doc[key] = typeof spec.$slice === "number" ? arr.slice(0, spec.$slice) : arr
+          }
+        }
+      }
+      return { matchedCount: hits.length, modifiedCount: hits.length }
+    },
     find(filter: Doc) {
-      return { sort: () => ({ toArray: async () => docs.filter((d) => matches(d, filter)) }) }
+      const toArray = async () => docs.filter((d) => matches(d, filter))
+      return { toArray, sort: () => ({ toArray }) }
     },
   }
 }
@@ -67,6 +97,9 @@ vi.mock("@/lib/auth/rate-limit", () => ({
 vi.mock("@/lib/logging/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
+vi.mock("@/lib/connected-business/service", () => ({
+  refreshConnectionStatus: vi.fn(async () => "not_connected"),
+}))
 vi.mock("./secure-fetch", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./secure-fetch")>()),
   safeFetchDocument: vi.fn(),
@@ -76,6 +109,8 @@ import { checkRateLimit } from "@/lib/auth/rate-limit"
 import { store } from "@/lib/store/store"
 import { safeFetchDocument, DomainFetchError } from "./secure-fetch"
 import {
+  BUSINESS_ALREADY_CONNECTED_MESSAGE,
+  CLAIM_RESERVATION_TTL_MS,
   DOMAIN_TOKEN_TTL_MS,
   MAX_DOMAIN_HISTORY,
   REVERIFICATION_FAILURE_GRACE,
@@ -90,7 +125,13 @@ import {
   verifyDomainOwnership,
   releaseDomain,
   toDomainView,
+  canonicalClaimFor,
+  claimIsActive,
+  claimStateFor,
+  releaseProjectClaims,
+  reserveBusinessClaim,
 } from "./service"
+import { refreshConnectionStatus } from "@/lib/connected-business/service"
 import { buildMetaTagSnippet } from "./html-meta"
 
 const fetchMock = vi.mocked(safeFetchDocument)
@@ -540,5 +581,124 @@ describe("bounded history", () => {
     expect(history[0].detail).toBe("META_MISSING") // newest survived the slice
     const view = toDomainView(stored as unknown as BusinessDomainDoc)
     expect(view.history).toHaveLength(MAX_DOMAIN_HISTORY)
+  })
+})
+
+describe("business claims", () => {
+  it("reserves a business for a new project and is idempotent for the same project", async () => {
+    const first = await reserveBusinessClaim({ userId: "user-1", projectId: "proj-1", rawUrl: "https://example.com" })
+    expect(first.state).toBe("reserved")
+    if (first.state !== "reserved") return
+    expect(first.created).toBe(true)
+    expect(first.doc.canonicalHostname).toBe("example.com")
+    expect(first.doc.token).toBeUndefined()
+
+    const again = await reserveBusinessClaim({ userId: "user-1", projectId: "proj-1", rawUrl: "https://example.com/" })
+    expect(again.state).toBe("reserved")
+    if (again.state !== "reserved") return
+    expect(again.created).toBe(false)
+    expect(again.doc.id).toBe(first.doc.id)
+
+    // The other exact host of the same business becomes an alias, not a rival claim.
+    const alias = await reserveBusinessClaim({ userId: "user-1", projectId: "proj-1", rawUrl: "https://www.example.com/x" })
+    expect(alias.state).toBe("reserved")
+    if (alias.state !== "reserved") return
+    expect(alias.doc.aliasOf).toBe(first.doc.id)
+    expect(col.docs.filter((d) => d.releasedAt === undefined)).toHaveLength(2)
+    expect(col.docs.filter((d) => d.aliasOf === undefined)).toHaveLength(1)
+  })
+
+  it("hands a second project of the same account back to the existing business", async () => {
+    const first = await reserveBusinessClaim({ userId: "user-1", projectId: "proj-1", rawUrl: "https://example.com" })
+    expect(first.state).toBe("reserved")
+    const second = await reserveBusinessClaim({ userId: "user-1", projectId: "proj-2", rawUrl: "https://example.com" })
+    expect(second).toEqual({ state: "reuse", projectId: "proj-1" })
+  })
+
+  it("refuses another account without disclosing who holds the business", async () => {
+    await reserveBusinessClaim({ userId: "user-1", projectId: "proj-1", rawUrl: "https://example.com" })
+    const refused = await reserveBusinessClaim({ userId: "user-2", projectId: "proj-2", rawUrl: "https://www.example.com" })
+    expect(refused.state).toBe("refused")
+    if (refused.state !== "refused") return
+    expect(refused.code).toBe("BUSINESS_ALREADY_CONNECTED")
+    expect(refused.status).toBe(409)
+    expect(refused.message).toBe(BUSINESS_ALREADY_CONNECTED_MESSAGE)
+    expect(refused.message).not.toContain("user-1")
+    expect(refused.message).not.toContain("proj-1")
+    expect(col.docs.filter((d) => d.projectId === "proj-2")).toHaveLength(0)
+  })
+
+  it("treats apex and www as one business but keeps subdomains apart", async () => {
+    await reserveBusinessClaim({ userId: "user-1", projectId: "proj-1", rawUrl: "https://example.com" })
+    const www = await reserveBusinessClaim({ userId: "user-2", projectId: "proj-2", rawUrl: "https://www.example.com" })
+    expect(www.state).toBe("refused")
+    const shop = await reserveBusinessClaim({ userId: "user-2", projectId: "proj-2", rawUrl: "https://shop.example.com" })
+    expect(shop.state).toBe("reserved")
+  })
+
+  it("stops blocking once an unverified reservation expires", async () => {
+    const now = Date.now()
+    const first = await reserveBusinessClaim({ userId: "user-1", projectId: "proj-1", rawUrl: "https://example.com", now })
+    expect(first.state).toBe("reserved")
+    const later = now + CLAIM_RESERVATION_TTL_MS + 1
+    expect(claimIsActive(col.docs[0] as BusinessDomainDoc, later)).toBe(false)
+    expect(await canonicalClaimFor("https://example.com", later)).toBeNull()
+    const second = await reserveBusinessClaim({ userId: "user-2", projectId: "proj-2", rawUrl: "https://example.com", now: later })
+    expect(second.state).toBe("reserved")
+  })
+
+  it("never expires a verified claim, even long after the reservation window", async () => {
+    const doc = await register("https://example.com")
+    await col.updateOne({ id: doc.id }, { $set: { status: "verified", verifiedAt: Date.now() } })
+    const later = Date.now() + CLAIM_RESERVATION_TTL_MS * 10
+    const stored = storedDoc(doc.id) as BusinessDomainDoc
+    expect(claimIsActive(stored, later)).toBe(true)
+    expect((await canonicalClaimFor("https://example.com", later))?.doc.id).toBe(doc.id)
+  })
+
+  it("frees the hostname when the claim is released", async () => {
+    const doc = await register("https://example.com")
+    await releaseDomain({ ...OWNER, domainId: doc.id })
+    expect(await canonicalClaimFor("https://example.com")).toBeNull()
+    const other = await reserveBusinessClaim({ userId: "user-2", projectId: "proj-2", rawUrl: "https://example.com" })
+    expect(other.state).toBe("reserved")
+    expect(refreshConnectionStatus).toHaveBeenCalledWith("proj-1")
+  })
+
+  it("releases every claim of a project at once", async () => {
+    await register("https://example.com")
+    await register("https://www.example.com")
+    const released = await releaseProjectClaims("proj-1", "project deleted")
+    expect(released).toBe(2)
+    expect(col.docs.every((d) => d.releasedAt !== undefined)).toBe(true)
+    expect(col.docs.every((d) => d.token === undefined && d.tokenHash === undefined)).toBe(true)
+  })
+
+  it("reports the claim state to the founder without naming the holder", async () => {
+    expect(await claimStateFor({ userId: "user-1", rawUrl: "https://example.com" })).toEqual({
+      hostname: "example.com",
+      state: "unclaimed",
+    })
+    await reserveBusinessClaim({ userId: "user-1", projectId: "proj-1", rawUrl: "https://example.com" })
+    expect(await claimStateFor({ userId: "user-1", projectId: "proj-1", rawUrl: "https://example.com" })).toEqual({
+      hostname: "example.com",
+      state: "yours",
+    })
+    expect(await claimStateFor({ userId: "user-2", rawUrl: "https://www.example.com" })).toEqual({
+      hostname: "example.com",
+      state: "held_by_other",
+    })
+  })
+
+  it("turns a reservation into a verification challenge on demand", async () => {
+    const reserved = await reserveBusinessClaim({ userId: "user-1", projectId: "proj-1", rawUrl: "https://example.com" })
+    expect(reserved.state).toBe("reserved")
+    if (reserved.state !== "reserved") return
+    expect(reserved.doc.token).toBeUndefined()
+    const { doc, created } = await registerDomain({ ...OWNER, rawUrl: "https://example.com" })
+    expect(created).toBe(false)
+    expect(doc.id).toBe(reserved.doc.id)
+    expect(doc.token).toMatch(/^[A-Za-z0-9_-]{43}$/)
+    expect(col.docs).toHaveLength(1)
   })
 })

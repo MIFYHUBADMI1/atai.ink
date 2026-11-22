@@ -245,7 +245,9 @@ export const deleteProjectTool: ToolDefinition = {
           name: project.name,
           runtimeKeysRevoked: true,
           externalResourcesRemoved: false,
-          warning: "Hosted apps, external files, domains and subscriptions are not removed or cancelled. Shut them down separately. Financial and audit records are retained.",
+          businessClaimReleased: true,
+          warning:
+            "The Atai ownership claim on this business's website is released, so it can be connected again. Hosted apps, external files, DNS, domains and subscriptions are not removed or cancelled — shut them down separately. Financial and audit records are retained.",
         },
       }
     } catch (e) {

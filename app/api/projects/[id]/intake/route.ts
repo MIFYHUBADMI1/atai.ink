@@ -61,7 +61,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           meta: result.meta,
         })
       }
-      const status = result.code === "RATE_LIMITED" ? 429 : result.code === "INTAKE_IN_PROGRESS" ? 409 : 422
+      const status =
+        result.code === "RATE_LIMITED"
+          ? 429
+          : result.code === "INTAKE_IN_PROGRESS" || result.code === "BUSINESS_ALREADY_CONNECTED"
+            ? 409
+            : 422
       return fail(result.code, result.message, status, undefined, result.meta)
     }
 

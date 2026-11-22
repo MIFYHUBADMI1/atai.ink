@@ -827,6 +827,34 @@ async function runEnsureIndexes(): Promise<void> {
       { hostname: 1 },
       { unique: true, partialFilterExpression: { releasedAt: { $exists: false } }, name: "business_domains_hostname_active_unique" },
     ),
+    // One business, one claim. The canonical index is the database guarantee
+    // behind "this website is already connected" — a check-then-insert race can
+    // never create a second primary claim for the same business. Alias records
+    // (apex + www inside one project) are excluded, as are released records.
+    //
+    // Isolated on purpose: historical duplicates would make this fail, and one
+    // failing index must not abort the rest of the bootstrap. The report script
+    // names the rows to release; the app-level claim check still refuses new
+    // duplicates in the meantime.
+    businessDomains
+      .createIndex(
+        { canonicalHostname: 1 },
+        {
+          unique: true,
+          partialFilterExpression: {
+            releasedAt: { $exists: false },
+            aliasOf: { $exists: false },
+            canonicalHostname: { $type: "string" },
+          },
+          name: "business_domains_canonical_active_unique",
+        },
+      )
+      .catch((error) => {
+        console.error(
+          "[v0] business_domains canonical index not built — run scripts/backfill-business-claims.ts dry-run to see the collisions, then restart",
+          error,
+        )
+      }),
     businessDomains.createIndex({ projectId: 1, createdAt: -1 }),
     businessDomains.createIndex({ userId: 1, updatedAt: -1 }),
   ])

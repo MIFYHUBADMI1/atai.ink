@@ -29,6 +29,7 @@ function view(overrides: Partial<IntakeView> = {}): IntakeView {
     objectives: [],
     overall: "completed",
     website: { submitted: true, analyzed: true, status: "completed", url: "https://bakery.example", pagesCrawled: 3 },
+    claim: { state: "unclaimed" },
     domain: { records: [], verified: false },
     connection: { status: "not_connected", label: "Not connected" },
     assessment: { status: "completed", result: assessment, generatedAt: 1 },
@@ -149,4 +150,15 @@ describe("BusinessProfile", () => {
     expect(html).toContain("Your first read is ready")
   })
 
+})
+
+describe("BusinessProfile — a business held by another account", () => {
+  it("shows the blocked card instead of verification controls", () => {
+    const html = render(view({ claim: { hostname: "bakery.example", state: "held_by_other" } }))
+
+    expect(html).toContain("connected to another Atai account")
+    expect(html).not.toContain("Start verification")
+    expect(html).not.toContain("Add the tag, then check")
+    expect(html).not.toContain("atai-verification")
+  })
 })

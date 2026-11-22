@@ -78,11 +78,21 @@ vi.mock("@/lib/billing/credit-service", () => ({
   getAvailableCredits: vi.fn(async () => 1_000),
 }))
 vi.mock("@/lib/domain/service", () => ({
+  BUSINESS_ALREADY_CONNECTED_MESSAGE:
+    "This website is already connected to another Atai account. Only that account can disconnect it. If this is the business you own, contact support to recover it.",
   registerDomain: vi.fn(async () => ({
-    doc: { hostname: "bakery.example", status: "pending", method: "meta_tag" },
+    doc: { hostname: "bakery.example", status: "pending", method: "meta_tag", canonicalHostname: "bakery.example" },
     created: true,
   })),
   listProjectDomains: vi.fn(async () => []),
+  canonicalClaimFor: vi.fn(async () => null),
+  canonicalHostFromInput: (value: string) => value.replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, ""),
+  reserveBusinessClaim: vi.fn(async () => ({
+    state: "reserved",
+    doc: {},
+    created: true,
+    canonicalHostname: "bakery.example",
+  })),
 }))
 vi.mock("./website-facts", () => ({
   collectWebsiteFacts: vi.fn(),
@@ -113,7 +123,7 @@ import { checkRateLimit } from "@/lib/auth/rate-limit"
 import { chargeBusinessReadCredits, hasSufficientCredits } from "@/lib/credits/credits"
 import { getExistingBusinessCosts } from "@/lib/billing/runtime-config"
 import { getAvailableCredits } from "@/lib/billing/credit-service"
-import { registerDomain, listProjectDomains } from "@/lib/domain/service"
+import { registerDomain, listProjectDomains, canonicalClaimFor, reserveBusinessClaim } from "@/lib/domain/service"
 import { collectWebsiteFacts } from "./website-facts"
 import { generateBusinessAssessment } from "./assessment"
 import {
@@ -132,6 +142,8 @@ const costsMock = vi.mocked(getExistingBusinessCosts)
 const availableMock = vi.mocked(getAvailableCredits)
 const affordableMock = vi.mocked(hasSufficientCredits)
 const registerMock = vi.mocked(registerDomain)
+const claimMock = vi.mocked(canonicalClaimFor)
+const reserveMock = vi.mocked(reserveBusinessClaim)
 const domainsMock = vi.mocked(listProjectDomains)
 const websiteMock = vi.mocked(collectWebsiteFacts)
 const assessmentMock = vi.mocked(generateBusinessAssessment)
@@ -179,6 +191,17 @@ beforeEach(() => {
   costsMock.mockResolvedValue({ readCost: 40, assessmentCost: 60 })
   rateMock.mockResolvedValue(undefined as never)
   domainsMock.mockResolvedValue([])
+  registerMock.mockResolvedValue({
+    doc: { hostname: "bakery.example", status: "pending", method: "meta_tag", canonicalHostname: "bakery.example" },
+    created: true,
+  } as Awaited<ReturnType<typeof registerDomain>>)
+  claimMock.mockResolvedValue(null)
+  reserveMock.mockResolvedValue({
+    state: "reserved",
+    doc: {},
+    created: true,
+    canonicalHostname: "bakery.example",
+  } as Awaited<ReturnType<typeof reserveBusinessClaim>>)
 })
 
 describe("buildIntakeRecord", () => {
@@ -486,10 +509,54 @@ describe("runBusinessIntake — sources and billing", () => {
     expect(evidence.domainVerified).toBe(true)
   })
 
-  it("a taken domain never blocks initialization", async () => {
+  it("a business held by another account stops the run before the assessment", async () => {
     registerMock.mockRejectedValue(Object.assign(new Error("taken"), { code: "DOMAIN_TAKEN" }))
     const result = await runBusinessIntake("proj-1")
-    expect(result).toMatchObject({ ok: true, status: "completed", assessmentCompleted: true })
+    expect(result).toMatchObject({ ok: false, code: "BUSINESS_ALREADY_CONNECTED" })
+    if (!result.ok) expect(result.message).not.toContain("user-2")
+    expect(assessmentMock).not.toHaveBeenCalled()
+    expect(stages().run?.status).toBe("failed")
+    expect(stages().claim).toMatchObject({ state: "held_by_other" })
+  })
+
+  it("never fails the run when only the redirect target is held by another account", async () => {
+    websiteMock.mockResolvedValue({
+      facts: { ...websiteFacts, normalizedUrl: "https://platform.example/landing" },
+    } as Awaited<ReturnType<typeof collectWebsiteFacts>>)
+    registerMock
+      .mockResolvedValueOnce({
+        doc: { hostname: "bakery.example", status: "pending", method: "meta_tag", canonicalHostname: "bakery.example" },
+        created: false,
+      } as Awaited<ReturnType<typeof registerDomain>>)
+      .mockRejectedValueOnce(Object.assign(new Error("taken"), { code: "DOMAIN_TAKEN" }))
+
+    const result = await runBusinessIntake("proj-1")
+
+    expect(result).toMatchObject({ ok: true })
+    expect(registerMock).toHaveBeenCalledTimes(2)
+    expect(assessmentMock).toHaveBeenCalled()
+    expect(stages().claim).toMatchObject({ state: "yours", hostname: "bakery.example" })
+  })
+
+  it("refuses before the crawl when another account holds the business", async () => {
+    claimMock.mockResolvedValue({
+      doc: { userId: "user-2", projectId: "proj-2", hostname: "bakery.example" },
+      canonicalHostname: "bakery.example",
+    } as Awaited<ReturnType<typeof canonicalClaimFor>>)
+    const result = await runBusinessIntake("proj-1")
+    expect(result).toMatchObject({ ok: false, code: "BUSINESS_ALREADY_CONNECTED" })
+    expect(websiteMock).not.toHaveBeenCalled()
+    expect(assessmentMock).not.toHaveBeenCalled()
+    expect(stages().claim).toMatchObject({ state: "held_by_other" })
+  })
+
+  it("reserves the business on the first run of a project created before claims existed", async () => {
+    const result = await runBusinessIntake("proj-1")
+    expect(result).toMatchObject({ ok: true })
+    expect(reserveMock).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: "user-1", projectId: "proj-1", rawUrl: "https://bakery.example" }),
+    )
+    expect(stages().claim).toMatchObject({ state: "yours" })
   })
 
   it("an assessment failure keeps the collected evidence and reports partial completion", async () => {

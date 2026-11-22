@@ -106,3 +106,28 @@ describe("buildIntakeView — a failed stage says why", () => {
     expect(view.assessment.error).toEqual({ code: "ASSESSMENT_FAILED", message: "It failed." })
   })
 })
+
+describe("buildIntakeView — business claim", () => {
+  it("reports an unclaimed business before anything was reserved", () => {
+    expect(buildIntakeView(project()).claim).toEqual({ state: "unclaimed" })
+  })
+
+  it("reports the founder's own business once a domain record exists", () => {
+    const view = buildIntakeView(project(), [domain({ status: "pending" })])
+    expect(view.claim).toEqual({ hostname: "bakery.example", state: "yours" })
+  })
+
+  it("reports a business held by another account without naming the holder", () => {
+    const view = buildIntakeView(
+      project({
+        intake: {
+          collectedAt: 1,
+          objectives: [],
+          claim: { hostname: "bakery.example", state: "held_by_other", at: 2 },
+        },
+      }),
+    )
+    expect(view.claim).toEqual({ hostname: "bakery.example", state: "held_by_other" })
+    expect(JSON.stringify(view)).not.toContain("user-2")
+  })
+})

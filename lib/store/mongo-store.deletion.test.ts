@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   deleteForks: vi.fn(),
   updateConversations: vi.fn(),
   expireActions: vi.fn(),
+  releaseClaims: vi.fn(),
   session: {
     withTransaction: vi.fn(),
     endSession: vi.fn(),
@@ -29,7 +30,9 @@ vi.mock("@/lib/db/collections", () => ({
   cofounderConversationsCol: async () => ({ updateMany: mocks.updateConversations }),
   cofounderPendingActionsCol: async () => ({ updateMany: mocks.expireActions }),
   usersCol: vi.fn(),
+  businessDomainsCol: async () => ({ updateMany: mocks.releaseClaims }),
 }))
+vi.mock("@/lib/domain/service", () => ({ MAX_DOMAIN_HISTORY: 20 }))
 vi.mock("@/lib/db/runtime-collections", () => ({
   apiKeysCol: async () => ({ updateMany: mocks.revokeKeys }),
   projectRuntimeConfigCol: async () => mocks.artifacts.projectRuntimeConfigCol,
@@ -56,6 +59,7 @@ beforeEach(() => {
   mocks.revokeKeys.mockResolvedValue({ modifiedCount: 2 })
   mocks.deleteRuns.mockResolvedValue({ deletedCount: 1 })
   mocks.deleteAttachments.mockResolvedValue({ deletedCount: 1 })
+  mocks.releaseClaims.mockResolvedValue({ modifiedCount: 1 })
   mocks.session.withTransaction.mockImplementation(async (callback: () => Promise<void>) => callback())
   mocks.session.endSession.mockResolvedValue(undefined)
 })
@@ -77,6 +81,26 @@ describe("MongoStore project deletion", () => {
     expect(mocks.revokeKeys.mock.invocationCallOrder[0]).toBeGreaterThan(mocks.deleteProject.mock.invocationCallOrder[0])
     expect(mocks.revokeKeys.mock.invocationCallOrder[0]).toBeLessThan(mocks.deleteRuns.mock.invocationCallOrder[0])
     expect(mocks.session.endSession).toHaveBeenCalledOnce()
+  })
+
+  it("releases the business claim inside the same transaction, so the site can be connected again", async () => {
+    await expect(new MongoStore().deleteProject("proj_own", "user_owner")).resolves.toBe(true)
+
+    expect(mocks.releaseClaims).toHaveBeenCalledWith(
+      { projectId: "proj_own", releasedAt: { $exists: false } },
+      expect.objectContaining({
+        $set: expect.objectContaining({ status: "revoked" }),
+        $unset: { token: "", tokenHash: "", claimExpiresAt: "" },
+      }),
+      { session: mocks.session },
+    )
+    expect(mocks.releaseClaims.mock.invocationCallOrder[0]).toBeGreaterThan(mocks.deleteProject.mock.invocationCallOrder[0])
+  })
+
+  it("does not release claims when the project is missing or belongs to someone else", async () => {
+    mocks.deleteProject.mockResolvedValue({ deletedCount: 0 })
+    await expect(new MongoStore().deleteProject("proj_foreign", "user_owner")).resolves.toBe(false)
+    expect(mocks.releaseClaims).not.toHaveBeenCalled()
   })
 
   it("does not revoke keys or cascade when the project is missing or belongs to someone else", async () => {
