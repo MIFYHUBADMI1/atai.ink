@@ -6,6 +6,7 @@ import {
   Loader2, AlertTriangle, Shield, Settings, Coins, DollarSign, Package,
   RefreshCw, CreditCard, Webhook, Key, ArrowRight, CheckCircle2, XCircle,
   TrendingUp, Star, Zap, MessageSquare, Brain, Hammer, Globe, Rocket, GitFork, Database, Gift,
+  Building2,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -84,6 +85,11 @@ interface BillingConfig {
       scrapeCost: number; heavyScrapeCost: number; planCost: number
       heavyPlanCost: number; deepCrawlCost: number; heavyDeepCrawlCost: number
     }
+  }
+  existingBusinessCosts: {
+    readCost: number
+    assessmentCost: number
+    defaults: { readCost: number; assessmentCost: number }
   }
   deploymentCosts: {
     deployCost: number
@@ -432,6 +438,102 @@ function MirrorPipelineCostsCard({
           </Button>
           {dirty && valid && <span className="text-[11px] text-amber-500">Unsaved changes</span>}
           {!valid && <span className="text-[11px] text-destructive">Costs must be whole numbers ≥ 0</span>}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ── Existing business journey — editable card ───────────────────────────────
+
+function ExistingBusinessCostsCard({
+  costs,
+  onSaved,
+}: {
+  costs: BillingConfig["existingBusinessCosts"]
+  onSaved: () => void
+}) {
+  const [readCost, setReadCost] = useState(String(costs.readCost))
+  const [assessmentCost, setAssessmentCost] = useState(String(costs.assessmentCost))
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    setReadCost(String(costs.readCost))
+    setAssessmentCost(String(costs.assessmentCost))
+  }, [costs.readCost, costs.assessmentCost])
+
+  const readNum = Number(readCost)
+  const assessmentNum = Number(assessmentCost)
+  const valid =
+    Number.isInteger(readNum) && readNum >= 0 && readNum <= 100_000 &&
+    Number.isInteger(assessmentNum) && assessmentNum >= 0 && assessmentNum <= 100_000
+  const dirty = readNum !== costs.readCost || assessmentNum !== costs.assessmentCost
+
+  async function save() {
+    if (!valid || !dirty || saving) return
+    setSaving(true)
+    try {
+      await patchJson("/api/admin/billing/configuration", {
+        existingBusiness: { readCost: readNum, assessmentCost: assessmentNum },
+      })
+      toast.success("Connecting a business repriced.")
+      onSaved()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not update the journey cost.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Card>
+      <CardContent className="py-5">
+        <div className="flex items-center gap-2 mb-1">
+          <Building2 className="size-4 text-primary" />
+          <p className="font-medium">Connecting an existing business</p>
+          <Badge variant="secondary" className="ml-auto text-[10px]">Runtime-editable</Badge>
+        </div>
+        <p className="mb-4 text-xs text-muted-foreground">
+          What a founder pays to finish connecting: one read of their live site, then the co-founder&apos;s first
+          read. Total is {readNum + assessmentNum} credits. A cached read is free and a failed read is refunded.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <label htmlFor="business-read-cost" className="text-xs text-muted-foreground">Website read</label>
+          <input
+            id="business-read-cost"
+            type="number"
+            min={0}
+            max={100000}
+            step={1}
+            value={readCost}
+            onChange={(e) => setReadCost(e.target.value)}
+            className="w-28 rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+          <label htmlFor="business-assessment-cost" className="ml-3 text-xs text-muted-foreground">First read</label>
+          <input
+            id="business-assessment-cost"
+            type="number"
+            min={0}
+            max={100000}
+            step={1}
+            value={assessmentCost}
+            onChange={(e) => setAssessmentCost(e.target.value)}
+            className="w-28 rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+          <span className="text-xs text-muted-foreground">credits</span>
+          {dirty && (
+            <span className="text-[10px] text-muted-foreground">
+              Default: {costs.defaults.readCost} + {costs.defaults.assessmentCost}
+            </span>
+          )}
+        </div>
+        <div className="mt-4 flex items-center gap-2">
+          <Button size="sm" onClick={save} disabled={!valid || !dirty || saving}>
+            {saving ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
+            Save changes
+          </Button>
+          {dirty && valid && <span className="text-[11px] text-amber-500">Unsaved changes</span>}
+          {!valid && <span className="text-[11px] text-destructive">Both values must be whole numbers ≥ 0</span>}
         </div>
       </CardContent>
     </Card>
@@ -975,6 +1077,13 @@ export default function AdminConfigurationPage() {
           <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-4">Infrastructure Plan Prices</p>
           {config?.infrastructurePrices && (
             <InfrastructurePricesCard costs={config.infrastructurePrices} onSaved={() => mutate()} />
+          )}
+        </section>
+
+        <section className="mt-8">
+          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-4">Connecting a Business</p>
+          {config?.existingBusinessCosts && (
+            <ExistingBusinessCostsCard costs={config.existingBusinessCosts} onSaved={() => mutate()} />
           )}
         </section>
 

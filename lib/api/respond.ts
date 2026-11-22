@@ -79,6 +79,8 @@ export function failInsufficientCredits(input: {
   required: number
   available: number
   message?: string
+  /** Extra numbers the client needs to show the gap in context. */
+  meta?: Record<string, unknown>
 }) {
   const required = Math.max(0, Math.round(input.required))
   const available = Math.max(0, Math.round(input.available))
@@ -88,7 +90,7 @@ export function failInsufficientCredits(input: {
       `You need ${required.toLocaleString()} credits for this and have ${available.toLocaleString()} available. Top up to continue.`,
     402,
     undefined,
-    { required, available },
+    { required, available, ...(input.meta ?? {}) },
   )
 }
 

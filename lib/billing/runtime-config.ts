@@ -83,6 +83,20 @@ export const DEFAULT_DEPLOYMENT_COSTS: DeploymentCosts = {
   deployCost: 500,
 }
 
+const ExistingBusinessCostsSchema = z.object({
+  /** Credits charged to read a business website once (a cached read is free). */
+  readCost: z.number().int().min(0).max(100_000),
+  /** Credits charged for the co-founder's first read of the business. */
+  assessmentCost: z.number().int().min(0).max(100_000),
+})
+export type ExistingBusinessCosts = z.infer<typeof ExistingBusinessCostsSchema>
+
+/** Connecting a business costs one read plus one assessment: 40 + 60 = 100. */
+export const DEFAULT_EXISTING_BUSINESS_COSTS: ExistingBusinessCosts = {
+  readCost: 40,
+  assessmentCost: 60,
+}
+
 const ForkPricingSchema = z.object({
   /** Credits charged to fork a simple-tier project. */
   simpleForkCost: z.number().int().min(0).max(10_000_000),
@@ -247,6 +261,7 @@ const BillingSettingsSchema = z.object({
   collaborate: CollaborateCostsSchema,
   buildTiers: BuildTiersCostsSchema,
   mirrorPipeline: MirrorPipelineCostsSchema,
+  existingBusiness: ExistingBusinessCostsSchema,
   deployment: DeploymentCostsSchema,
   forkPricing: ForkPricingSchema,
   infrastructurePrices: InfrastructurePricesSchema,
@@ -262,6 +277,7 @@ interface SettingsDoc {
   collaborate?: Partial<CollaborateCosts>
   buildTiers?: Partial<BuildTierCosts>
   mirrorPipeline?: Partial<MirrorPipelineCosts>
+  existingBusiness?: Partial<ExistingBusinessCosts>
   deployment?: Partial<DeploymentCosts>
   forkPricing?: Partial<ForkPricing>
   infrastructurePrices?: Partial<InfrastructurePrices>
@@ -288,6 +304,7 @@ async function loadSettings(): Promise<BillingSettings> {
     collaborate: { ...DEFAULT_COLLABORATE_COSTS },
     buildTiers: { ...DEFAULT_BUILD_TIER_COSTS },
     mirrorPipeline: { ...DEFAULT_MIRROR_PIPELINE_COSTS },
+    existingBusiness: { ...DEFAULT_EXISTING_BUSINESS_COSTS },
     deployment: { ...DEFAULT_DEPLOYMENT_COSTS },
     forkPricing: { ...DEFAULT_FORK_PRICING },
     infrastructurePrices: { ...DEFAULT_INFRASTRUCTURE_PRICES },
@@ -303,6 +320,7 @@ async function loadSettings(): Promise<BillingSettings> {
         collaborate: { ...DEFAULT_COLLABORATE_COSTS, ...(doc.collaborate ?? {}) },
         buildTiers: { ...DEFAULT_BUILD_TIER_COSTS, ...(doc.buildTiers ?? {}) },
         mirrorPipeline: { ...DEFAULT_MIRROR_PIPELINE_COSTS, ...(doc.mirrorPipeline ?? {}) },
+        existingBusiness: { ...DEFAULT_EXISTING_BUSINESS_COSTS, ...(doc.existingBusiness ?? {}) },
         deployment: { ...DEFAULT_DEPLOYMENT_COSTS, ...(doc.deployment ?? {}) },
         forkPricing: { ...DEFAULT_FORK_PRICING, ...(doc.forkPricing ?? {}) },
         infrastructurePrices: { ...DEFAULT_INFRASTRUCTURE_PRICES, ...(doc.infrastructurePrices ?? {}) },
@@ -343,6 +361,13 @@ export async function getBuildTierCosts(): Promise<BuildTierCosts> {
 export async function getMirrorPipelineCosts(): Promise<MirrorPipelineCosts> {
   const settings = await loadSettings()
   return settings.mirrorPipeline
+}
+
+/** Current existing-business journey costs — the read and the first read
+ * (DB override layered over code defaults). */
+export async function getExistingBusinessCosts(): Promise<ExistingBusinessCosts> {
+  const settings = await loadSettings()
+  return settings.existingBusiness
 }
 
 /** Current deployment cost (DB override layered over code defaults). */
@@ -423,6 +448,7 @@ export async function updateBillingSettings(
     collaborate?: Partial<CollaborateCosts>
     buildTiers?: Partial<BuildTierCosts>
     mirrorPipeline?: Partial<MirrorPipelineCosts>
+    existingBusiness?: Partial<ExistingBusinessCosts>
     deployment?: Partial<DeploymentCosts>
     forkPricing?: Partial<ForkPricing>
     infrastructurePrices?: Partial<InfrastructurePrices>
@@ -436,6 +462,7 @@ export async function updateBillingSettings(
     collaborate: { ...current.collaborate, ...(patch.collaborate ?? {}) },
     buildTiers: { ...current.buildTiers, ...(patch.buildTiers ?? {}) },
     mirrorPipeline: { ...current.mirrorPipeline, ...(patch.mirrorPipeline ?? {}) },
+    existingBusiness: { ...current.existingBusiness, ...(patch.existingBusiness ?? {}) },
     deployment: { ...current.deployment, ...(patch.deployment ?? {}) },
     forkPricing: { ...current.forkPricing, ...(patch.forkPricing ?? {}) },
     infrastructurePrices: { ...current.infrastructurePrices, ...(patch.infrastructurePrices ?? {}) },

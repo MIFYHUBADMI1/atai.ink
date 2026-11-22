@@ -67,9 +67,15 @@ vi.mock("@/lib/logging/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 vi.mock("@/lib/credits/credits", () => ({
-  getScrapeCost: vi.fn(async () => 2),
+  getBusinessReadCost: vi.fn(async () => 40),
   hasSufficientCredits: vi.fn(async () => true),
-  chargeScrapeCredits: vi.fn(async () => undefined),
+  chargeBusinessReadCredits: vi.fn(async () => undefined),
+}))
+vi.mock("@/lib/billing/runtime-config", () => ({
+  getExistingBusinessCosts: vi.fn(async () => ({ readCost: 40, assessmentCost: 60 })),
+}))
+vi.mock("@/lib/billing/credit-service", () => ({
+  getAvailableCredits: vi.fn(async () => 1_000),
 }))
 vi.mock("@/lib/domain/service", () => ({
   registerDomain: vi.fn(async () => ({
@@ -104,7 +110,9 @@ vi.mock("@/lib/marketing/feature-flags", () => ({
 }))
 
 import { checkRateLimit } from "@/lib/auth/rate-limit"
-import { chargeScrapeCredits, hasSufficientCredits } from "@/lib/credits/credits"
+import { chargeBusinessReadCredits, hasSufficientCredits } from "@/lib/credits/credits"
+import { getExistingBusinessCosts } from "@/lib/billing/runtime-config"
+import { getAvailableCredits } from "@/lib/billing/credit-service"
 import { registerDomain, listProjectDomains } from "@/lib/domain/service"
 import { collectWebsiteFacts } from "./website-facts"
 import { generateBusinessAssessment } from "./assessment"
@@ -119,7 +127,9 @@ import {
 } from "./intake"
 
 const rateMock = vi.mocked(checkRateLimit)
-const chargeMock = vi.mocked(chargeScrapeCredits)
+const chargeMock = vi.mocked(chargeBusinessReadCredits)
+const costsMock = vi.mocked(getExistingBusinessCosts)
+const availableMock = vi.mocked(getAvailableCredits)
 const affordableMock = vi.mocked(hasSufficientCredits)
 const registerMock = vi.mocked(registerDomain)
 const domainsMock = vi.mocked(listProjectDomains)
@@ -165,6 +175,8 @@ beforeEach(() => {
     charged: true,
   } as Awaited<ReturnType<typeof generateBusinessAssessment>>)
   affordableMock.mockResolvedValue(true)
+  availableMock.mockResolvedValue(1_000)
+  costsMock.mockResolvedValue({ readCost: 40, assessmentCost: 60 })
   rateMock.mockResolvedValue(undefined as never)
   domainsMock.mockResolvedValue([])
 })
@@ -310,6 +322,34 @@ describe("runBusinessIntake — gates", () => {
     expect(assessmentMock).not.toHaveBeenCalled()
   })
 
+  it("refuses to start when the balance cannot cover the whole journey, and says by how much", async () => {
+    availableMock.mockResolvedValue(35)
+    const result = await runBusinessIntake("proj-1")
+    expect(result).toMatchObject({
+      ok: false,
+      code: "INSUFFICIENT_CREDITS",
+      meta: { readCost: 40, assessmentCost: 60, required: 100, available: 35, shortfall: 65 },
+    })
+    // Nothing is crawled, assessed or claimed for a journey that cannot finish.
+    expect(websiteMock).not.toHaveBeenCalled()
+    expect(assessmentMock).not.toHaveBeenCalled()
+  })
+
+  it("prices only what is still unpaid — a finished read is not charged twice", async () => {
+    seedProject({
+      ...buildIntakeRecord({ description: "d", websiteUrl: "https://bakery.example" }),
+      website: { status: "completed", url: "https://bakery.example" },
+      assessment: { status: "failed", errorMessage: "nope" },
+    } as BusinessIntake)
+    availableMock.mockResolvedValue(59)
+    const result = await runBusinessIntake("proj-1")
+    expect(result).toMatchObject({
+      ok: false,
+      code: "INSUFFICIENT_CREDITS",
+      meta: { required: 60, available: 59, shortfall: 1 },
+    })
+  })
+
   it("maps rate limiting to a stable code", async () => {
     rateMock.mockRejectedValue(new AppError("RATE_LIMITED", "slow down", 429))
     expect(await runBusinessIntake("proj-1")).toMatchObject({ ok: false, code: "RATE_LIMITED" })
@@ -404,7 +444,7 @@ describe("runBusinessIntake — sources and billing", () => {
   it("bills a read at the standard rate even when the project was created heavy", async () => {
     projectDoc = { ...projectDoc!, pipelineMode: "heavy" }
     await runBusinessIntake("proj-1")
-    expect(chargeMock).toHaveBeenCalledWith("user-1", "proj-1", "legacy")
+    expect(chargeMock).toHaveBeenCalledWith("user-1", "proj-1")
   })
 
   it("never pays for a crawl served from the cache", async () => {

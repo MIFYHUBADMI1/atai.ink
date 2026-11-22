@@ -20,7 +20,7 @@ import {
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
-import { jsonFetcher, postJson } from "@/lib/client/api"
+import { jsonFetcher, postJson, type ApiError } from "@/lib/client/api"
 import type { IntakeView } from "@/lib/existing-business/view"
 import { businessSteps, type BusinessStep, type BusinessStepId } from "@/lib/existing-business/steps"
 import { intakeStatusLabel } from "@/lib/existing-business/stage-labels"
@@ -29,6 +29,7 @@ import { AssessmentReport } from "./assessment-report"
 import { ConnectionCard } from "./connection-card"
 import { DomainVerification } from "./domain-verification"
 import { ReadingPreviewButton, ReadingPreviewDialog } from "./reading-preview-dialog"
+import { CreditsShortfallDialog, type JourneyCost } from "./credits-shortfall-dialog"
 
 const POLL_MS = 4000
 
@@ -72,6 +73,11 @@ export function BusinessProfile({ projectId, initialView }: { projectId: string;
   const [readingOpen, setReadingOpen] = useState(false)
   const [view, setView] = useState<IntakeView>(initialView)
   const [busy, setBusy] = useState<"retry" | "reassess" | null>(null)
+  // A refusal to start for want of credits carries its numbers; it is not a
+  // red error line, it is a decision the founder can act on.
+  const [shortfall, setShortfall] = useState<JourneyCost | null>(null)
+  // What finishing still costs, so the price is on screen before the button.
+  const [cost, setCost] = useState<JourneyCost | null>(null)
   const [error, setError] = useState<string | null>(null)
   // `null` means "follow the current step"; a number means the founder opened
   // an earlier step to re-read it and should not be moved off it.
@@ -94,6 +100,19 @@ export function BusinessProfile({ projectId, initialView }: { projectId: string;
   const [watching, setWatching] = useState(false)
   const watchDeadline = useRef(0)
   const watchStartedAt = useRef(0)
+
+  useEffect(() => {
+    if (view.assessment.result) return
+    let cancelled = false
+    jsonFetcher<JourneyCost>(`/api/billing/business-connect?projectId=${projectId}`)
+      .then((next) => {
+        if (!cancelled) setCost(next)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [projectId, view.assessment.result, view.website.status])
 
   useEffect(() => {
     if (!running && !watching) return
@@ -134,7 +153,19 @@ export function BusinessProfile({ projectId, initialView }: { projectId: string;
         await refresh()
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not start the run. Please try again.")
+      const api = e as ApiError
+      const meta = api.meta as Partial<JourneyCost> | undefined
+      if (api.code === "INSUFFICIENT_CREDITS" && typeof meta?.shortfall === "number") {
+        setShortfall({
+          readCost: Number(meta.readCost ?? 0),
+          assessmentCost: Number(meta.assessmentCost ?? 0),
+          required: Number(meta.required ?? 0),
+          available: Number(meta.available ?? 0),
+          shortfall: meta.shortfall,
+        })
+      } else {
+        setError(e instanceof Error ? e.message : "Could not start the run. Please try again.")
+      }
     } finally {
       setBusy(null)
     }
@@ -260,6 +291,7 @@ export function BusinessProfile({ projectId, initialView }: { projectId: string;
               {active.id === "assessment" ? (
                 <AssessmentStep
                   view={view}
+                  cost={cost}
                   running={running || watching}
                   busy={busy}
                   error={error}
@@ -322,6 +354,16 @@ export function BusinessProfile({ projectId, initialView }: { projectId: string;
         </div>
 
         <ReadingPreviewDialog projectId={projectId} open={readingOpen} onOpenChange={setReadingOpen} />
+        <CreditsShortfallDialog
+          open={shortfall !== null}
+          onOpenChange={(next) => {
+            if (!next) setShortfall(null)
+          }}
+          cost={shortfall}
+          businessName={view.displayName ?? ""}
+          stepLabel={active.title}
+          stepHint={`You are on “${active.title}”. ${STEP_COPY[active.id].purpose}`}
+        />
 
         <aside className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-28">
           <nav aria-label="Your connection path" className="rounded-2xl border border-border/80 bg-card p-5">
@@ -438,6 +480,7 @@ function NextBestActions({ projectId }: { projectId: string }) {
 
 function AssessmentStep({
   view,
+  cost,
   running,
   busy,
   error,
@@ -445,6 +488,7 @@ function AssessmentStep({
   onShowReading,
 }: {
   view: IntakeView
+  cost: JourneyCost | null
   running: boolean
   busy: "retry" | "reassess" | null
   error: string | null
@@ -494,6 +538,19 @@ function AssessmentStep({
           </p>
         </div>
       )}
+
+      {cost && cost.required > 0 ? (
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {cost.readCost > 0 && !website.analyzed
+            ? `${cost.readCost.toLocaleString()} credits to read your live site, then `
+            : ""}
+          {cost.assessmentCost.toLocaleString()} credits for the read. You have{" "}
+          {cost.available.toLocaleString()}
+          {cost.shortfall > 0
+            ? ` — ${cost.shortfall.toLocaleString()} short of finishing.`
+            : " — enough to finish."}
+        </p>
+      ) : null}
 
       {error ? <Alert>{error}</Alert> : null}
 

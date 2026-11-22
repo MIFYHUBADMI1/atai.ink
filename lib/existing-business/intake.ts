@@ -27,7 +27,9 @@ import { projectsCol, usersCol } from "@/lib/db/collections"
 import { checkRateLimit } from "@/lib/auth/rate-limit"
 import { AppError } from "@/lib/errors"
 import { logger } from "@/lib/logging/logger"
-import { chargeScrapeCredits, getScrapeCost, hasSufficientCredits } from "@/lib/credits/credits"
+import { chargeBusinessReadCredits, getBusinessReadCost, hasSufficientCredits } from "@/lib/credits/credits"
+import { getExistingBusinessCosts } from "@/lib/billing/runtime-config"
+import { getAvailableCredits } from "@/lib/billing/credit-service"
 import { listProjectDomains, registerDomain } from "@/lib/domain/service"
 import { businessStartingPointOf, type BusinessIntake, type BusinessObjectiveId, type IntakeStageStatus } from "@/lib/types/business-intake"
 import type { FeaturePreferences } from "@/lib/types/db"
@@ -199,18 +201,12 @@ function websiteStageFields(intake: BusinessIntake, patch: Record<string, unknow
  * Website evidence, or the reason we could not get it. Credits are charged only
  * for a crawl that was not served from the 7-day cache, so a retry of a failed
  * assessment does not pay for the same pages twice.
- *
- * The read always bills the standard rate: it fetches a handful of pages, never
- * the crawl-and-rebuild volume the heavy rate pays for, whatever mode the
- * project was created with.
  */
-const READ_PIPELINE_MODE = "legacy" as const
-
 async function readWebsite(project: MirrorProject, intake: BusinessIntake): Promise<WebsiteFacts | null> {
   const url = intake.website?.url
   if (!url || intake.website?.status === "skipped") return null
 
-  const scrapeCost = await getScrapeCost(READ_PIPELINE_MODE)
+  const scrapeCost = await getBusinessReadCost()
   const affordable = await hasSufficientCredits(project.userId, scrapeCost)
   if (!affordable) {
     await patchIntake(project.id, websiteStageFields(intake, {
@@ -241,7 +237,7 @@ async function readWebsite(project: MirrorProject, intake: BusinessIntake): Prom
 
   if (!result.facts.fromCache) {
     try {
-      await chargeScrapeCredits(project.userId, project.id, READ_PIPELINE_MODE)
+      await chargeBusinessReadCredits(project.userId, project.id)
     } catch (error) {
       // A failed ledger write must not discard evidence the founder paid for.
       logger.error("intake.credits", "scrape charge failed", {
@@ -357,13 +353,47 @@ export type IntakeRunResult =
   | { ok: false; code: string; message: string }
 
 /** What a caller learns about a run it asked for: accepted, already done, or refused. */
+export interface BusinessJourneyCost {
+  /** Credits the read alone costs. */
+  readCost: number
+  /** Credits the co-founder's read alone costs. */
+  assessmentCost: number
+  /** What is still unpaid from here — a finished stage is never charged twice. */
+  required: number
+  /** Credits the founder can spend right now. */
+  available: number
+  /** How many credits are missing before the journey can finish. */
+  shortfall: number
+}
+
 export type IntakeStartResult =
   | { ok: true; projectId: string; started: boolean; status: IntakeStageStatus; assessmentCompleted: boolean }
-  | { ok: false; code: string; message: string }
+  | { ok: false; code: string; message: string; meta?: Record<string, unknown> }
 
 type PreparedRun =
   | { ok: true; project: MirrorProject; intake: BusinessIntake; alreadyDone: boolean }
-  | { ok: false; code: string; message: string }
+  | { ok: false; code: string; message: string; meta?: Record<string, unknown> }
+
+/**
+ * What finishing this business still costs, and whether the founder can pay.
+ * Both stages are priced up front so the founder is told the whole number
+ * before a single credit leaves the account, not one failure at a time.
+ */
+export async function businessJourneyCost(project: MirrorProject, intake: BusinessIntake): Promise<BusinessJourneyCost> {
+  const costs = await getExistingBusinessCosts()
+  const websitePending =
+    Boolean(intake.website?.url) && intake.website?.status !== "skipped" && intake.website?.status !== "completed"
+  const assessmentPending = intake.assessment?.status !== "completed"
+  const required = (websitePending ? costs.readCost : 0) + (assessmentPending ? costs.assessmentCost : 0)
+  const available = await getAvailableCredits(project.userId)
+  return {
+    readCost: costs.readCost,
+    assessmentCost: costs.assessmentCost,
+    required,
+    available,
+    shortfall: Math.max(0, required - available),
+  }
+}
 
 /**
  * Everything that can refuse a run, decided before any work starts: access,
@@ -388,6 +418,16 @@ async function prepareIntakeRun(
   const intake = project.intake ?? buildIntakeRecord({})
   if (intakeProgress(intake).status === "completed" && !options.allowReassessment) {
     return { ok: true, project, intake, alreadyDone: true }
+  }
+
+  const cost = await businessJourneyCost(project, intake)
+  if (cost.shortfall > 0) {
+    return {
+      ok: false,
+      code: "INSUFFICIENT_CREDITS",
+      message: `Finishing this business costs ${cost.required} credits. You have ${cost.available}, so you are ${cost.shortfall} short.`,
+      meta: { ...cost },
+    }
   }
 
   try {

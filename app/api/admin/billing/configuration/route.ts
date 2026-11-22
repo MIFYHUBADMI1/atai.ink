@@ -13,6 +13,7 @@ import {
   getCollaborateCosts,
   getBuildTierCosts,
   getMirrorPipelineCosts,
+  getExistingBusinessCosts,
   getDeploymentCosts,
   getForkPricing,
   getInfrastructurePrices,
@@ -20,6 +21,7 @@ import {
   DEFAULT_COLLABORATE_COSTS,
   DEFAULT_BUILD_TIER_COSTS,
   DEFAULT_MIRROR_PIPELINE_COSTS,
+  DEFAULT_EXISTING_BUSINESS_COSTS,
   DEFAULT_DEPLOYMENT_COSTS,
   DEFAULT_FORK_PRICING,
   DEFAULT_INFRASTRUCTURE_PRICES,
@@ -39,6 +41,7 @@ export async function GET() {
     const collaborateCosts = await getCollaborateCosts()
     const buildTierCosts = await getBuildTierCosts()
     const mirrorPipelineCosts = await getMirrorPipelineCosts()
+    const existingBusinessCosts = await getExistingBusinessCosts()
     const deploymentCosts = await getDeploymentCosts()
     const forkPricing = await getForkPricing()
     const infrastructurePrices = await getInfrastructurePrices()
@@ -102,6 +105,13 @@ export async function GET() {
         deepCrawlCost: mirrorPipelineCosts.deepCrawlCost,
         heavyDeepCrawlCost: mirrorPipelineCosts.heavyDeepCrawlCost,
         defaults: DEFAULT_MIRROR_PIPELINE_COSTS,
+      },
+
+      // ── Existing business journey (runtime-configurable) ──
+      existingBusinessCosts: {
+        readCost: existingBusinessCosts.readCost,
+        assessmentCost: existingBusinessCosts.assessmentCost,
+        defaults: DEFAULT_EXISTING_BUSINESS_COSTS,
       },
 
       // ── Deployment costs (runtime-configurable) ──
@@ -217,6 +227,12 @@ const PatchSchema = z.object({
       heavyDeepCrawlCost: z.number().int().min(0).max(1_000_000).optional(),
     })
     .optional(),
+  existingBusiness: z
+    .object({
+      readCost: z.number().int().min(0).max(100_000).optional(),
+      assessmentCost: z.number().int().min(0).max(100_000).optional(),
+    })
+    .optional(),
   deployment: z
     .object({
       deployCost: z.number().int().min(0).max(1_000_000).optional(),
@@ -269,7 +285,7 @@ export async function PATCH(req: Request) {
     }
     if (
       !parsed.data.collaborate && !parsed.data.buildTiers && !parsed.data.mirrorPipeline &&
-      !parsed.data.deployment && !parsed.data.forkPricing && !parsed.data.infrastructurePrices &&
+      !parsed.data.existingBusiness && !parsed.data.deployment && !parsed.data.forkPricing && !parsed.data.infrastructurePrices &&
       !parsed.data.rewards && !parsed.data.runtimePricing
     ) {
       return fail("VALIDATION", "No configuration changes provided.", 422)
@@ -279,6 +295,7 @@ export async function PATCH(req: Request) {
       ...(parsed.data.collaborate ? { collaborate: parsed.data.collaborate } : {}),
       ...(parsed.data.buildTiers ? { buildTiers: parsed.data.buildTiers } : {}),
       ...(parsed.data.mirrorPipeline ? { mirrorPipeline: parsed.data.mirrorPipeline } : {}),
+      ...(parsed.data.existingBusiness ? { existingBusiness: parsed.data.existingBusiness } : {}),
       ...(parsed.data.deployment ? { deployment: parsed.data.deployment } : {}),
       ...(parsed.data.forkPricing ? { forkPricing: parsed.data.forkPricing } : {}),
       ...(parsed.data.infrastructurePrices ? { infrastructurePrices: parsed.data.infrastructurePrices } : {}),
@@ -292,6 +309,7 @@ export async function PATCH(req: Request) {
       collaborate: updated.collaborate,
       buildTiers: updated.buildTiers,
       mirrorPipeline: updated.mirrorPipeline,
+      existingBusiness: updated.existingBusiness,
       deployment: updated.deployment,
       forkPricing: updated.forkPricing,
       infrastructurePrices: updated.infrastructurePrices,
@@ -302,6 +320,7 @@ export async function PATCH(req: Request) {
       collaborateCosts: updated.collaborate,
       buildTierCosts: updated.buildTiers,
       mirrorPipelineCosts: updated.mirrorPipeline,
+      existingBusinessCosts: updated.existingBusiness,
       deploymentCosts: updated.deployment,
       forkPricing: updated.forkPricing,
       infrastructurePrices: updated.infrastructurePrices,

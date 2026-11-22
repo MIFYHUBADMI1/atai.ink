@@ -1,6 +1,6 @@
 import { requireUser } from "@/lib/auth/session"
 import { store } from "@/lib/store/store"
-import { ok, fail, handleRouteError } from "@/lib/api/respond"
+import { ok, fail, failInsufficientCredits, handleRouteError } from "@/lib/api/respond"
 import { readJsonBody } from "@/lib/api/request-body"
 import { businessStartingPointOf } from "@/lib/types/business-intake"
 import { listProjectDomains } from "@/lib/domain/service"
@@ -51,8 +51,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // nothing when they press the button again.
     const result = await startIntakeRun(id, { userId: user.id, allowReassessment: reassess })
     if (!result.ok) {
+      // The numbers travel with the refusal so the founder is shown the
+      // balance, the price and the gap instead of a sentence alone.
+      if (result.code === "INSUFFICIENT_CREDITS" && result.meta) {
+        return failInsufficientCredits({
+          required: Number(result.meta.required ?? 0),
+          available: Number(result.meta.available ?? 0),
+          message: result.message,
+          meta: result.meta,
+        })
+      }
       const status = result.code === "RATE_LIMITED" ? 429 : result.code === "INTAKE_IN_PROGRESS" ? 409 : 422
-      return fail(result.code, result.message, status)
+      return fail(result.code, result.message, status, undefined, result.meta)
     }
 
     const domains = await listProjectDomains(id)

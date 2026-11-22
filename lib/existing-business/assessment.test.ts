@@ -9,7 +9,7 @@ vi.mock("@/lib/logging/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 vi.mock("@/lib/billing/runtime-config", () => ({
-  getCollaborateCosts: vi.fn(async () => ({ planAnalysisCost: 10 })),
+  getExistingBusinessCosts: vi.fn(async () => ({ readCost: 40, assessmentCost: 60 })),
 }))
 vi.mock("@/lib/billing/credit-service", () => ({
   consumeCredits: vi.fn(async () => ({ success: true })),
@@ -19,7 +19,7 @@ vi.mock("@/lib/billing/credit-service", () => ({
 
 import { generateText } from "ai"
 import { consumeCredits, grantCredits, getAvailableCredits } from "@/lib/billing/credit-service"
-import { getCollaborateCosts } from "@/lib/billing/runtime-config"
+import { getExistingBusinessCosts } from "@/lib/billing/runtime-config"
 import { collaborationIdempotencyKey } from "@/lib/analysis/collaborate-credits"
 import {
   buildAssessment,
@@ -35,7 +35,7 @@ const textMock = vi.mocked(generateText)
 const consumeMock = vi.mocked(consumeCredits)
 const grantMock = vi.mocked(grantCredits)
 const availableMock = vi.mocked(getAvailableCredits)
-const costsMock = vi.mocked(getCollaborateCosts)
+const costsMock = vi.mocked(getExistingBusinessCosts)
 
 const baseEvidence: AssessmentEvidence = {
   ownerDescription: "We run a small bakery selling sourdough and pastries to local offices.",
@@ -95,7 +95,7 @@ const actions: ResolvedAction[] = [
 
 beforeEach(() => {
   vi.clearAllMocks()
-  costsMock.mockResolvedValue({ planAnalysisCost: 10 } as Awaited<ReturnType<typeof getCollaborateCosts>>)
+  costsMock.mockResolvedValue({ readCost: 40, assessmentCost: 60 } as Awaited<ReturnType<typeof getExistingBusinessCosts>>)
   availableMock.mockResolvedValue(100)
   consumeMock.mockResolvedValue({ success: true } as Awaited<ReturnType<typeof consumeCredits>>)
   process.env.OPENROUTER_API_KEY = "test-key"
@@ -355,7 +355,7 @@ describe("buildAssessment — validation and honesty", () => {
 })
 
 describe("generateBusinessAssessment — billing and failure honesty", () => {
-  const expectedKey = collaborationIdempotencyKey("user-1", "proj-1", "existing-business-intake", "assessment", 10)
+  const expectedKey = collaborationIdempotencyKey("user-1", "proj-1", "existing-business-intake", "assessment", 60)
 
   it("returns AI_UNAVAILABLE without charging when no key is configured", async () => {
     delete process.env.OPENROUTER_API_KEY
@@ -380,14 +380,14 @@ describe("generateBusinessAssessment — billing and failure honesty", () => {
     expect(textMock).not.toHaveBeenCalled()
   })
 
-  it("charges the existing analysis cost under the intake-specific idempotency key", async () => {
+  it("charges the journey's assessment cost under the intake-specific idempotency key", async () => {
     textMock.mockResolvedValue({ text: JSON.stringify(validPayload()) } as Awaited<ReturnType<typeof generateText>>)
     const outcome = await generateBusinessAssessment(input, { actions })
     expect(outcome.ok).toBe(true)
     if (outcome.ok) expect(outcome.charged).toBe(true)
     expect(consumeMock).toHaveBeenCalledWith(expect.objectContaining({
       userId: "user-1",
-      amount: 10,
+      amount: 60,
       idempotencyKey: expectedKey,
     }))
     // The intake key must not collide with the plan-analysis charge key.
@@ -400,7 +400,7 @@ describe("generateBusinessAssessment — billing and failure honesty", () => {
     expect(outcome).toMatchObject({ ok: false, code: "ASSESSMENT_FAILED" })
     expect(grantMock).toHaveBeenCalledWith(expect.objectContaining({
       userId: "user-1",
-      amount: 10,
+      amount: 60,
       idempotencyKey: `collab_refund_${expectedKey}`,
     }))
     if (!outcome.ok) expect(outcome.message).not.toContain("502")
@@ -495,7 +495,7 @@ describe("generateBusinessAssessment — billing and failure honesty", () => {
   })
 
   it("skips billing entirely when the configured cost is zero", async () => {
-    costsMock.mockResolvedValue({ planAnalysisCost: 0 } as Awaited<ReturnType<typeof getCollaborateCosts>>)
+    costsMock.mockResolvedValue({ readCost: 40, assessmentCost: 0 } as Awaited<ReturnType<typeof getExistingBusinessCosts>>)
     textMock.mockResolvedValue({ text: JSON.stringify(validPayload()) } as Awaited<ReturnType<typeof generateText>>)
     const outcome = await generateBusinessAssessment(input, { actions })
     expect(outcome.ok).toBe(true)

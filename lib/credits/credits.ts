@@ -1,6 +1,11 @@
 import { store, cryptoId } from "@/lib/store/store"
 import { logger } from "@/lib/logging/logger"
-import { getBuildTierCosts, getMirrorPipelineCosts, DEFAULT_MIRROR_PIPELINE_COSTS } from "@/lib/billing/runtime-config"
+import {
+  getBuildTierCosts,
+  getExistingBusinessCosts,
+  getMirrorPipelineCosts,
+  DEFAULT_MIRROR_PIPELINE_COSTS,
+} from "@/lib/billing/runtime-config"
 import { getAvailableCredits } from "@/lib/billing/credit-service"
 
 /**
@@ -145,6 +150,27 @@ export async function chargeScrapeCredits(userId: string, projectId: string, pip
     createdAt: Date.now(),
   })
   logger.info("credits.scrape", "charged", { userId, projectId, amount: cost, mode: pipelineMode ?? "legacy" })
+}
+
+/** Credits charged to read an existing business website once. */
+export async function getBusinessReadCost(): Promise<number> {
+  const costs = await getExistingBusinessCosts()
+  return costs.readCost
+}
+
+/** Charge a user for reading an existing business website (a cached read is free). */
+export async function chargeBusinessReadCredits(userId: string, projectId: string) {
+  const cost = await getBusinessReadCost()
+  await store.addTransaction({
+    id: cryptoId(),
+    userId,
+    type: "consume",
+    amount: -cost,
+    reason: "Reading your business website",
+    metadata: { projectId },
+    createdAt: Date.now(),
+  })
+  logger.info("credits.business-read", "charged", { userId, projectId, amount: cost })
 }
 
 /** Charge a user for a deep crawl (full-site research mode). */

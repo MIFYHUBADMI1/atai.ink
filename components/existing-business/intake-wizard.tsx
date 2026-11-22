@@ -1,6 +1,7 @@
 "use client"
 
-import { useMemo, useState, type ComponentType, type ReactNode } from "react"
+import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   AlertTriangle,
@@ -21,9 +22,10 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import { postJson } from "@/lib/client/api"
+import { jsonFetcher, postJson } from "@/lib/client/api"
 import { INTAKE_SOURCE_ERROR, parseIntakeWebsite } from "@/lib/existing-business/source-rule"
 import { cn } from "@/lib/utils"
+import { CreditsShortfallDialog, TOP_UP_HREF, type JourneyCost } from "./credits-shortfall-dialog"
 
 export interface WizardObjective {
   id: string
@@ -89,6 +91,22 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
   const [additionalContext, setAdditionalContext] = useState("")
   const [websiteUrl, setWebsiteUrl] = useState("")
   const [chosen, setChosen] = useState<string[]>([])
+  // The price of the whole journey, fetched once so the review step can state
+  // it before the founder presses Connect.
+  const [journeyCost, setJourneyCost] = useState<JourneyCost | null>(null)
+  const [shortfall, setShortfall] = useState<JourneyCost | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    jsonFetcher<JourneyCost>("/api/billing/business-connect")
+      .then((cost) => {
+        if (!cancelled) setJourneyCost(cost)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const website = useMemo(() => parseIntakeWebsite(websiteUrl), [websiteUrl])
   const websiteTypedButUnusable = websiteUrl.trim().length > 0 && !website
@@ -129,6 +147,15 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
     setBusy(true)
     setError(null)
     try {
+      // Ask before creating: a founder who cannot pay for the journey is told
+      // the whole number here, not stage by stage after the fact.
+      const cost = await jsonFetcher<JourneyCost>("/api/billing/business-connect").catch(() => null)
+      if (cost) setJourneyCost(cost)
+      if (cost && cost.shortfall > 0) {
+        setShortfall(cost)
+        setBusy(false)
+        return
+      }
       const { project } = await postJson<{ project: { id: string } }>("/api/projects", {
         mode: "scratch",
         startingPoint: "existing_business",
@@ -433,9 +460,26 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
                 ) : null}
 
                 <p className="text-xs leading-relaxed text-muted-foreground">
-                  The co-founder assessment uses Atai credits (the same cost as a plan analysis). If it cannot run,
-                  your collected evidence is saved and any charge is refunded — nothing is invented.
+                  {journeyCost
+                    ? `Connecting costs ${journeyCost.required.toLocaleString()} credits — ${journeyCost.readCost.toLocaleString()} to read your live site and ${journeyCost.assessmentCost.toLocaleString()} for your co-founder's first read. A failed read is refunded in full, and a page Atai read in the last 7 days is never charged twice.`
+                    : "Connecting uses Atai credits: one read of your live site, then your co-founder's first read. A failed read is refunded in full."}
                 </p>
+
+                {journeyCost && journeyCost.shortfall > 0 ? (
+                  <div
+                    role="alert"
+                    className="flex flex-col gap-2 rounded-xl border border-primary/30 bg-primary/5 p-4 text-xs leading-relaxed sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <p className="text-foreground">
+                      Your balance covers {journeyCost.available.toLocaleString()} of the{" "}
+                      {journeyCost.required.toLocaleString()} credits. Add{" "}
+                      {journeyCost.shortfall.toLocaleString()} to connect without stopping halfway.
+                    </p>
+                    <Button variant="outline" size="sm" className="shrink-0" render={<Link href={TOP_UP_HREF} />}>
+                      Add credits
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -574,6 +618,17 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
           </p>
         </div>
       </aside>
+
+      <CreditsShortfallDialog
+        open={shortfall !== null}
+        onOpenChange={(next) => {
+          if (!next) setShortfall(null)
+        }}
+        cost={shortfall}
+        businessName={reviewName}
+        stepLabel={STEPS[STEPS.length - 1].label}
+        stepHint="Nothing has been created yet — your answers stay on this page, and the read starts the moment the credits land."
+      />
     </div>
   )
 }

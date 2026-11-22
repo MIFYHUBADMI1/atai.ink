@@ -6,7 +6,7 @@ import "server-only"
  * Reuse, not new substrate:
  *  - the one-shot `MODEL` handle from `lib/analysis/model` (same OpenRouter
  *    route every other analysis step uses),
- *  - the existing collaborate credit cost (`planAnalysisCost`) and the existing
+ *  - its own credit cost (`existingBusiness.assessmentCost`) and the existing
  *    double-entry ledger through `consumeCredits`/`grantCredits`,
  *  - the SEO module's grounding/metric-honesty filter instead of a new one.
  *
@@ -27,7 +27,7 @@ import { generateText } from "ai"
 import { MODEL, MODEL_ID } from "@/lib/analysis/model"
 import { aiSignal } from "@/lib/api/ai-context"
 import { logger } from "@/lib/logging/logger"
-import { getCollaborateCosts } from "@/lib/billing/runtime-config"
+import { getExistingBusinessCosts } from "@/lib/billing/runtime-config"
 import { consumeCredits, grantCredits, getAvailableCredits } from "@/lib/billing/credit-service"
 import {
   collaborationIdempotencyKey,
@@ -597,8 +597,8 @@ export async function generateBusinessAssessment(
     }
   }
 
-  const costs = await getCollaborateCosts()
-  const amount = costs.planAnalysisCost
+  const costs = await getExistingBusinessCosts()
+  const amount = costs.assessmentCost
   const feature = "existing-business-intake"
   const kind = "assessment"
   let charged = false
