@@ -325,7 +325,11 @@ export function DomainVerification({
 
             {domain.token && !expired ? (
               <div className="mt-3 flex flex-col gap-3">
-                <div className="flex flex-wrap items-center gap-2 text-xs" role="group" aria-label="Verification method">
+                <div
+                  className="flex min-w-0 flex-wrap items-center gap-2 text-xs"
+                  role="group"
+                  aria-label="Verification method"
+                >
                   <span className="text-muted-foreground">Check with:</span>
                   {(
                     [
@@ -380,30 +384,34 @@ export function DomainVerification({
                   </div>
                 ) : (
                   <div className="flex flex-col gap-1.5">
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground break-words">
                       Put this file where your site is published from, so it is served at{" "}
+                      {/* Inline, not inline-flex: a flex container cannot wrap the
+                          unbreakable file name and widens the card instead. */}
                       <a
                         href={`https://${domain.hostname}/${domain.fileName}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1 break-all text-primary hover:underline"
+                        className="break-all text-primary hover:underline"
                       >
                         https://{domain.hostname}/{domain.fileName}
-                        <ExternalLink className="size-3 shrink-0" />
                       </a>
-                      :
+                      <ExternalLink className="ml-1 inline size-3 align-baseline" />:
                     </p>
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                       <code className="min-w-0 select-all overflow-x-auto whitespace-pre-wrap break-all rounded-lg border border-border bg-secondary/50 px-3 py-2 font-mono text-[11px]">
                         {`atai-verification=${domain.token}`}
                       </code>
                       <a
                         href={`${base}/${domain.id}/file`}
                         download={domain.fileName ?? undefined}
-                        className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+                        className={cn(
+                          buttonVariants({ variant: "outline", size: "sm" }),
+                          "h-auto max-w-full whitespace-normal text-left",
+                        )}
                       >
-                        <Download className="size-3.5" />
-                        Download {domain.fileName}
+                        <Download className="size-3.5 shrink-0" />
+                        <span className="min-w-0 break-all">Download {domain.fileName}</span>
                       </a>
                     </div>
                     <p className="text-[11px] text-muted-foreground">
