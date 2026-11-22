@@ -9,7 +9,7 @@
 
 import { describe, expect, it, beforeAll } from "vitest"
 import { NextRequest, NextResponse } from "next/server"
-import { proxy, PUBLIC_API_PREFIXES } from "./proxy"
+import { proxy, config, PUBLIC_API_PREFIXES } from "./proxy"
 
 // The portal host is read lazily per proxy() call — set it for the dev-host
 // tests (vitest runs with NODE_ENV=test, where no default host applies).
@@ -136,5 +136,28 @@ describe("proxy — intentionally-anonymous public surfaces", () => {
   it("keeps /api/health/planning session-gated at the edge (operator diagnostics)", () => {
     const result = proxy(runtimeRequest("/api/health/planning"))
     expect(result.status).toBe(401)
+  })
+})
+
+describe("proxy — public paths that must never be session-gated", () => {
+  // The matcher decides what the edge sees at all. A verification file that
+  // reaches the gate is redirected to /login, and our own verifier then reads
+  // the login page — a correct file reported as a token mismatch.
+  const gated = new RegExp(`^${config.matcher[0]}$`)
+
+  it("lets the domain verification file through, new name and legacy name", () => {
+    expect(gated.test("/atai-verify-Ab3dEf9hIj2k.txt")).toBe(false)
+    expect(gated.test("/atai-verification-legacy-token.html")).toBe(false)
+  })
+
+  it("still gates the pages and APIs a session is required for", () => {
+    expect(gated.test("/project/1/business")).toBe(true)
+    expect(gated.test("/settings/ai")).toBe(true)
+    expect(gated.test("/api/projects/1/domains")).toBe(true)
+  })
+
+  it("still skips Next.js internals and static assets", () => {
+    expect(gated.test("/_next/static/chunk.js")).toBe(false)
+    expect(gated.test("/sitemap.xml")).toBe(false)
   })
 })

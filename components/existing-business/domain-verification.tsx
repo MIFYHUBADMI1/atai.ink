@@ -1,7 +1,20 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Check, Clock, Copy, Download, Globe, Loader2, RefreshCw, ShieldCheck, Trash2, TriangleAlert } from "lucide-react"
+import {
+  Check,
+  Clock,
+  Copy,
+  Download,
+  ExternalLink,
+  Globe,
+  ListChecks,
+  Loader2,
+  RefreshCw,
+  ShieldCheck,
+  Trash2,
+  TriangleAlert,
+} from "lucide-react"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -11,6 +24,7 @@ import { trackConnectVerified } from "@/lib/analytics/connect-funnel"
 import type { DomainView } from "@/lib/domain/service"
 import type { BusinessDomainMethod, BusinessDomainStatus } from "@/lib/types/business-intake"
 import { cn } from "@/lib/utils"
+import { VerificationGuideDialog } from "./verification-guide-dialog"
 
 const STATUS_LABEL: Record<BusinessDomainStatus, string> = {
   not_verified: "Not verified",
@@ -27,6 +41,18 @@ function statusTone(status: BusinessDomainStatus): string {
   if (status === "failed" || status === "expired") return "bg-destructive/10 text-destructive"
   if (status === "revoked") return "bg-secondary text-secondary-foreground"
   return "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+}
+
+/**
+ * Which instructions to show for one challenge. The founder's click wins over
+ * the stored value: both artifacts come from the same token, so the choice is a
+ * view preference and must never wait for a server round-trip.
+ */
+export function methodFor(
+  domain: Pick<DomainView, "id" | "method">,
+  choice: Record<string, BusinessDomainMethod>,
+): BusinessDomainMethod {
+  return choice[domain.id] ?? domain.method ?? "meta_tag"
 }
 
 function formatDate(at: number | null | undefined): string {
@@ -56,6 +82,11 @@ export function DomainVerification({
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [confirmRelease, setConfirmRelease] = useState<string | null>(null)
   const [showHistory, setShowHistory] = useState<string | null>(null)
+  // The method is a view choice, not a server fact: both artifacts come from the
+  // same token, so switching must be instant. It is sent with the check, which
+  // persists it, and the override outlives a parent refresh until then.
+  const [methodChoice, setMethodChoice] = useState<Record<string, BusinessDomainMethod>>({})
+  const [guideFor, setGuideFor] = useState<string | null>(null)
 
   const base = `/api/projects/${projectId}/domains`
 
@@ -92,19 +123,19 @@ export function DomainVerification({
     })
   }
 
-  async function setRecordMethod(domain: DomainView, next: BusinessDomainMethod) {
-    await run(`method-${domain.id}`, async () => {
-      const data = await patchJson<{ domain: DomainView }>(`${base}/${domain.id}`, { action: "set_method", method: next })
-      setDomains((current) => current.map((d) => (d.id === domain.id ? data.domain : d)))
-    })
-  }
-
   async function verify(domain: DomainView) {
+    const method = methodFor(domain, methodChoice)
     await run(`verify-${domain.id}`, async () => {
       const data = await postJson<{ verified: boolean; domain: DomainView; failure?: { code: string; message: string } }>(
         `${base}/${domain.id}/verify`,
-        { reverification: domain.status === "verified" },
+        { reverification: domain.status === "verified", method },
       )
+      // The check persisted the choice, so the override has done its job.
+      setMethodChoice((current) => {
+        const next = { ...current }
+        delete next[domain.id]
+        return next
+      })
       setDomains((current) => current.map((d) => (d.id === domain.id ? data.domain : d)))
       if (data.verified) {
         setNotice(`${domain.hostname} is verified as yours in Atai.`)
@@ -118,7 +149,10 @@ export function DomainVerification({
 
   async function regenerate(domain: DomainView) {
     await run(`regen-${domain.id}`, async () => {
-      const data = await patchJson<{ domain: DomainView }>(`${base}/${domain.id}`, { action: "regenerate" })
+      const data = await patchJson<{ domain: DomainView }>(`${base}/${domain.id}`, {
+        action: "regenerate",
+        method: methodFor(domain, methodChoice),
+      })
       setDomains((current) => current.map((d) => (d.id === domain.id ? data.domain : d)))
       setNotice("A new challenge was generated. The previous tag or file no longer works — replace it with the new one below.")
       onChanged?.()
@@ -150,6 +184,7 @@ export function DomainVerification({
 
   const active = domains.filter((d) => d.status !== "revoked")
   const released = domains.filter((d) => d.status === "revoked")
+  const guideDomain = active.find((d) => d.id === guideFor) ?? null
 
   return (
     <div data-atai-tour="existing-business-domains" className="flex flex-col gap-5">
@@ -173,26 +208,30 @@ export function DomainVerification({
             </Button>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-3 text-xs">
-          <span className="text-muted-foreground">Method:</span>
-          {(
-            [
-              ["meta_tag", "Meta tag in my homepage"],
-              ["html_file", "HTML file at my site root"],
-            ] as Array<[BusinessDomainMethod, string]>
-          ).map(([value, label]) => (
-            <label key={value} className="inline-flex cursor-pointer items-center gap-1.5">
-              <input
-                type="radio"
-                name="dv-method"
-                checked={method === value}
-                onChange={() => setMethod(value)}
-                className="size-3.5 accent-[var(--primary)]"
-              />
-              {label}
-            </label>
-          ))}
-        </div>
+        {/* Once a challenge exists, each card carries its own instant toggle;
+            two controls for one choice is what made switching feel broken. */}
+        {active.length === 0 ? (
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            <span className="text-muted-foreground">How do you want to verify?</span>
+            {(
+              [
+                ["meta_tag", "Meta tag in my homepage"],
+                ["html_file", "HTML file at my site root"],
+              ] as Array<[BusinessDomainMethod, string]>
+            ).map(([value, label]) => (
+              <label key={value} className="inline-flex cursor-pointer items-center gap-1.5">
+                <input
+                  type="radio"
+                  name="dv-method"
+                  checked={method === value}
+                  onChange={() => setMethod(value)}
+                  className="size-3.5 accent-[var(--primary)]"
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+        ) : null}
         <p className="text-[11px] leading-relaxed text-muted-foreground">
           Verifying <span className="font-medium">yourbusiness.com</span> verifies only that exact hostname — not
           <span className="font-medium"> shop.yourbusiness.com</span> or any other subdomain. Add each hostname you
@@ -286,32 +325,45 @@ export function DomainVerification({
 
             {domain.token && !expired ? (
               <div className="mt-3 flex flex-col gap-3">
-                <div className="flex flex-wrap items-center gap-2 text-xs">
+                <div className="flex flex-wrap items-center gap-2 text-xs" role="group" aria-label="Verification method">
                   <span className="text-muted-foreground">Check with:</span>
                   {(
                     [
                       ["meta_tag", "Meta tag"],
                       ["html_file", "HTML file"],
                     ] as Array<[BusinessDomainMethod, string]>
-                  ).map(([value, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setRecordMethod(domain, value)}
-                      disabled={busy === `method-${domain.id}`}
-                      className={cn(
-                        "rounded-lg border px-2.5 py-1 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                        (domain.method ?? "meta_tag") === value
-                          ? "border-primary/40 bg-primary/10 text-primary"
-                          : "border-border bg-card text-muted-foreground hover:border-primary/30",
-                      )}
-                    >
-                      {label}
-                    </button>
-                  ))}
+                  ).map(([value, label]) => {
+                    const selected = methodFor(domain, methodChoice) === value
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => setMethodChoice((current) => ({ ...current, [domain.id]: value }))}
+                        className={cn(
+                          "rounded-lg border px-2.5 py-1 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                          selected
+                            ? "border-primary/40 bg-primary/10 text-primary"
+                            : "border-border bg-card text-muted-foreground hover:border-primary/30",
+                        )}
+                      >
+                        {label}
+                      </button>
+                    )
+                  })}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="ml-auto gap-1.5"
+                    onClick={() => setGuideFor(domain.id)}
+                  >
+                    <ListChecks className="size-3.5" />
+                    Steps to follow
+                  </Button>
                 </div>
 
-                {(domain.method ?? "meta_tag") === "meta_tag" ? (
+                {methodFor(domain, methodChoice) === "meta_tag" ? (
                   <div className="flex flex-col gap-1.5">
                     <p className="text-xs text-muted-foreground">
                       Paste this inside your homepage&apos;s <code className="rounded bg-secondary px-1">&lt;head&gt;</code>:
@@ -329,8 +381,17 @@ export function DomainVerification({
                 ) : (
                   <div className="flex flex-col gap-1.5">
                     <p className="text-xs text-muted-foreground">
-                      Upload this file to your website&apos;s root so it is served at{" "}
-                      <code className="rounded bg-secondary px-1">https://{domain.hostname}/{domain.fileName}</code>:
+                      Put this file where your site is published from, so it is served at{" "}
+                      <a
+                        href={`https://${domain.hostname}/${domain.fileName}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 break-all text-primary hover:underline"
+                      >
+                        https://{domain.hostname}/{domain.fileName}
+                        <ExternalLink className="size-3 shrink-0" />
+                      </a>
+                      :
                     </p>
                     <div className="flex flex-wrap items-center gap-2">
                       <code className="min-w-0 select-all overflow-x-auto whitespace-pre-wrap break-all rounded-lg border border-border bg-secondary/50 px-3 py-2 font-mono text-[11px]">
@@ -345,6 +406,10 @@ export function DomainVerification({
                         Download {domain.fileName}
                       </a>
                     </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      On Vercel or Next.js the file goes in <code className="rounded bg-secondary px-1">public/</code>,
+                      not the repository root — the root is not published.
+                    </p>
                   </div>
                 )}
 
@@ -418,6 +483,27 @@ export function DomainVerification({
           </div>
         )
       })}
+
+    {guideDomain ? (
+      <VerificationGuideDialog
+        open
+        onOpenChange={(next) => {
+          if (!next) setGuideFor(null)
+        }}
+        hostname={guideDomain.hostname}
+        method={methodFor(guideDomain, methodChoice)}
+        metaSnippet={guideDomain.metaSnippet}
+        fileName={guideDomain.fileName}
+        downloadHref={`${base}/${guideDomain.id}/file`}
+        fileHref={`https://${guideDomain.hostname}/${guideDomain.fileName ?? ""}`}
+        checking={busy === `verify-${guideDomain.id}`}
+        onCheck={() => {
+          const target = guideDomain
+          setGuideFor(null)
+          void verify(target)
+        }}
+      />
+    ) : null}
 
     {released.length ? (
       <div className="text-[11px] text-muted-foreground">

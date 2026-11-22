@@ -71,9 +71,11 @@ export function hashDomainToken(token: string): string {
 
 /** Filename is derived from the token so every challenge is unique, and it is
  * fixed at generation time so a founder cannot be talked into fetching an
- * arbitrary path. */
+ * arbitrary path. It is deliberately short enough to find in a host's file
+ * manager, and hashed so the public file name reveals nothing about the token. */
 export function fileNameForToken(token: string): string {
-  return `atai-verification-${token}.html`
+  const digest = createHash("sha256").update(token).digest("base64url").slice(0, 12)
+  return `atai-verify-${digest}.txt`
 }
 
 export function fileContentForToken(token: string): string {
@@ -652,6 +654,9 @@ export async function verifyDomainOwnership(input: {
   domainId: string
   /** true = a periodic/manual re-check of an already-verified domain. */
   reverification?: boolean
+  /** The method the founder is looking at. The toggle is a view choice, so the
+   * check follows the visible instructions instead of a stale stored value. */
+  method?: BusinessDomainMethod
   /** Scheduled sweep: our own cron, not a founder request, so the per-user and
    * per-domain attempt limits (which exist to stop a person hammering a check)
    * do not apply. The batch size is the real bound. */
@@ -681,31 +686,52 @@ export async function verifyDomainOwnership(input: {
     await checkRateLimit({ action: "domain_verify_domain", identifier: doc.id, limit: 10, windowMs: 30 * 60 * 1000 })
   }
 
-  const method = doc.method ?? "meta_tag"
-  await col.updateOne({ id: doc.id }, { $set: { status: "in_progress", attempts: (doc.attempts ?? 0) + 1, lastAttemptAt: now, updatedAt: now } })
+  const method: BusinessDomainMethod =
+    input.method === "html_file" || input.method === "meta_tag" ? input.method : (doc.method ?? "meta_tag")
+  await col.updateOne(
+    { id: doc.id },
+    { $set: { status: "in_progress", method, attempts: (doc.attempts ?? 0) + 1, lastAttemptAt: now, updatedAt: now } },
+  )
 
   let outcome: { ok: boolean; code?: string; message?: string }
   try {
     if (method === "html_file") {
-      const path = `/${doc.fileName}`
-      const page = await safeFetchDocument(
-        doc.submittedUrl,
-        path,
-        {
-          allowHostnameChange: false,
-          allowSameSiteRedirects: true,
-          acceptContentTypes: ["text/html", "text/plain", "application/octet-stream"],
-          ...input.limits,
-        },
-      )
-      const expected = fileContentForToken(token)
-      const got = page.body
-      const found = got.trim() === expected.trim() || got.includes(expected.trim())
-      outcome = found
-        ? { ok: true }
-        : got.trim().length === 0
-          ? { ok: false, code: "FILE_MISSING", message: "We couldn't find your verification file at the expected website location. Make sure it is uploaded to your website's root directory." }
-          : { ok: false, code: "TOKEN_MISMATCH", message: "The verification file was found, but its token did not match this verification request." }
+      const fileName = doc.fileName ?? fileNameForToken(token)
+      const fileUrl = `https://${doc.hostname}/${fileName}`
+      try {
+        const page = await safeFetchDocument(
+          doc.submittedUrl,
+          `/${fileName}`,
+          {
+            allowHostnameChange: false,
+            allowSameSiteRedirects: true,
+            acceptContentTypes: ["text/html", "text/plain", "application/octet-stream"],
+            ...input.limits,
+          },
+        )
+        const expected = fileContentForToken(token)
+        const got = page.body
+        const found = got.trim() === expected.trim() || got.includes(expected.trim())
+        outcome = found
+          ? { ok: true }
+          : got.trim().length === 0
+            ? { ok: false, code: "FILE_MISSING", message: fileMissingMessage(fileUrl) }
+            : { ok: false, code: "TOKEN_MISMATCH", message: "The verification file was found, but its token did not match this verification request." }
+      } catch (error) {
+        // "Page not found" is the one failure a founder can fix in seconds if we
+        // name the address and the folder it should be in.
+        if (error instanceof DomainFetchError && error.code === "NOT_FOUND") {
+          outcome = { ok: false, code: "FILE_MISSING", message: fileMissingMessage(fileUrl) }
+        } else if (error instanceof DomainFetchError && error.code === "CONTENT_TYPE") {
+          outcome = {
+            ok: false,
+            code: "FILE_MISSING",
+            message: `${fileUrl} answered, but not with the verification file. Check the file name is exactly ${fileName} — a renamed file is not served at this address.`,
+          }
+        } else {
+          throw error
+        }
+      }
     } else {
       // A tag served on the same site (apex↔www, a sibling subdomain) still
       // proves this business. A tag that only appears after a hop to another
@@ -879,6 +905,15 @@ export async function releaseDomain(input: { userId: string; projectId: string; 
   return next
 }
 
+/**
+ * A 404 on the verification file is almost always the wrong folder, not a
+ * missing file — on Vercel/Next.js only `public/` is published, so a file at
+ * the repository root is invisible even though the founder "added it".
+ */
+function fileMissingMessage(fileUrl: string): string {
+  return `Your site answered 404 for ${fileUrl}, so the file is not being served there yet. Put it in the folder your homepage is published from — on Vercel or Next.js that is public/ (the repository root is not published) — then redeploy and check again.`
+}
+
 function fetchFailureMessage(code: string): string {
   switch (code) {
     case "UNSAFE_DESTINATION":
@@ -886,7 +921,7 @@ function fetchFailureMessage(code: string): string {
     case "TIMEOUT":
       return "Your website did not respond within the verification time limit. Please try again."
     case "NOT_FOUND":
-      return "We couldn't find your verification file at the expected website location. Make sure it is uploaded to your website's root directory."
+      return "Your website answered 404 for the page we checked. Confirm the address is right and that the page is published."
     case "RESPONSE_TOO_LARGE":
       return "That page is larger than verification can read. Use the verification file method instead."
     case "CONTENT_TYPE":

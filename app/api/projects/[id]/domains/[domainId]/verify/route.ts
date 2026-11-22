@@ -19,11 +19,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return fail("UNAUTHORIZED_PROJECT_ACCESS", "We couldn't find this business.", 404)
     }
     const body = await readJsonBody(req, 4096)
+    const method = body.method === "html_file" ? "html_file" : body.method === "meta_tag" ? "meta_tag" : undefined
     const outcome = await verifyDomainOwnership({
       userId: user.id,
       projectId: id,
       domainId,
       reverification: body.reverification === true,
+      ...(method ? { method } : {}),
     })
     return ok({
       verified: outcome.view.status === "verified",

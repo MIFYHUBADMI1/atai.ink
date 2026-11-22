@@ -18,6 +18,9 @@ import type { NextRequest } from "next/server"
  *  - Public auth routes (login, register, forgot-password, OAuth callback, etc.)
  *  - Billing webhook (signed with HMAC — has its own auth; no session cookie)
  *  - Static assets and Next.js internals
+ *  - Domain verification files (`atai-verif*`), which are public proof by
+ *    design: a session gate would redirect our own verifier to the login page
+ *    and turn a correct file into a token mismatch.
  */
 
 const SESSION_COOKIE = "Atai_session"
@@ -118,7 +121,8 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Run on all paths except Next.js internals and static files.
-    "/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)",
+    // Run on all paths except Next.js internals, static files, and the public
+    // domain-verification files (`atai-verify-*.txt`, legacy `atai-verification-*`).
+    "/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|atai-verif).*)",
   ],
 }

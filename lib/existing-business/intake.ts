@@ -489,7 +489,7 @@ async function runAssessment(
       "intake.assessment": compact({
         ...intake.assessment,
         status: "failed",
-        attemptedAt: Date.now(),
+        attemptedAt,
         errorCode: outcome.code,
         errorMessage: outcome.message,
         errorDetail: outcome.detail ?? null,
@@ -504,7 +504,9 @@ async function runAssessment(
   await patchIntake(project.id, {
     "intake.assessment": compact({
       status: "completed",
-      attemptedAt: intake.assessment?.attemptedAt ?? Date.now(),
+      // The attempt that was actually billed — never a fresh clock reading, or
+      // the stored record and the ledger entry describe different attempts.
+      attemptedAt,
       completedAt: Date.now(),
       generatedAt: outcome.assessment.generatedAt,
       result: outcome.assessment,

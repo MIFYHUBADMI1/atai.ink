@@ -176,8 +176,18 @@ describe("token primitives", () => {
   })
 
   it("file name and content are derived from the token", () => {
-    expect(fileNameForToken("tok")).toBe("atai-verification-tok.html")
+    expect(fileNameForToken("tok")).toMatch(/^atai-verify-[A-Za-z0-9_-]{12}\.txt$/)
     expect(fileContentForToken("tok")).toBe("atai-verification=tok\n")
+  })
+
+  it("gives a short, typeable file name that never carries the token", () => {
+    const token = "A".repeat(43)
+    const name = fileNameForToken(token)
+    expect(name.length).toBeLessThanOrEqual(30)
+    expect(name).not.toContain(token.slice(0, 8))
+    // Two challenges never share a name, and the same token always maps to one.
+    expect(fileNameForToken("tok-a")).not.toBe(fileNameForToken("tok-b"))
+    expect(fileNameForToken("tok-a")).toBe(fileNameForToken("tok-a"))
   })
 })
 
@@ -445,6 +455,40 @@ describe("verifyDomainOwnership — html file", () => {
     fetchMock.mockResolvedValue({ status: 200, body: "  ", contentType: "text/plain", hostname: "example.com", redirects: 0 })
     const outcome = await verifyDomainOwnership({ ...OWNER, domainId: doc.id })
     expect(outcome.failure?.code).toBe("FILE_MISSING")
+  })
+
+  it("turns a 404 into the address that answered and the folder the file belongs in", async () => {
+    const doc = await register("https://example.com", "html_file")
+    fetchMock.mockRejectedValue(new DomainFetchError("NOT_FOUND", "raw internal detail 10.0.0.9"))
+    const outcome = await verifyDomainOwnership({ ...OWNER, domainId: doc.id })
+    expect(outcome.failure?.code).toBe("FILE_MISSING")
+    // A founder who put the file in the repository root needs to read this.
+    expect(outcome.failure?.message).toContain(`https://example.com/${doc.fileName}`)
+    expect(outcome.failure?.message).toContain("public/")
+    expect(outcome.failure?.message).not.toContain("10.0.0.9")
+  })
+
+  it("checks the method the founder is looking at, and stores it", async () => {
+    const doc = await register("https://example.com", "meta_tag")
+    fetchMock.mockResolvedValue({
+      status: 200,
+      body: fileContentForToken(doc.token!),
+      contentType: "text/plain",
+      hostname: "example.com",
+      redirects: 0,
+    })
+    const outcome = await verifyDomainOwnership({ ...OWNER, domainId: doc.id, method: "html_file" })
+    expect(outcome.doc.status).toBe("verified")
+    expect(outcome.doc.verifiedMethod).toBe("html_file")
+    expect(fetchMock).toHaveBeenCalledWith(doc.submittedUrl, `/${doc.fileName}`, expect.anything())
+    expect(storedDoc(doc.id).method).toBe("html_file")
+  })
+
+  it("still checks the stored method when the caller sends none", async () => {
+    const doc = await register("https://example.com", "meta_tag")
+    fetchMock.mockResolvedValue(metaPage(doc.token!))
+    const outcome = await verifyDomainOwnership({ ...OWNER, domainId: doc.id })
+    expect(outcome.doc.verifiedMethod).toBe("meta_tag")
   })
 })
 

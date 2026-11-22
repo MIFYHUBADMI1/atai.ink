@@ -24,7 +24,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return new Response(fileContentForToken(doc.token), {
       status: 200,
       headers: {
-        "content-type": "text/html; charset=utf-8",
+        // The file is a single plain-text line; serving it as text keeps hosts
+        // from rendering it as a page and makes the browser check trivial.
+        "content-type": "text/plain; charset=utf-8",
         "content-disposition": `attachment; filename="${doc.fileName}"`,
         "cache-control": "no-store",
       },

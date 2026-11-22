@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import type { DomainView } from "@/lib/domain/service"
-import { DomainVerification } from "./domain-verification"
+import { DomainVerification, methodFor } from "./domain-verification"
 
 vi.mock("@/lib/client/api", () => ({ jsonFetcher: vi.fn(), postJson: vi.fn(), patchJson: vi.fn(), deleteJson: vi.fn() }))
 
@@ -78,5 +78,56 @@ describe("DomainVerification — when the last check happened", () => {
     ])
     expect(html).toContain("The page did not respond.")
     expect(html).toContain("Checked 5 min ago")
+  })
+})
+
+describe("DomainVerification — choosing how to check", () => {
+  it("follows the founder's click without waiting for the server", () => {
+    const pending = domain({ status: "pending", method: "meta_tag", verifiedAt: null, verifiedMethod: null })
+    // The stored value is the starting point…
+    expect(methodFor(pending, {})).toBe("meta_tag")
+    // …and one click decides, in either direction, with no round-trip in between.
+    expect(methodFor(pending, { "dom-1": "html_file" })).toBe("html_file")
+    expect(methodFor({ ...pending, method: "html_file" }, { "dom-1": "meta_tag" })).toBe("meta_tag")
+  })
+
+  it("treats a challenge with no stored method as the meta tag", () => {
+    expect(methodFor({ id: "dom-1", method: null }, {})).toBe("meta_tag")
+  })
+
+  it("offers the switch and the steps on every pending card", () => {
+    const html = render([
+      domain({
+        status: "pending",
+        method: "meta_tag",
+        verifiedAt: null,
+        verifiedMethod: null,
+        fileName: "atai-verify-Ab3dEf9hIj2k.txt",
+      }),
+    ])
+    expect(html).toContain("Check with:")
+    expect(html).toContain('aria-pressed="true"')
+    expect(html).toContain("Steps to follow")
+    // One control per choice: the duplicate radios belong to a new challenge only.
+    expect(html).not.toContain("How do you want to verify?")
+  })
+
+  it("names the exact file address the check will open, short and clickable", () => {
+    const html = render([
+      domain({
+        status: "pending",
+        method: "html_file",
+        verifiedAt: null,
+        verifiedMethod: null,
+        fileName: "atai-verify-Ab3dEf9hIj2k.txt",
+      }),
+    ])
+    expect(html).toContain("https://bakery.example/atai-verify-Ab3dEf9hIj2k.txt")
+    expect(html).toContain("public/")
+  })
+
+  it("shows the method radios only when there is nothing to switch yet", () => {
+    const html = render([domain({ status: "revoked", verifiedAt: null, verifiedMethod: null })])
+    expect(html).toContain("How do you want to verify?")
   })
 })
