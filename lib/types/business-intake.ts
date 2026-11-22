@@ -262,6 +262,15 @@ export interface BusinessDomainDoc {
   /** When an unverified claim stops blocking other accounts. Cleared once the
    * domain is verified: a verified business is held until it is released. */
   claimExpiresAt?: number
+  /** Set when the founder was warned that an unverified claim is about to
+   * expire, so a daily sweep sends one reminder, not one per run. */
+  claimReminderSentAt?: number
+  /** Set when the founder was told an unverified claim was released. */
+  claimExpiryNoticeSentAt?: number
+  /** True only when the release came from the expiry window (not from the
+   * founder deleting the business or releasing the domain) — the notice sweep
+   * keys on it so nobody is emailed about a release they performed. */
+  expiredUnverified?: boolean
   /** Registrable domain (eTLD+1) for display only. Never a verification target. */
   registrableDomain: string
   submittedUrl: string

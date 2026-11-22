@@ -978,7 +978,7 @@ export default async function ProjectPlanPage({ params }: { params: Promise<{ pr
                       rel="noreferrer"
                       className="group block overflow-hidden rounded-xl border border-border bg-background transition-colors hover:border-primary/40"
                     >
-                      <img src={src} alt={`Screenshot ${i + 1}`} className="aspect-video w-full object-cover object-top transition-transform duration-300 group-hover:scale-[1.03]" />
+                      <img src={src} alt={`Screenshot ${i + 1}`} loading="lazy" decoding="async" className="aspect-video w-full object-cover object-top transition-transform duration-300 group-hover:scale-[1.03]" />
                     </a>
                   ))}
                 </div>

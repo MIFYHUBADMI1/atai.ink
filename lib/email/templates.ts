@@ -103,3 +103,59 @@ export function sessionVerificationEmail(name: string, code: string) {
     text: `Hey ${name}, your Atai sign-in code is ${code} (expires in 10 minutes). If you didn't try to sign in, change your password immediately.`,
   }
 }
+
+/**
+ * A business was reserved but not proven. The window is real: when it closes,
+ * the website becomes connectable by any account, including whoever squatted it.
+ */
+export function claimExpiryReminderEmail(name: string, hostname: string, hoursLeft: number, verifyUrl: string) {
+  const window = hoursLeft <= 1 ? "less than an hour" : `about ${hoursLeft} hours`
+  const bodyHtml = [
+    emailParagraph(`Hey ${emailStrong(name)},`),
+    emailParagraph(
+      `You started connecting <strong class="email-strong" style="color:#18181b;">${hostname}</strong> to Atai, but the ownership check is not finished yet.`,
+    ),
+    emailParagraph(`The reservation lasts ${window} more. After that, the website can be connected by any other Atai account.`),
+    emailButton(verifyUrl, "Finish verification"),
+    emailNote("All it takes is one meta tag or file on your site. If you have moved on, you can ignore this email — nothing is charged for a business you never verified."),
+  ].join("")
+
+  return {
+    subject: `${hostname} is reserved for you for ${window} more`,
+    html: renderEmailShell({
+      title: "Finish verifying your business",
+      preheader: `Your claim on ${hostname} expires in ${window}.`,
+      eyebrow: "Connected business",
+      heading: "Finish verifying your business",
+      bodyHtml,
+      footerNote: "This is a transactional email about a business you started connecting.",
+    }),
+    text: `Hey ${name}, ${hostname} is reserved for you for ${window} more. Finish verification: ${verifyUrl}`,
+  }
+}
+
+/** The window closed. Nothing was deleted — the site is simply free again. */
+export function claimReleasedEmail(name: string, hostname: string, reconnectUrl: string) {
+  const bodyHtml = [
+    emailParagraph(`Hey ${emailStrong(name)},`),
+    emailParagraph(
+      `The reservation on <strong class="email-strong" style="color:#18181b;">${hostname}</strong> expired because ownership was never confirmed, so it is no longer held for your account.`,
+    ),
+    emailParagraph("Your business page, your read and your notes are all still there. Reconnecting takes one check."),
+    emailButton(reconnectUrl, "Reconnect the business"),
+    emailNote("If someone else connects this website first, only they can disconnect it. Reconnecting now keeps it yours."),
+  ].join("")
+
+  return {
+    subject: `${hostname} was released — reconnect it when you are ready`,
+    html: renderEmailShell({
+      title: "Your business reservation expired",
+      preheader: `${hostname} is no longer reserved for your account.`,
+      eyebrow: "Connected business",
+      heading: "Your business reservation expired",
+      bodyHtml,
+      footerNote: "This is a transactional email about a business you started connecting.",
+    }),
+    text: `Hey ${name}, the reservation on ${hostname} expired. Reconnect it: ${reconnectUrl}`,
+  }
+}

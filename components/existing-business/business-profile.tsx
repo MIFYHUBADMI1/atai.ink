@@ -27,6 +27,7 @@ import { businessSteps, type BusinessStep, type BusinessStepId } from "@/lib/exi
 import { intakeStatusLabel } from "@/lib/existing-business/stage-labels"
 import { cn } from "@/lib/utils"
 import { AssessmentReport } from "./assessment-report"
+import { trackConnectCompleted, trackConnectReadCompleted } from "@/lib/analytics/connect-funnel"
 import { ConnectionCard } from "./connection-card"
 import { DomainVerification } from "./domain-verification"
 import { ReadingPreviewButton, ReadingPreviewDialog } from "./reading-preview-dialog"
@@ -123,6 +124,23 @@ export function BusinessProfile({ projectId, initialView }: { projectId: string;
     }, POLL_MS)
     return () => clearInterval(timer)
   }, [running, watching, refresh])
+
+  // The connect funnel: the read landing and the connection going live are the
+  // two moments the journey can be measured from the browser.
+  const readReported = useRef(false)
+  const connectionReported = useRef(false)
+  useEffect(() => {
+    if (view.assessment.result && !readReported.current) {
+      readReported.current = true
+      trackConnectReadCompleted({ surface: "project" })
+    }
+  }, [view.assessment.result])
+  useEffect(() => {
+    if (view.connection.status === "verified" && !connectionReported.current) {
+      connectionReported.current = true
+      trackConnectCompleted({ surface: "project" })
+    }
+  }, [view.connection.status])
 
   // Stop polling once the run reports a verdict. The view right after a start
   // still shows the previous outcome, so an old failure only counts once enough

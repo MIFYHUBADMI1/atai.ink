@@ -118,7 +118,7 @@ export function OnboardingVideoCard() {
             <div className="flex items-center gap-3 rounded-xl border border-border bg-background/60 p-3">
               {thumbnail ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={thumbnail} alt="" className="h-14 w-24 shrink-0 rounded-md object-cover" />
+                <img src={thumbnail} alt="" loading="lazy" decoding="async" className="h-14 w-24 shrink-0 rounded-md object-cover" />
               ) : (
                 <span className="flex h-14 w-24 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
                   <Film className="size-4" />

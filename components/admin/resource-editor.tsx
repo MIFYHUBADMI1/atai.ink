@@ -487,7 +487,7 @@ export function ResourceEditor({
               {videoId && videoThumb ? (
                 <div className="mt-3 flex items-center gap-3">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={videoThumb} alt="" className="h-16 w-28 rounded-lg border border-border object-cover" />
+                  <img src={videoThumb} alt="" loading="lazy" decoding="async" className="h-16 w-28 rounded-lg border border-border object-cover" />
                   <div className="min-w-0 text-xs text-muted-foreground">
                     <p className="flex items-center gap-1 font-medium text-foreground">
                       <Film className="size-3.5 text-red-500" /> Video detected

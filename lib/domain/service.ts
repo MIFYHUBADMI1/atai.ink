@@ -17,13 +17,14 @@
  * ownership-gated domain endpoint and is never logged. See "Known
  * limitations" in the engineering report for the encryption-at-rest follow-up.
  */
-import { timingSafeEqual, createHash } from "node:crypto"
+import { createHash } from "node:crypto"
 import { ObjectId, type ClientSession } from "mongodb"
 import { businessDomainsCol } from "@/lib/db/collections"
 import { cryptoId, store } from "@/lib/store/store"
 import { generateToken } from "@/lib/auth/crypto"
 import { checkRateLimit } from "@/lib/auth/rate-limit"
 import { logger } from "@/lib/logging/logger"
+import { decryptDomainToken, encryptDomainToken } from "@/lib/domain/token-cipher"
 import { DomainInputError, assertSiteUrl, canonicalBusinessHost, normalizeHostname, registrableDomainOf } from "./host"
 import {
   BUSINESS_ALREADY_CONNECTED_MESSAGE,
@@ -68,13 +69,6 @@ export function hashDomainToken(token: string): string {
   return createHash("sha256").update(token).digest("hex")
 }
 
-function tokensEqual(candidateToken: string, expectedHash: string): boolean {
-  const candidate = hashDomainToken(candidateToken)
-  const expected = expectedHash
-  if (candidate.length !== expected.length) return false
-  return timingSafeEqual(Buffer.from(candidate, "hex"), Buffer.from(expected, "hex"))
-}
-
 /** Filename is derived from the token so every challenge is unique, and it is
  * fixed at generation time so a founder cannot be talked into fetching an
  * arbitrary path. */
@@ -107,6 +101,9 @@ export interface DomainView {
   lastAttemptAt: number | null
   /** When a check actually ran, successful or not. Null until the first check. */
   lastCheckedAt: number | null
+  /** Deadline on an unverified claim, so the profile can show the clock. Null
+   * once verified — a proven business does not expire. */
+  claimExpiresAt: number | null
   verifiedAt: number | null
   verifiedMethod: BusinessDomainMethod | null
   needsAttention: boolean
@@ -127,13 +124,14 @@ export function toDomainView(doc: BusinessDomainDoc, opts: { includeToken?: bool
     submittedUrl: doc.submittedUrl,
     status,
     method: doc.method ?? null,
-    token: includeToken ? (doc.token as string) : null,
-    metaSnippet: includeToken ? buildMetaTagSnippet(doc.token as string) : null,
+    token: includeToken ? decryptDomainToken(doc.token as string) : null,
+    metaSnippet: includeToken ? buildMetaTagSnippet(decryptDomainToken(doc.token as string)) : null,
     fileName: includeToken ? doc.fileName ?? null : null,
     tokenExpiresAt: doc.tokenExpiresAt ?? null,
     attempts: doc.attempts ?? 0,
     lastAttemptAt: doc.lastAttemptAt ?? null,
     lastCheckedAt: doc.lastCheckedAt ?? null,
+    claimExpiresAt: doc.verifiedAt !== undefined ? null : doc.claimExpiresAt ?? null,
     verifiedAt: doc.verifiedAt ?? null,
     verifiedMethod: doc.verifiedMethod ?? null,
     needsAttention: Boolean(doc.lastFailure) && (doc.status === "verified" || doc.status === "failed"),
@@ -228,7 +226,7 @@ export async function registerDomain(input: {
   }
 
   try {
-    await col.insertOne(doc)
+    await col.insertOne({ ...doc, token: encryptDomainToken(token) })
   } catch (error) {
     // The unique indexes are the authority on conflicts; a race lands here
     // rather than in the pre-check above.
@@ -238,7 +236,7 @@ export async function registerDomain(input: {
         hostname: target.hostname,
         releasedAt: { $exists: false },
       })) as BusinessDomainDoc | null
-      if (own) return { doc: own, created: false }
+      if (own) return { doc: withPlainToken(own), created: false }
       const raced = await findActiveClaim(canonicalHostname, now)
       if (raced && raced.hostname === target.hostname) {
         throw new DomainServiceError(
@@ -269,12 +267,12 @@ async function ensureChallenge(doc: BusinessDomainDoc, canonicalHostname: string
     if (Object.keys(setCanonical).length) {
       await col.updateOne({ id: doc.id }, { $set: { ...setCanonical, updatedAt: now } })
     }
-    return { ...doc, ...setCanonical } as BusinessDomainDoc
+    return withPlainToken({ ...doc, ...setCanonical } as BusinessDomainDoc)
   }
   const token = generateToken()
   const next = {
     ...setCanonical,
-    token,
+    token: encryptDomainToken(token),
     tokenHash: hashDomainToken(token),
     fileName: fileNameForToken(token),
     tokenGeneration: (doc.tokenGeneration ?? 1) + 1,
@@ -287,7 +285,7 @@ async function ensureChallenge(doc: BusinessDomainDoc, canonicalHostname: string
   }
   await col.updateOne({ id: doc.id }, { $set: next, $push: historyPush("pending", "challenge created") })
   logger.info("domain.register", "challenge restored on an existing claim", { projectId: doc.projectId, hostname: doc.hostname })
-  return { ...doc, ...next } as BusinessDomainDoc
+  return { ...doc, ...next, token } as BusinessDomainDoc
 }
 
 function isDuplicateKeyError(error: unknown): boolean {
@@ -369,7 +367,14 @@ async function expireStaleClaims(canonicalHostname: string, now: number): Promis
     await col.updateOne(
       { id: doc.id },
       {
-        $set: { status: "revoked" as BusinessDomainStatus, releasedAt: now, updatedAt: now },
+        $set: {
+          status: "revoked" as BusinessDomainStatus,
+          releasedAt: now,
+          // Distinguishes "the window closed" from "the founder released it",
+          // so the notice sweep never emails someone about their own action.
+          expiredUnverified: true,
+          updatedAt: now,
+        },
         $unset: { token: "", tokenHash: "", claimExpiresAt: "" },
         $push: historyPush("revoked", "reservation expired without verification"),
       },
@@ -553,7 +558,8 @@ export async function releaseProjectClaims(
 
 export async function listProjectDomains(projectId: string): Promise<BusinessDomainDoc[]> {
   const col = await businessDomainsCol()
-  return (await col.find({ projectId }).sort({ createdAt: -1 }).toArray()) as BusinessDomainDoc[]
+  const docs = (await col.find({ projectId }).sort({ createdAt: -1 }).toArray()) as BusinessDomainDoc[]
+  return docs.map(withPlainToken)
 }
 
 export async function getOwnedDomain(input: { userId: string; projectId: string; domainId: string }): Promise<BusinessDomainDoc> {
@@ -563,7 +569,7 @@ export async function getOwnedDomain(input: { userId: string; projectId: string;
     // Uniform not-found: never confirm that the id exists under someone else.
     throw new DomainServiceError("DOMAIN_NOT_FOUND", "We couldn't find that domain.", 404)
   }
-  return doc as BusinessDomainDoc
+  return withPlainToken(doc as BusinessDomainDoc)
 }
 
 /** Choose/switch the verification method without invalidating the challenge. */
@@ -598,7 +604,7 @@ export async function regenerateChallenge(input: {
   const now = Date.now()
   const method = input.method ?? doc.method ?? "meta_tag"
   const next: Partial<Omit<BusinessDomainDoc, "_id">> = {
-    token,
+    token: encryptDomainToken(token),
     tokenHash: hashDomainToken(token),
     fileName: fileNameForToken(token),
     tokenGeneration: (doc.tokenGeneration ?? 1) + 1,
@@ -616,7 +622,13 @@ export async function regenerateChallenge(input: {
     { $set: stripUndefined(next), $push: historyPush("pending", "challenge regenerated") },
   )
   logger.info("domain.regenerate", "challenge replaced", { domainId: doc.id, hostname: doc.hostname })
-  return { ...doc, ...next, history: pushHistory(doc, "pending", "challenge regenerated") } as BusinessDomainDoc
+  return { ...doc, ...next, token, history: pushHistory(doc, "pending", "challenge regenerated") } as BusinessDomainDoc
+}
+
+/** Storage holds the token encrypted; service callers work with plaintext.
+ * `decryptDomainToken` is a no-op for legacy unencrypted rows. */
+function withPlainToken(doc: BusinessDomainDoc): BusinessDomainDoc {
+  return doc.token ? { ...doc, token: decryptDomainToken(doc.token) } : doc
 }
 
 function stripUndefined<T extends object>(value: T): Partial<T> {
@@ -640,6 +652,10 @@ export async function verifyDomainOwnership(input: {
   domainId: string
   /** true = a periodic/manual re-check of an already-verified domain. */
   reverification?: boolean
+  /** Scheduled sweep: our own cron, not a founder request, so the per-user and
+   * per-domain attempt limits (which exist to stop a person hammering a check)
+   * do not apply. The batch size is the real bound. */
+  internal?: boolean
   limits?: { maxBytes?: number; totalTimeoutMs?: number }
 }): Promise<VerifyOutcome> {
   const doc = await getOwnedDomain(input)
@@ -657,10 +673,13 @@ export async function verifyDomainOwnership(input: {
   if (!doc.token || !doc.tokenHash) {
     throw new DomainServiceError("CHALLENGE_MISSING", "This domain needs a new verification token before it can be checked.", 409)
   }
+  const token = doc.token
 
   // Abuse limits: per user, per domain, plus a cooldown between attempts.
-  await checkRateLimit({ action: "domain_verify_user", identifier: input.userId, limit: 20, windowMs: 60 * 60 * 1000 })
-  await checkRateLimit({ action: "domain_verify_domain", identifier: doc.id, limit: 10, windowMs: 30 * 60 * 1000 })
+  if (!input.internal) {
+    await checkRateLimit({ action: "domain_verify_user", identifier: input.userId, limit: 20, windowMs: 60 * 60 * 1000 })
+    await checkRateLimit({ action: "domain_verify_domain", identifier: doc.id, limit: 10, windowMs: 30 * 60 * 1000 })
+  }
 
   const method = doc.method ?? "meta_tag"
   await col.updateOne({ id: doc.id }, { $set: { status: "in_progress", attempts: (doc.attempts ?? 0) + 1, lastAttemptAt: now, updatedAt: now } })
@@ -674,7 +693,7 @@ export async function verifyDomainOwnership(input: {
         path,
         { allowHostnameChange: false, acceptContentTypes: ["text/html", "text/plain", "application/octet-stream"], ...input.limits },
       )
-      const expected = fileContentForToken(doc.token)
+      const expected = fileContentForToken(token)
       const got = page.body
       const found = got.trim() === expected.trim() || got.includes(expected.trim())
       outcome = found
@@ -684,7 +703,7 @@ export async function verifyDomainOwnership(input: {
           : { ok: false, code: "TOKEN_MISMATCH", message: "The verification file was found, but its token did not match this verification request." }
     } else {
       const page = await safeFetchDocument(doc.submittedUrl, META_PATH, { acceptContentTypes: ["text/html"], ...input.limits })
-      const diagnosis = diagnoseVerificationMeta(page.body, doc.token)
+      const diagnosis = diagnoseVerificationMeta(page.body, token)
       outcome =
         diagnosis === "match"
           ? { ok: true }

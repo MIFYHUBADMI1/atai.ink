@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
@@ -25,6 +25,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { jsonFetcher, postJson } from "@/lib/client/api"
 import { INTAKE_SOURCE_ERROR, parseIntakeWebsite } from "@/lib/existing-business/source-rule"
 import { BUSINESS_ALREADY_CONNECTED_MESSAGE, BUSINESS_CLAIM_SUPPORT_HREF } from "@/lib/domain/claim-copy"
+import { beginConnectFlow, trackConnectClaimBlocked, trackConnectSubmitted } from "@/lib/analytics/connect-funnel"
 import { cn } from "@/lib/utils"
 import { CreditsShortfallDialog, TOP_UP_HREF, type JourneyCost } from "./credits-shortfall-dialog"
 
@@ -99,6 +100,12 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
   // Whether another account already holds this business. Checked before the
   // founder invests time in the rest of the wizard, not after they press Connect.
   const [claimHeld, setClaimHeld] = useState<string | null>(null)
+  // One blocked report per hostname: the preflight re-runs on every debounce.
+  const blockedReported = useRef(new Set<string>())
+
+  useEffect(() => {
+    beginConnectFlow("wizard")
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -121,11 +128,19 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
     }
     let cancelled = false
     const timer = setTimeout(() => {
-      jsonFetcher<{ hostname?: string; available: boolean }>(
+      jsonFetcher<{ hostname?: string; available: boolean; state?: "unclaimed" | "yours" | "held_by_other" }>(
         `/api/business/availability?url=${encodeURIComponent(website.url)}`,
       )
         .then((data) => {
-          if (!cancelled) setClaimHeld(data.available ? null : (data.hostname ?? website.hostname))
+          if (cancelled) return
+          setClaimHeld(data.available ? null : (data.hostname ?? website.hostname))
+          if (!data.available && !blockedReported.current.has(website.hostname)) {
+            blockedReported.current.add(website.hostname)
+            trackConnectClaimBlocked({
+              surface: "wizard",
+              state: data.state === "yours" ? "held_by_same_account" : "held_by_other",
+            })
+          }
         })
         .catch(() => {
           // A failed preflight must not block a founder: creation still checks.
@@ -206,6 +221,7 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
           websiteUrl: website?.url,
         },
       })
+      trackConnectSubmitted({ surface: "wizard" })
       router.push(`/project/${project.id}/business`)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not connect your business. Please try again.")

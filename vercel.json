@@ -8,6 +8,14 @@
     {
       "path": "/api/admin/billing/entitlements/annual-sweep",
       "schedule": "15 6 * * *"
+    },
+    {
+      "path": "/api/admin/domains/recheck",
+      "schedule": "20 3 * * *"
+    },
+    {
+      "path": "/api/admin/domains/claim-notices",
+      "schedule": "40 4 * * *"
     }
   ]
 }

@@ -1,20 +1,19 @@
 /**
- * Support release for a business claim (v1 operator path).
+ * Support release for a business claim (operator CLI).
  *
  *   npx tsx --env-file=.env.local scripts/release-business-claim.ts example.com \
  *     --reason "owner lost access to the old account" --apply
  *
- * Resolves by exact host or canonical host (so `example.com` also finds a claim
- * stored as `www.example.com`), prints every claim it finds, and releases them
- * with `detail: "released by support: <reason>"`. Dry-run unless `--apply`.
+ * Dry-run unless `--apply`. Resolves by exact or canonical host, prints what it
+ * found, then releases through the same service the admin page uses — so both
+ * paths write the same audit entry (`released by support (<actor>): <reason>`).
  *
- * This is the recovery path for "the old account is unreachable". It never
- * deletes anything: released rows keep their audit trail, and the website
- * becomes connectable by any account.
+ * The admin page (`/admin/domains/claims`) is the normal path; this script is
+ * for when the console is unreachable.
  */
 import { businessDomainsCol } from "@/lib/db/collections"
 import { canonicalBusinessHost } from "@/lib/domain/host"
-import { MAX_DOMAIN_HISTORY } from "@/lib/domain/service"
+import { releaseBusinessClaimForSupport } from "@/lib/domain/claims-admin"
 import type { BusinessDomainDoc } from "@/lib/types/business-intake"
 
 function argValue(name: string): string | undefined {
@@ -23,28 +22,29 @@ function argValue(name: string): string | undefined {
 }
 
 async function main() {
-  const host = process.argv.slice(2).find((arg) => !arg.startsWith("--") && !arg.startsWith("--reason"))
+  const flags = new Set(["--reason", "--actor"])
+  const host = process.argv.slice(2).find((arg, index, all) => !arg.startsWith("--") && !flags.has(all[index - 1] ?? ""))
   const reason = argValue("--reason")
+  const actor = argValue("--actor") ?? "cli"
   const apply = process.argv.includes("--apply")
 
   if (!host || !reason) {
     console.error(
-      "usage: release-business-claim.ts <host> --reason \"<why>\" [--apply]\n" +
+      "usage: release-business-claim.ts <host> --reason \"<why>\" [--actor <id>] [--apply]\n" +
         "  --reason is required: a support release must be explainable afterwards.",
     )
     process.exit(2)
   }
 
   const canonicalHostname = canonicalBusinessHost(host)
-  const col = await businessDomainsCol()
-  const docs = (await col
+  const docs = (await (await businessDomainsCol())
     .find({
       releasedAt: { $exists: false },
       hostname: { $in: [host, canonicalHostname, `www.${canonicalHostname}`] },
     })
     .toArray()) as BusinessDomainDoc[]
+  const matching = docs.filter((doc) => (doc.canonicalHostname ?? canonicalBusinessHost(doc.hostname)) === canonicalHostname)
 
-  const matching = docs.filter((doc) => canonicalBusinessHost(doc.hostname) === canonicalHostname)
   if (matching.length === 0) {
     console.log(`No active claim for ${canonicalHostname}. Nothing to release.`)
     return
@@ -64,24 +64,8 @@ async function main() {
     return
   }
 
-  const now = Date.now()
-  for (const doc of matching) {
-    await col.updateOne(
-      { id: doc.id },
-      {
-        $set: { status: "revoked", releasedAt: now, updatedAt: now },
-        $unset: { token: "", tokenHash: "", claimExpiresAt: "" },
-        $push: {
-          history: {
-            $each: [{ status: "revoked", at: now, detail: `released by support: ${reason}` }],
-            $position: 0,
-            $slice: MAX_DOMAIN_HISTORY,
-          },
-        },
-      },
-    )
-  }
-  console.log(`\nReleased ${matching.length} claim(s) for ${canonicalHostname}. Reason recorded: ${reason}`)
+  const result = await releaseBusinessClaimForSupport({ hostname: canonicalHostname, reason, actorId: actor })
+  console.log(`\nReleased ${result.released.length} claim(s) for ${result.canonicalHostname}. Reason recorded: ${reason}`)
 }
 
 main().catch((error) => {

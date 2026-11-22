@@ -218,7 +218,7 @@ export default async function PublicProjectPage({ params }: { params: Promise<{ 
                       >
                         <div className="relative aspect-[16/9] w-full overflow-hidden bg-muted">
                           {spThumb ? (
-                            <img src={spThumb} alt={sp.name}
+                            <img src={spThumb} alt={sp.name} loading="lazy" decoding="async"
                               className="h-full w-full object-cover object-top transition-transform duration-500 group-hover:scale-105" />
                           ) : (
                             <div className="flex h-full items-center justify-center bg-gradient-to-br from-muted to-accent/20">
@@ -254,7 +254,7 @@ export default async function PublicProjectPage({ params }: { params: Promise<{ 
                 <div className="flex items-center gap-3">
                   <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-sm font-bold text-primary overflow-hidden">
                     {authorDoc.imageUrl ? (
-                      <img src={authorDoc.imageUrl} alt={authorDoc.name} className="h-full w-full object-cover" />
+                      <img src={authorDoc.imageUrl} alt={authorDoc.name} loading="lazy" decoding="async" className="h-full w-full object-cover" />
                     ) : authorInitials(authorDoc.name)}
                   </div>
                   <div className="min-w-0">

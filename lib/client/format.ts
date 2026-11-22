@@ -35,3 +35,18 @@ export function relativeTimeShort(value: string | number | Date): string {
   if (day < 30) return `${day}d ago`
   return new Date(then).toLocaleDateString("en-US", { month: "short", day: "numeric" })
 }
+
+/** How long until a deadline still in the future: "for 41 more hours".
+ * Mirrors `relativeTime`'s thresholds so a card can say how long is left. */
+export function relativeDeadline(value: string | number | Date): string {
+  const then = value instanceof Date ? value.getTime() : new Date(value).getTime()
+  if (Number.isNaN(then)) return ""
+
+  const min = Math.round((then - Date.now()) / 60_000)
+  if (min <= 0) return "now"
+  if (min < 60) return `for ${min} more min`
+  const hr = Math.round(min / 60)
+  if (hr < 48) return `for ${hr} more hour${hr === 1 ? "" : "s"}`
+  const day = Math.round(hr / 24)
+  return `for ${day} more days`
+}

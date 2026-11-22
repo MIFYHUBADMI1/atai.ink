@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Verified claims stay true, and support can release one
+
+- **Daily re-verification** (`lib/domain/recheck.ts`, `GET /api/admin/domains/recheck`): verified businesses are re-checked oldest-first, at most once per 20h, 25 per run. A failed check raises attention; only three consecutive failures expire the claim, and the sweep never releases a claim by itself.
+- **Claim-expiry emails** (`lib/domain/claim-notices.ts`, `GET /api/admin/domains/claim-notices`): one reminder inside the last 48h of an unverified claim, one notice if it expired. `expiredUnverified` keeps the notice away from releases the founder performed. The deadline is now visible in the domain card.
+- **Admin → Business claims** (`/admin/domains/claims`): who holds each connected business, with an audited support release (operator + reason in the record's history). `scripts/release-business-claim.ts` now shares the same service.
+- **Connect-journey analytics** (`lib/analytics/connect-funnel.ts`): started → submitted → read → verified → completed, plus `connect_claim_blocked` with the blocking state. No hostname, URL, project id or email is sent.
+
+### Changed
+
+- Verification tokens are encrypted at rest (AES-256-GCM, key from `AUTH_SECRET` or `DOMAIN_TOKEN_KEY`). Legacy plaintext rows still read.
+- Security headers in `next.config.mjs` (`X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, COOP, HSTS) and a report-only CSP.
+- CI now runs `pnpm lint` between typecheck and tests.
+- `package-lock.json` removed: `pnpm` is the only package manager.
+- Repository root cleaned: implementation reports moved to `docs/history/`, audits to `docs/audits/`, tracked build artifacts removed.
+- Below-the-fold images load lazily with `decoding="async"`; removed the dead `tokensEqual` helper.
+
 ### Changed - Credit Ledger Migration
 
 #### Migration to Unified Double-Entry Ledger System

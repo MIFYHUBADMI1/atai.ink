@@ -76,7 +76,7 @@ export function ProjectAssets({ projectId }: { projectId: string }) {
           <div className="grid gap-3 sm:grid-cols-2">
             {screenshots.slice(0, 6).map((src, index) => (
               <a key={`ss-${index}`} href={src} target="_blank" rel="noreferrer" className="group overflow-hidden border border-border bg-background">
-                <img src={src} alt={`Screenshot ${index + 1}`} className="aspect-video w-full object-cover transition-transform group-hover:scale-[1.02]" loading="lazy" />
+                <img src={src} alt={`Screenshot ${index + 1}`} className="aspect-video w-full object-cover transition-transform group-hover:scale-[1.02]" loading="lazy" decoding="async" />
               </a>
             ))}
           </div>
@@ -88,7 +88,7 @@ export function ProjectAssets({ projectId }: { projectId: string }) {
           <div className="grid gap-3 sm:grid-cols-2">
             {otherAssets.slice(0, 18).map((src, index) => (
               <a key={`a-${index}`} href={src} target="_blank" rel="noreferrer" className="group overflow-hidden border border-border bg-background">
-                <img src={src} alt={`Asset ${index + 1}`} className="aspect-video w-full object-cover transition-transform group-hover:scale-[1.02]" loading="lazy" />
+                <img src={src} alt={`Asset ${index + 1}`} className="aspect-video w-full object-cover transition-transform group-hover:scale-[1.02]" loading="lazy" decoding="async" />
               </a>
             ))}
           </div>

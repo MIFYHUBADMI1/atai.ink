@@ -159,7 +159,7 @@ function ProjectCard({ project, onLikeToggle, onFollowToggle, onFork }: {
             <div className="flex items-center gap-2 min-w-0">
               <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-[10px] font-semibold text-primary overflow-hidden">
                 {project.author.imageUrl ? (
-                  <img src={project.author.imageUrl} alt={project.author.name} className="h-full w-full object-cover" />
+                  <img src={project.author.imageUrl} alt={project.author.name} loading="lazy" decoding="async" className="h-full w-full object-cover" />
                 ) : (
                   authorInitials(project.author.name)
                 )}

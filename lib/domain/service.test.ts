@@ -108,6 +108,7 @@ vi.mock("./secure-fetch", async (importOriginal) => ({
 import { checkRateLimit } from "@/lib/auth/rate-limit"
 import { store } from "@/lib/store/store"
 import { safeFetchDocument, DomainFetchError } from "./secure-fetch"
+import { decryptDomainToken } from "./token-cipher"
 import {
   BUSINESS_ALREADY_CONNECTED_MESSAGE,
   CLAIM_RESERVATION_TTL_MS,
@@ -192,6 +193,14 @@ describe("registerDomain", () => {
     expect(doc.tokenGeneration).toBe(1)
     expect(doc.registrableDomain).toBe("example.com")
     expect(doc.history?.[0]?.status).toBe("pending")
+  })
+
+  it("stores the challenge token encrypted, never in the clear", async () => {
+    const doc = await register()
+    const stored = storedDoc(doc.id)
+    expect(String(stored.token)).toMatch(/^v1:/)
+    expect(stored.token).not.toBe(doc.token)
+    expect(decryptDomainToken(String(stored.token))).toBe(doc.token)
   })
 
   it("mints a distinct token for every challenge", async () => {

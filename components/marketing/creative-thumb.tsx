@@ -63,7 +63,7 @@ export function CreativeThumb({
           <Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden />
         ) : isImage && src ? (
           // Stored creative bytes (data URL), not a remote host — next/image adds nothing here.
-          <img src={src} alt={title} className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
+          <img src={src} alt={title} loading="lazy" decoding="async" className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
         ) : (
           <div className="flex flex-col items-center gap-2 text-muted-foreground">
             {isImage ? <ImageIcon className="size-6" aria-hidden /> : <FileText className="size-6" aria-hidden />}

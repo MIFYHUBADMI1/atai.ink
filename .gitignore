@@ -27,6 +27,9 @@ tsconfig.tsbuildinfo
 tsconfig.tmp-*
 tsconfig.*-check.json
 *.tsbuildinfo
+# Root-level tool output that used to get committed
+tsc-*.txt
+test-out.txt
 
 # Local caches
 .cache/

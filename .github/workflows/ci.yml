@@ -46,6 +46,9 @@ jobs:
       - name: Typecheck
         run: pnpm exec tsc --noEmit
 
+      - name: Lint
+        run: pnpm lint
+
       - name: Unit suite
         run: pnpm test
 

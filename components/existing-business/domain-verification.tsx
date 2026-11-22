@@ -6,7 +6,8 @@ import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { patchJson, postJson } from "@/lib/client/api"
-import { relativeTime } from "@/lib/client/format"
+import { relativeDeadline, relativeTime } from "@/lib/client/format"
+import { trackConnectVerified } from "@/lib/analytics/connect-funnel"
 import type { DomainView } from "@/lib/domain/service"
 import type { BusinessDomainMethod, BusinessDomainStatus } from "@/lib/types/business-intake"
 import { cn } from "@/lib/utils"
@@ -107,6 +108,7 @@ export function DomainVerification({
       setDomains((current) => current.map((d) => (d.id === domain.id ? data.domain : d)))
       if (data.verified) {
         setNotice(`${domain.hostname} is verified as yours in Atai.`)
+        trackConnectVerified({ method: data.domain.method ?? "meta_tag", attempts: data.domain.attempts })
       } else if (data.failure) {
         setError(data.failure.message)
       }
@@ -240,6 +242,13 @@ export function DomainVerification({
                   <Clock className="size-3 shrink-0" />
                   {domain.lastCheckedAt ? `Last checked ${relativeTime(domain.lastCheckedAt)}` : "Not checked yet"}
                 </p>
+                {domain.claimExpiresAt && domain.status !== "verified" ? (
+                  <p className="mt-1 flex items-center gap-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+                    <TriangleAlert className="size-3 shrink-0" />
+                    Reserved for your account {relativeDeadline(domain.claimExpiresAt)} — after that another account can
+                    connect it
+                  </p>
+                ) : null}
               </div>
               <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-medium", statusTone(domain.status))}>
                 {STATUS_LABEL[domain.status]}

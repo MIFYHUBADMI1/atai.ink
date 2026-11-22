@@ -29,3 +29,6 @@ if (uri && process.env.ATAI_TEST_ALLOW_REMOTE_MONGO !== "1") {
     )
   }
 }
+// Fixed, non-secret key for at-rest encryption in tests. Production derives
+// the same key material from AUTH_SECRET, which is absent in a bare test run.
+process.env.AUTH_SECRET ??= "test-only-auth-secret-not-used-outside-vitest"

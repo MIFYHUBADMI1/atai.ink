@@ -154,7 +154,7 @@ export function ArticlePreview({ article }: { article: ArticlePreviewInput }) {
         <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">When the link is shared</p>
         <div className="overflow-hidden rounded-lg border border-border">
           {shareImage ? (
-            <img src={shareImage} alt="" className="h-32 w-full object-cover" />
+            <img src={shareImage} alt="" loading="lazy" decoding="async" className="h-32 w-full object-cover" />
           ) : null}
           <div className="p-3">
             <p className="line-clamp-2 break-words text-sm font-medium">{shareTitle}</p>
