@@ -158,6 +158,22 @@ describe("businessSteps — unproved addresses keep the domain step open", () =>
     }
   })
 
+  it("lets the step close once the reservation has run out, because nothing is blocked any more", () => {
+    const { steps } = businessSteps(
+      view({
+        assessment: assessed,
+        domain: {
+          records: [
+            claim({ status: "verified" }),
+            claim({ id: "dom-2", hostname: "shop.bakery.example", claimExpiresAt: Date.now() - 1 }),
+          ],
+          verified: true,
+        },
+      }),
+    )
+    expect(steps[1].done).toBe(true)
+  })
+
   it("reports the addresses that still need a decision", () => {
     const records = [
       claim({ status: "verified" }),

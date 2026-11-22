@@ -28,14 +28,22 @@ export interface BusinessSteps {
 }
 
 /**
- * Addresses the founder added but has not proved. Each one reserves a hostname
- * for 72 hours, so leaving it behind is not harmless bookkeeping: nobody else
- * can connect that site while it waits. Proving one address does not settle the
- * others — the domain step is finished only when every address is proved or
- * removed.
+ * Addresses the founder added but has not proved, while they still block
+ * anyone else. A live reservation is not harmless bookkeeping — nobody else can
+ * connect that site — so proving one address does not settle the others: the
+ * domain step is finished only when every address is proved or removed.
+ *
+ * A reservation that has run out no longer blocks anyone (`claimIsActive` in
+ * `lib/domain/service.ts` is the server-side rule this mirrors), so it cannot
+ * keep the step closed forever either.
  */
-export function unresolvedDomainClaims(records: DomainView[]): DomainView[] {
-  return records.filter((record) => record.status !== "verified" && record.status !== "revoked")
+export function unresolvedDomainClaims(records: DomainView[], now = Date.now()): DomainView[] {
+  return records.filter((record) => {
+    if (record.status === "verified" || record.status === "revoked") return false
+    if (record.claimExpiresAt !== null && record.claimExpiresAt !== undefined) return record.claimExpiresAt > now
+    if (record.tokenExpiresAt !== null && record.tokenExpiresAt !== undefined) return record.tokenExpiresAt > now
+    return true
+  })
 }
 
 export function businessSteps(view: IntakeView): BusinessSteps {
