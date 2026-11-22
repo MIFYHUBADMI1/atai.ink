@@ -1,10 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { ArrowRight, FileText, Globe, Loader2, ShieldCheck } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Skeleton } from "@/components/ui/skeleton"
 import { jsonFetcher } from "@/lib/client/api"
 import { relativeTime } from "@/lib/client/format"
+import { readingPreviewState } from "@/lib/existing-business/reading-preview-state"
 import type { IntakeWebsiteReading } from "@/lib/types/business-intake"
 
 interface ReadingPayload {
@@ -22,19 +24,30 @@ interface ReadingPayload {
  */
 export function ReadingPreviewDialog({
   projectId,
+  /** The address the founder submitted, so the dialog has a title before the
+   * fetch lands instead of flashing "your website". */
+  submittedUrl,
   open,
   onOpenChange,
 }: {
   projectId: string
+  submittedUrl?: string
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
   const [payload, setPayload] = useState<ReadingPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [attempt, setAttempt] = useState(0)
+  const loadedFor = useRef<string | null>(null)
 
   useEffect(() => {
     if (!open) return
+    // Never show one business's read under another business's name.
+    if (loadedFor.current !== projectId) {
+      loadedFor.current = projectId
+      setPayload(null)
+    }
     let cancelled = false
     setLoading(true)
     setError(null)
@@ -51,10 +64,14 @@ export function ReadingPreviewDialog({
     return () => {
       cancelled = true
     }
-  }, [open, projectId])
+  }, [open, projectId, attempt])
 
   const reading = payload?.reading ?? null
-  const host = payload?.url?.replace(/^https?:\/\//, "").replace(/\/$/, "") ?? "your website"
+  const state = readingPreviewState(payload, error)
+  const awaitingFirstAnswer = state === "loading"
+  const refreshing = loading && payload !== null
+  const host =
+    (payload?.url ?? submittedUrl)?.replace(/^https?:\/\//, "").replace(/\/$/, "") ?? "your website"
   const servedHost = reading?.finalUrl?.replace(/^https?:\/\//, "").replace(/\/$/, "")
   const redirected = Boolean(reading?.redirectedFrom && servedHost && servedHost !== host)
 
@@ -67,8 +84,15 @@ export function ReadingPreviewDialog({
           <p className="text-sm text-muted-foreground">
             {reading
               ? `${reading.pagesRead} page${reading.pagesRead === 1 ? "" : "s"} · ${reading.charsRead.toLocaleString()} characters of text · read ${relativeTime(reading.capturedAt)}${payload?.fromCache ? " (cached)" : ""}`
-              : "Public pages only. Nothing was copied into your application."}
+              : awaitingFirstAnswer
+                ? "Fetching the copy Atai kept of this read…"
+                : "Public pages only. Nothing was copied into your application."}
           </p>
+          {refreshing ? (
+            <p role="status" className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <Loader2 className="size-3 animate-spin" /> Checking for a newer read…
+            </p>
+          ) : null}
           {redirected ? (
             <p className="flex flex-wrap items-center gap-1.5 rounded-lg bg-secondary/60 px-2.5 py-1.5 text-[11px] leading-relaxed text-muted-foreground">
               <span className="font-mono">{host}</span>
@@ -80,15 +104,22 @@ export function ReadingPreviewDialog({
         </DialogHeader>
 
         <div className="-mr-2 flex-1 overflow-y-auto pr-2">
-          {loading ? (
-            <p className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" /> Loading the read…
-            </p>
-          ) : error ? (
-            <p role="alert" className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              {error}
-            </p>
-          ) : !reading ? (
+          {state === "loading" ? (
+            <ReadingSkeleton />
+          ) : state === "error" ? (
+            <div className="flex flex-col items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2">
+              <p role="alert" className="text-xs leading-relaxed text-destructive">
+                {error}
+              </p>
+              <button
+                type="button"
+                onClick={() => setAttempt((value) => value + 1)}
+                className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-foreground transition-colors hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Try again
+              </button>
+            </div>
+          ) : state === "empty" || !reading ? (
             <div className="flex flex-col gap-2 rounded-xl border border-dashed border-border bg-secondary/30 px-4 py-6">
               <p className="text-sm leading-relaxed text-muted-foreground">
                 Atai did not keep a copy of this particular read — it ran before we started saving one. The read still
@@ -100,6 +131,11 @@ export function ReadingPreviewDialog({
             </div>
           ) : (
             <div className="flex flex-col gap-5">
+              {error ? (
+                <p role="status" className="rounded-xl border border-border bg-secondary/40 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+                  Showing the copy we already had — refreshing it failed ({error}).
+                </p>
+              ) : null}
               <section className="flex flex-col gap-3">
                 {reading.pages.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
@@ -185,5 +221,31 @@ export function ReadingPreviewButton({ onClick }: { onClick: () => void }) {
       <Globe className="size-3" />
       See what was read
     </button>
+  )
+}
+
+/**
+ * The dialog opens before the copy of the read arrives. Without this, the first
+ * frame looks exactly like "there is nothing to show", which reads as a broken
+ * read rather than a slow one.
+ */
+function ReadingSkeleton() {
+  return (
+    <div aria-busy="true" className="flex flex-col gap-4">
+      <span className="sr-only">Loading what was read…</span>
+      {[0, 1].map((index) => (
+        <div key={index} className="rounded-xl border border-border/70 bg-background/60 p-4">
+          <div className="flex items-center gap-2">
+            <Skeleton className="size-3.5 shrink-0 rounded-full" />
+            <Skeleton className="h-3 w-44" />
+          </div>
+          <div className="mt-3 flex flex-col gap-2">
+            <Skeleton className="h-3 w-full" />
+            <Skeleton className="h-3 w-11/12" />
+            <Skeleton className="h-3 w-4/5" />
+          </div>
+        </div>
+      ))}
+    </div>
   )
 }

@@ -381,7 +381,12 @@ export function BusinessProfile({ projectId, initialView }: { projectId: string;
           {allDone ? <NextBestActions projectId={projectId} /> : null}
         </div>
 
-        <ReadingPreviewDialog projectId={projectId} open={readingOpen} onOpenChange={setReadingOpen} />
+        <ReadingPreviewDialog
+          projectId={projectId}
+          submittedUrl={view.website.url}
+          open={readingOpen}
+          onOpenChange={setReadingOpen}
+        />
         <CreditsShortfallDialog
           open={shortfall !== null}
           onOpenChange={(next) => {
