@@ -1,4 +1,5 @@
 import "server-only"
+import { hostnameOfUrl } from "@/lib/domain/host"
 import { listProjectDomains, toDomainView } from "@/lib/domain/service"
 import { businessStartingPointOf } from "@/lib/types/business-intake"
 import { CONNECTION_STATUS_LABEL, businessConnectionStatus } from "@/lib/connected-business/status"
@@ -43,6 +44,7 @@ export const getBusinessAssessmentTool: ToolDefinition = {
         }
       }
       const intake = project.intake
+      const readHostname = hostnameOfUrl(intake?.website?.url) ?? hostnameOfUrl(intake?.website?.reading?.finalUrl)
       const domains = await listProjectDomains(project.id)
       const stageError = (stage?: { status: string; errorCode?: string | null; errorMessage?: string | null }) =>
         stage && (stage.status === "failed" || stage.status === "partially_completed") && stage.errorCode && stage.errorMessage
@@ -89,13 +91,16 @@ export const getBusinessAssessmentTool: ToolDefinition = {
             },
           },
           domains: domains.map((doc) => {
-            const view = toDomainView(doc)
+            const view = toDomainView(doc, { readHostname })
             return {
               hostname: view.hostname,
               status: view.status,
               method: view.method,
               verifiedAt: view.verifiedAt,
               needsAttention: view.needsAttention,
+              /** False when this address is not the site the read describes, so
+               * the co-founder never talks about one site as if it were the other. */
+              matchesRead: view.matchesRead,
             }
           }),
           caveat:

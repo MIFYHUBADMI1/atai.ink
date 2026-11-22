@@ -5,7 +5,7 @@ import { readJsonBody } from "@/lib/api/request-body"
 import { checkRateLimit } from "@/lib/auth/rate-limit"
 import { businessStartingPointOf } from "@/lib/types/business-intake"
 import { DomainServiceError, listProjectDomains, registerDomain, toDomainView } from "@/lib/domain/service"
-import { buildIntakeView } from "@/lib/existing-business/view"
+import { buildIntakeView, readHostnameOf } from "@/lib/existing-business/view"
 import type { BusinessDomainMethod } from "@/lib/types/business-intake"
 
 /**
@@ -51,9 +51,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const method: BusinessDomainMethod | undefined =
       body.method === "html_file" ? "html_file" : body.method === "meta_tag" ? "meta_tag" : undefined
 
-    const { doc, created } = await registerDomain({ userId: user.id, projectId: id, rawUrl: url, method })
+    // The address Atai read travels with the claim, so the record itself says
+    // whether the co-founder's reading describes the site being verified.
+    const readHostname = readHostnameOf(project)
+    const { doc, created } = await registerDomain({
+      userId: user.id,
+      projectId: id,
+      rawUrl: url,
+      method,
+      ...(readHostname ? { readHostname } : {}),
+    })
     return ok(
-      { domain: toDomainView(doc, { includeToken: true }), created, view: buildIntakeView(project, await listProjectDomains(id)) },
+      {
+        domain: toDomainView(doc, { includeToken: true, readHostname }),
+        created,
+        view: buildIntakeView(project, await listProjectDomains(id)),
+      },
       { status: created ? 201 : 200 },
     )
   } catch (error) {

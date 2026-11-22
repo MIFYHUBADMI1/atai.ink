@@ -25,7 +25,14 @@ import { generateToken } from "@/lib/auth/crypto"
 import { checkRateLimit } from "@/lib/auth/rate-limit"
 import { logger } from "@/lib/logging/logger"
 import { decryptDomainToken, encryptDomainToken } from "@/lib/domain/token-cipher"
-import { DomainInputError, assertSiteUrl, canonicalBusinessHost, normalizeHostname, registrableDomainOf } from "./host"
+import {
+  DomainInputError,
+  assertSiteUrl,
+  canonicalBusinessHost,
+  isSameSiteHost,
+  normalizeHostname,
+  registrableDomainOf,
+} from "./host"
 import {
   BUSINESS_ALREADY_CONNECTED_MESSAGE,
   BUSINESS_ALREADY_CONNECTED_MESSAGE_SAME_ACCOUNT,
@@ -109,13 +116,20 @@ export interface DomainView {
   verifiedAt: number | null
   verifiedMethod: BusinessDomainMethod | null
   needsAttention: boolean
-  lastFailure: { code: string; message: string; at: number } | null
+  lastFailure: { code: string; message: string; at: number; hostname?: string } | null
+  /** Is this the same site as the address the co-founder read? `null` when the
+   * caller did not supply that address, so the UI never guesses. A verified
+   * address the read does not describe is a fact the founder must see. */
+  matchesRead: boolean | null
   history: BusinessDomainDoc["history"]
   createdAt: number
   updatedAt: number
 }
 
-export function toDomainView(doc: BusinessDomainDoc, opts: { includeToken?: boolean } = {}): DomainView {
+export function toDomainView(
+  doc: BusinessDomainDoc,
+  opts: { includeToken?: boolean; readHostname?: string | null } = {},
+): DomainView {
   const expired = doc.status === "pending" && doc.tokenExpiresAt !== undefined && doc.tokenExpiresAt < Date.now()
   const status: BusinessDomainStatus = expired ? "expired" : doc.status
   const includeToken = opts.includeToken === true && Boolean(doc.token)
@@ -138,6 +152,9 @@ export function toDomainView(doc: BusinessDomainDoc, opts: { includeToken?: bool
     verifiedMethod: doc.verifiedMethod ?? null,
     needsAttention: Boolean(doc.lastFailure) && (doc.status === "verified" || doc.status === "failed"),
     lastFailure: doc.lastFailure ?? null,
+    matchesRead: opts.readHostname
+      ? isSameSiteHost(doc.hostname, opts.readHostname)
+      : doc.matchesRead ?? null,
     history: doc.history ?? [],
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
@@ -155,6 +172,9 @@ export async function registerDomain(input: {
   projectId: string
   rawUrl: string
   method?: BusinessDomainMethod
+  /** The address Atai read for this business, when the caller knows it. Stored
+   * on the record so "is this the site we read?" survives without recomputing. */
+  readHostname?: string
 }): Promise<{ doc: BusinessDomainDoc; created: boolean }> {
   let target
   try {
@@ -201,6 +221,7 @@ export async function registerDomain(input: {
 
   const token = generateToken()
   const method: BusinessDomainMethod = input.method === "html_file" ? "html_file" : "meta_tag"
+  const matchesRead = input.readHostname ? isSameSiteHost(target.hostname, input.readHostname) : undefined
   const doc: BusinessDomainDoc & { _id: ObjectId } = {
     _id: new ObjectId(),
     id: cryptoId(),
@@ -222,7 +243,14 @@ export async function registerDomain(input: {
     tokenExpiresAt: now + DOMAIN_TOKEN_TTL_MS,
     claimExpiresAt: now + CLAIM_RESERVATION_TTL_MS,
     attempts: 0,
-    history: [{ status: "pending" as BusinessDomainStatus, at: now, detail: "challenge created" }],
+    ...(matchesRead === undefined ? {} : { matchesRead }),
+    history: [
+      {
+        status: "pending" as BusinessDomainStatus,
+        at: now,
+        detail: matchesRead === false ? "challenge created for an address Atai did not read" : "challenge created",
+      },
+    ],
     createdAt: now,
     updatedAt: now,
   }
@@ -640,8 +668,10 @@ function stripUndefined<T extends object>(value: T): Partial<T> {
 export interface VerifyOutcome {
   doc: BusinessDomainDoc
   view: DomainView
-  /** Stable, founder-actionable code when verification did not succeed. */
-  failure?: { code: string; message: string }
+  /** Stable, founder-actionable code when verification did not succeed.
+   * `hostname` is the address the site actually served when the check was
+   * refused for a cross-site redirect: the thing worth verifying instead. */
+  failure?: { code: string; message: string; hostname?: string }
 }
 
 /**
@@ -693,7 +723,7 @@ export async function verifyDomainOwnership(input: {
     { $set: { status: "in_progress", method, attempts: (doc.attempts ?? 0) + 1, lastAttemptAt: now, updatedAt: now } },
   )
 
-  let outcome: { ok: boolean; code?: string; message?: string }
+  let outcome: { ok: boolean; code?: string; message?: string; hostname?: string }
   try {
     if (method === "html_file") {
       const fileName = doc.fileName ?? fileNameForToken(token)
@@ -756,7 +786,15 @@ export async function verifyDomainOwnership(input: {
     }
   } catch (error) {
     if (error instanceof DomainFetchError) {
-      outcome = { ok: false, code: error.code, message: fetchFailureMessage(error.code) }
+      outcome =
+        error.code === "REDIRECT_HOST" && error.hostname
+          ? {
+              ok: false,
+              code: error.code,
+              message: redirectHostMessage(doc.hostname, error.hostname),
+              hostname: error.hostname,
+            }
+          : { ok: false, code: error.code, message: fetchFailureMessage(error.code) }
     } else if (error instanceof DomainInputError) {
       outcome = { ok: false, code: error.code, message: error.message }
     } else {
@@ -800,7 +838,7 @@ export async function verifyDomainOwnership(input: {
       status,
       failedChecks,
       needsAttention: true,
-      lastFailure: { code: outcome.code ?? "FAILED", message: outcome.message ?? "Verification check failed.", at: now },
+      lastFailure: failureRecord(outcome, now, "Verification check failed."),
       lastCheckedAt: now,
       updatedAt: now,
       history: pushHistory(doc, status, `re-check failed: ${outcome.code ?? "FAILED"}`),
@@ -820,13 +858,13 @@ export async function verifyDomainOwnership(input: {
         : `The verification tag or file on ${doc.hostname} was not found on a re-check. Ownership still stands for now — restore it and re-check from the business profile.`,
     )
     if (!giveUp) return { doc: next, view: toDomainView(next, { includeToken: true }) }
-    return finished(next, input, { code: outcome.code ?? "FAILED", message: outcome.message ?? "Verification failed." })
+    return finished(next, input, failureOutcome(outcome))
   }
 
   const next: BusinessDomainDoc = {
     ...doc,
     status: "failed",
-    lastFailure: { code: outcome.code ?? "FAILED", message: outcome.message ?? "Verification failed.", at: now },
+    lastFailure: failureRecord(outcome, now, "Verification failed."),
     lastCheckedAt: now,
     updatedAt: now,
     history: pushHistory(doc, "failed", outcome.code ?? "FAILED"),
@@ -835,7 +873,7 @@ export async function verifyDomainOwnership(input: {
     { id: doc.id },
     { $set: { status: "failed", lastFailure: next.lastFailure, lastCheckedAt: now, updatedAt: now }, $push: historyPush("failed", outcome.code ?? "FAILED") },
   )
-  return finished(next, input, { code: outcome.code ?? "FAILED", message: outcome.message ?? "Verification failed." })
+  return finished(next, input, failureOutcome(outcome))
 }
 
 /** Owner notification through the existing project activity feed. Best-effort:
@@ -848,7 +886,11 @@ async function notifyOwner(projectId: string, message: string, level: "info" | "
   }
 }
 
-async function finished(doc: BusinessDomainDoc, input: { userId: string; projectId: string; domainId: string; reverification?: boolean }, failure?: { code: string; message: string }): Promise<VerifyOutcome> {
+async function finished(
+  doc: BusinessDomainDoc,
+  input: { userId: string; projectId: string; domainId: string; reverification?: boolean },
+  failure?: { code: string; message: string; hostname?: string },
+): Promise<VerifyOutcome> {
   const view = toDomainView(doc, { includeToken: true })
   if (failure) {
     logger.info("domain.verify", "verification failed", { domainId: doc.id, hostname: doc.hostname, code: failure.code, reverification: input.reverification === true })
@@ -912,6 +954,29 @@ export async function releaseDomain(input: { userId: string; projectId: string; 
  */
 function fileMissingMessage(fileUrl: string): string {
   return `Your site answered 404 for ${fileUrl}, so the file is not being served there yet. Put it in the folder your homepage is published from — on Vercel or Next.js that is public/ (the repository root is not published) — then redeploy and check again.`
+}
+
+/** A refused cross-site redirect, named. Naming the address is the whole point:
+ * "different domain" is a dead end, "verify shop.example.com instead" is a step. */
+function redirectHostMessage(from: string, to: string): string {
+  return `${from} redirects to ${to}, so a tag or file found there would prove you own ${to} — not ${from}. If ${to} is your site, verify it instead.`
+}
+
+function failureRecord(outcome: { code?: string; message?: string; hostname?: string }, at: number, fallback: string) {
+  return {
+    code: outcome.code ?? "FAILED",
+    message: outcome.message ?? fallback,
+    at,
+    ...(outcome.hostname ? { hostname: outcome.hostname } : {}),
+  }
+}
+
+function failureOutcome(outcome: { code?: string; message?: string; hostname?: string }) {
+  return {
+    code: outcome.code ?? "FAILED",
+    message: outcome.message ?? "Verification failed.",
+    ...(outcome.hostname ? { hostname: outcome.hostname } : {}),
+  }
 }
 
 function fetchFailureMessage(code: string): string {

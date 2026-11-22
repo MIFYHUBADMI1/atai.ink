@@ -234,6 +234,28 @@ describe("safeFetchDocument — redirect policy", () => {
     )
   })
 
+  it("names the address that actually answered, so the founder has a next step", async () => {
+    const { deps } = scriptedDeps([redirect("https://my-shop.example.net/file.html"), htmlResponse()])
+    await expect(
+      safeFetchDocument(
+        "https://example.com/file.html",
+        "/file.html",
+        { allowHostnameChange: false, allowSameSiteRedirects: true },
+        deps,
+      ),
+    ).rejects.toMatchObject({ code: "REDIRECT_HOST", hostname: "my-shop.example.net" })
+  })
+
+  it("never names a redirect target that is not a public destination", async () => {
+    const { deps } = scriptedDeps([redirect("http://127.0.0.1/admin"), htmlResponse()])
+    const error = await safeFetchDocument("https://example.com/", "/", { allowHostnameChange: false }, deps).catch(
+      (e: unknown) => e,
+    )
+    expect(error).toBeInstanceOf(DomainFetchError)
+    expect((error as DomainFetchError).code).toBe("REDIRECT_HOST")
+    expect((error as DomainFetchError).hostname).toBeUndefined()
+  })
+
   it("allows a same-site hop when only same-site redirects are permitted", async () => {
     const { deps, calls } = scriptedDeps([redirect("https://www.example.com/"), htmlResponse()])
     const doc = await safeFetchDocument(

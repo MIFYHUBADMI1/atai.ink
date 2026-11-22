@@ -3,6 +3,8 @@ import {
   DomainInputError,
   assertSiteUrl,
   canonicalBusinessHost,
+  hostnameOfUrl,
+  isSameSiteHost,
   sameBusinessHost,
   formatHostForUrl,
   isIpLiteralHost,
@@ -168,5 +170,48 @@ describe("canonicalBusinessHost", () => {
     expect(typeof canonicalBusinessHost("not a host")).toBe("string")
     expect(canonicalBusinessHost("")).toBe("")
     expect(sameBusinessHost("", "example.com")).toBe(false)
+  })
+})
+
+describe("isSameSiteHost — is this the business we read?", () => {
+  it("treats apex and www as one site", () => {
+    expect(isSameSiteHost("example.com", "www.example.com")).toBe(true)
+    expect(isSameSiteHost("WWW.Example.COM", "example.com")).toBe(true)
+  })
+
+  it("treats sibling subdomains as one site", () => {
+    expect(isSameSiteHost("shop.example.com", "example.com")).toBe(true)
+    expect(isSameSiteHost("app.example.co.uk", "www.example.co.uk")).toBe(true)
+  })
+
+  it("never unifies two tenants of a shared host", () => {
+    expect(isSameSiteHost("study-iota-lime.vercel.app", "other-project.vercel.app")).toBe(false)
+    expect(isSameSiteHost("my-shop.myshopify.com", "my-shop.myshopify.com")).toBe(true)
+  })
+
+  it("keeps different registrable domains apart", () => {
+    expect(isSameSiteHost("example.com", "example.net")).toBe(false)
+    expect(isSameSiteHost("example.com", "notexample.com")).toBe(false)
+  })
+
+  it("never unifies IP literals or junk", () => {
+    expect(isSameSiteHost("93.184.216.34", "93.184.216.34")).toBe(true)
+    expect(isSameSiteHost("93.184.216.34", "93.184.216.35")).toBe(false)
+    expect(isSameSiteHost("", "example.com")).toBe(false)
+    expect(isSameSiteHost("not a host", "example.com")).toBe(false)
+  })
+})
+
+describe("hostnameOfUrl — reading a stored address", () => {
+  it("takes the host from a full URL, a bare host, or a URL with a path", () => {
+    expect(hostnameOfUrl("https://Example.com/about?x=1")).toBe("example.com")
+    expect(hostnameOfUrl("example.com")).toBe("example.com")
+    expect(hostnameOfUrl("  https://www.example.com  ")).toBe("www.example.com")
+  })
+
+  it("returns undefined for nothing we could verify", () => {
+    expect(hostnameOfUrl("")).toBeUndefined()
+    expect(hostnameOfUrl(undefined)).toBeUndefined()
+    expect(hostnameOfUrl("not a host")).toBeUndefined()
   })
 })

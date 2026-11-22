@@ -21,6 +21,7 @@ import { Label } from "@/components/ui/label"
 import { patchJson, postJson } from "@/lib/client/api"
 import { relativeDeadline, relativeTime } from "@/lib/client/format"
 import { trackConnectVerified } from "@/lib/analytics/connect-funnel"
+import { hostnameOfUrl, isSameSiteHost } from "@/lib/domain/host"
 import type { DomainView } from "@/lib/domain/service"
 import type { BusinessDomainMethod, BusinessDomainStatus } from "@/lib/types/business-intake"
 import { cn } from "@/lib/utils"
@@ -103,13 +104,14 @@ export function DomainVerification({
     }
   }
 
-  async function register() {
-    if (!url.trim()) {
+  async function register(targetUrl?: string) {
+    const address = (targetUrl ?? url).trim()
+    if (!address) {
       setError("Enter the website address you own.")
       return
     }
     await run("register", async () => {
-      const data = await postJson<{ domain: DomainView; created: boolean }>(base, { url: url.trim(), method })
+      const data = await postJson<{ domain: DomainView; created: boolean }>(base, { url: address, method })
       setDomains((current) => {
         const rest = current.filter((d) => d.id !== data.domain.id)
         return [data.domain, ...rest]
@@ -126,7 +128,11 @@ export function DomainVerification({
   async function verify(domain: DomainView) {
     const method = methodFor(domain, methodChoice)
     await run(`verify-${domain.id}`, async () => {
-      const data = await postJson<{ verified: boolean; domain: DomainView; failure?: { code: string; message: string } }>(
+      const data = await postJson<{
+        verified: boolean
+        domain: DomainView
+        failure?: { code: string; message: string; hostname?: string }
+      }>(
         `${base}/${domain.id}/verify`,
         { reverification: domain.status === "verified", method },
       )
@@ -185,29 +191,86 @@ export function DomainVerification({
   const active = domains.filter((d) => d.status !== "revoked")
   const released = domains.filter((d) => d.status === "revoked")
   const guideDomain = active.find((d) => d.id === guideFor) ?? null
+  // The address Atai read is the site this step is about. A claim on any other
+  // site is still a real proof of ownership, but it is not the business the
+  // co-founder described — so it is labelled rather than silently accepted.
+  const readHostname = hostnameOfUrl(defaultUrl)
+  const matchesRead = (domain: DomainView): boolean | null =>
+    readHostname ? isSameSiteHost(domain.hostname, readHostname) : domain.matchesRead ?? null
 
   return (
     <div data-atai-tour="existing-business-domains" className="flex flex-col gap-5">
       <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-secondary/30 p-4">
-        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">1 · Tell Atai which site</p>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="dv-url">Website address</Label>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Input
-              id="dv-url"
-              value={url}
-              onChange={(e) => setUrl(e.target.value.slice(0, 500))}
-              placeholder="yourbusiness.com"
-              inputMode="url"
-              maxLength={500}
-              className="sm:flex-1"
-            />
-            <Button type="button" onClick={register} disabled={busy === "register"}>
-              {busy === "register" ? <Loader2 className="size-4 animate-spin" /> : <Globe className="size-4" />}
-              Start verification
-            </Button>
+        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+          {readHostname ? "1 · The site your co-founder read" : "1 · Tell Atai which site"}
+        </p>
+
+        {readHostname ? (
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="min-w-0 break-all font-mono text-sm">{readHostname}</span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                <Check className="size-3 shrink-0" /> Read by your co-founder
+              </span>
+            </div>
+            <p className="text-xs leading-relaxed text-muted-foreground break-words">
+              Verifying this address proves the business Atai already read is yours. Your assessment and your connection
+              describe this site — nothing else on it changes.
+            </p>
+            <div>
+              <Button type="button" onClick={() => register(defaultUrl)} disabled={busy === "register"}>
+                {busy === "register" ? <Loader2 className="size-4 animate-spin" /> : <Globe className="size-4" />}
+                Verify this address
+              </Button>
+            </div>
+            <details className="rounded-lg border border-border/60 bg-background/40 px-3 py-2">
+              <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+                A different address?
+              </summary>
+              <div className="mt-2 flex flex-col gap-2">
+                <p className="text-xs leading-relaxed text-muted-foreground break-words">
+                  Atai read <span className="font-mono break-all">{readHostname}</span>. Another address is verified on
+                  its own: it proves you own that address, but your co-founder&apos;s first read does not describe it.
+                  You can ask for a new read afterwards.
+                </p>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Input
+                    id="dv-url"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value.slice(0, 500))}
+                    placeholder="another-site-you-own.com"
+                    inputMode="url"
+                    maxLength={500}
+                    aria-label="A different website address to verify"
+                    className="sm:flex-1"
+                  />
+                  <Button type="button" variant="outline" onClick={() => register()} disabled={busy === "register"}>
+                    Verify this address instead
+                  </Button>
+                </div>
+              </div>
+            </details>
           </div>
-        </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="dv-url">Website address</Label>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input
+                id="dv-url"
+                value={url}
+                onChange={(e) => setUrl(e.target.value.slice(0, 500))}
+                placeholder="yourbusiness.com"
+                inputMode="url"
+                maxLength={500}
+                className="sm:flex-1"
+              />
+              <Button type="button" onClick={() => register()} disabled={busy === "register"}>
+                {busy === "register" ? <Loader2 className="size-4 animate-spin" /> : <Globe className="size-4" />}
+                Start verification
+              </Button>
+            </div>
+          </div>
+        )}
         {/* Once a challenge exists, each card carries its own instant toggle;
             two controls for one choice is what made switching feel broken. */}
         {active.length === 0 ? (
@@ -232,10 +295,10 @@ export function DomainVerification({
             ))}
           </div>
         ) : null}
-        <p className="text-[11px] leading-relaxed text-muted-foreground">
-          Verifying <span className="font-medium">yourbusiness.com</span> verifies only that exact hostname — not
-          <span className="font-medium"> shop.yourbusiness.com</span> or any other subdomain. Add each hostname you
-          want verified separately.
+        <p className="text-[11px] leading-relaxed text-muted-foreground break-words">
+          Verification is per hostname: proving{" "}
+          <span className="font-mono break-all">{readHostname ?? "yourbusiness.com"}</span> does not prove a
+          subdomain of it or any other address. Add each hostname you want verified separately.
         </p>
       </div>
 
@@ -260,8 +323,7 @@ export function DomainVerification({
 
       {active.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border bg-background/40 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
-          Nothing to check yet. Enter your address above and press Start verification — Atai will give you the exact
-          tag or file to add.
+          Nothing to check yet. Start verification above and Atai will give you the exact tag or file to add.
         </p>
       ) : null}
 
@@ -294,6 +356,27 @@ export function DomainVerification({
               </span>
             </div>
 
+            {matchesRead(domain) === false ? (
+              <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-700 dark:text-amber-400">
+                <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
+                <div className="min-w-0 break-words">
+                  <p className="font-medium">Not the address Atai read</p>
+                  <p className="mt-1">
+                    {readHostname ? (
+                      <>
+                        Your co-founder&apos;s first read was{" "}
+                        <span className="font-mono break-all">{readHostname}</span>.{" "}
+                      </>
+                    ) : (
+                      <>Your co-founder read a different site. </>
+                    )}
+                    Verifying this address proves you own it, but nothing Atai wrote describes this site yet — ask your
+                    co-founder to read it when you are ready.
+                  </p>
+                </div>
+              </div>
+            ) : null}
+
             {domain.needsAttention && domain.status === "verified" ? (
               <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-700 dark:text-amber-400">
                 <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
@@ -310,8 +393,23 @@ export function DomainVerification({
 
             {domain.lastFailure && domain.status !== "verified" ? (
               <div className="mt-3 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs leading-relaxed text-destructive">
-                <p>{domain.lastFailure.message}</p>
+                <p className="break-words">{domain.lastFailure.message}</p>
                 <p className="mt-1 opacity-80">Checked {relativeTime(domain.lastFailure.at)}.</p>
+                {/* A redirect that leaves the site is not a dead end: the address
+                    that answered is the one worth proving. */}
+                {domain.lastFailure.hostname ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="mt-2 h-auto max-w-full whitespace-normal text-left"
+                    onClick={() => register(`https://${domain.lastFailure?.hostname}`)}
+                    disabled={busy === "register"}
+                  >
+                    <Globe className="size-3.5 shrink-0" />
+                    <span className="min-w-0 break-all">Verify {domain.lastFailure.hostname} instead</span>
+                  </Button>
+                ) : null}
               </div>
             ) : null}
 

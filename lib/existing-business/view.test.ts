@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { BusinessDomainDoc } from "@/lib/types/business-intake"
 import type { MirrorProject } from "@/lib/types/project"
-import { buildIntakeView } from "./view"
+import { buildIntakeView, readHostnameOf } from "./view"
 
 function project(overrides: Partial<MirrorProject> = {}): MirrorProject {
   return {
@@ -154,5 +154,45 @@ describe("buildIntakeView — business claim", () => {
     )
     expect(view.claim).toEqual({ hostname: "bakery.example", state: "held_by_other" })
     expect(JSON.stringify(view)).not.toContain("user-2")
+  })
+})
+
+describe("buildIntakeView — is the verified address the one we read?", () => {
+  const read = { intake: { website: { url: "https://bakery.example", status: "completed" } } }
+
+  it("reports the address Atai read as a hostname", () => {
+    expect(readHostnameOf(project(read as Partial<MirrorProject>))).toBe("bakery.example")
+    expect(readHostnameOf(project())).toBeUndefined()
+  })
+
+  it("falls back to where the read actually landed", () => {
+    const project_ = project({
+      intake: { website: { url: "", status: "completed", reading: { finalUrl: "https://www.bakery.example/" } } },
+    } as Partial<MirrorProject>)
+    expect(readHostnameOf(project_)).toBe("www.bakery.example")
+  })
+
+  it("marks the claim that is the site we read", () => {
+    const view = buildIntakeView(project(read as Partial<MirrorProject>), [domain()])
+    expect(view.domain.records[0]?.matchesRead).toBe(true)
+  })
+
+  it("marks a claim on another site as not the one we read", () => {
+    const view = buildIntakeView(project(read as Partial<MirrorProject>), [
+      domain({ id: "dom-2", hostname: "another-shop.example.net", registrableDomain: "example.net" }),
+    ])
+    expect(view.domain.records[0]?.matchesRead).toBe(false)
+  })
+
+  it("counts a sibling subdomain as the same site", () => {
+    const view = buildIntakeView(project(read as Partial<MirrorProject>), [
+      domain({ id: "dom-3", hostname: "shop.bakery.example" }),
+    ])
+    expect(view.domain.records[0]?.matchesRead).toBe(true)
+  })
+
+  it("says unknown when no address was read", () => {
+    const view = buildIntakeView(project(), [domain()])
+    expect(view.domain.records[0]?.matchesRead).toBeNull()
   })
 })

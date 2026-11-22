@@ -50,9 +50,19 @@ const ASSESSMENT = {
 } as const
 
 /** The domain step, with a challenge created before file names were shortened,
- * so the long-token layout can be checked on a phone. */
-function domainState(): IntakeView {
+ * so the long-token layout can be checked on a phone. `mismatch` previews a
+ * claim on an address the co-founder never read. */
+function domainState(mismatch = false): IntakeView {
   return view({
+    website: mismatch
+      ? { submitted: true, analyzed: true, status: "completed", url: "https://cornerbakery.com", pagesCrawled: 3 }
+      : {
+          submitted: true,
+          analyzed: true,
+          status: "completed",
+          url: "https://study-iota-lime.vercel.app",
+          pagesCrawled: 3,
+        },
     overall: "partially_completed",
     assessment: { status: "completed", result: ASSESSMENT as never, generatedAt: 1 },
     domain: {
@@ -78,6 +88,7 @@ function domainState(): IntakeView {
           verifiedMethod: null,
           needsAttention: false,
           lastFailure: null,
+          matchesRead: !mismatch,
           history: [],
           createdAt: Date.now() - 3_600_000,
           updatedAt: Date.now() - 3_600_000,
@@ -93,7 +104,9 @@ export default async function PreviewPage({ searchParams }: { searchParams: Prom
   const v =
     state === "domain"
       ? domainState()
-      : state === "unread"
+      : state === "domain-mismatch"
+        ? domainState(true)
+        : state === "unread"
         ? view({ website: { submitted: true, analyzed: false, status: "failed", url: "https://cornerbakery.com" } })
         : view()
   return (

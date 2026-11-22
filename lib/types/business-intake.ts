@@ -319,6 +319,9 @@ export interface BusinessDomainDoc {
   token?: string
   /** Filename for the html_file method — unique per challenge. */
   fileName?: string
+  /** Whether this hostname is the same site as the address Atai read. Stored so
+   * the record itself says whether the co-founder's reading describes it. */
+  matchesRead?: boolean
   /** Bumped on every regeneration so an old challenge can never validate. */
   tokenGeneration?: number
   tokenCreatedAt?: number
@@ -327,7 +330,9 @@ export interface BusinessDomainDoc {
   lastAttemptAt?: number
   /** Last time a check actually ran (success or failure). */
   lastCheckedAt?: number
-  lastFailure?: { code: string; message: string; at: number } | null
+  /** `hostname` is set only for a redirect we refused: the address the site
+   * actually served, so the profile can offer it as the thing to verify. */
+  lastFailure?: { code: string; message: string; at: number; hostname?: string } | null
   /** Consecutive failed checks against an already-verified domain. Cleared on
    * a successful check; only past the grace limit does verified status drop. */
   failedChecks?: number

@@ -11,6 +11,7 @@ import "server-only"
  * pending/skipped/failed with the message the run actually recorded.
  */
 
+import { hostnameOfUrl } from "@/lib/domain/host"
 import { toDomainView, type DomainView } from "@/lib/domain/service"
 import {
   businessStartingPointOf,
@@ -96,10 +97,22 @@ function stageError(stage?: {
   }
 }
 
+/**
+ * The address Atai actually read, as a hostname: the typed address, or where it
+ * ended up after redirects. The domain step verifies THIS site by default — a
+ * verified address the read does not describe is a mismatch, not a detail.
+ */
+export function readHostnameOf(project: MirrorProject): string | undefined {
+  return (
+    hostnameOfUrl(project.intake?.website?.url) ?? hostnameOfUrl(project.intake?.website?.reading?.finalUrl)
+  )
+}
+
 export function buildIntakeView(project: MirrorProject, domains: BusinessDomainDoc[] = []): IntakeView {
   const intake = project.intake
   const startingPoint = businessStartingPointOf(project)
-  const views = domains.map((doc) => toDomainView(doc, { includeToken: true }))
+  const readHostname = readHostnameOf(project)
+  const views = domains.map((doc) => toDomainView(doc, { includeToken: true, readHostname }))
   const verifiedRecord = views.find((view) => view.status === "verified")
   const connectionStatus = businessConnectionStatus({
     connection: project.connection,

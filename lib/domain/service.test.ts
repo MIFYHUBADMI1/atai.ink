@@ -261,6 +261,29 @@ describe("registerDomain", () => {
     expect(sub.doc.hostname).toBe("shop.example.com")
   })
 
+  it("records whether the claim is the site Atai read, so the mismatch is a stored fact", async () => {
+    const sameSite = await registerDomain({
+      ...OWNER,
+      rawUrl: "https://shop.example.com",
+      readHostname: "example.com",
+    })
+    expect(sameSite.doc.matchesRead).toBe(true)
+    expect(sameSite.doc.history?.[0]?.detail).toBe("challenge created")
+
+    const otherSite = await registerDomain({
+      ...OWNER,
+      rawUrl: "https://other-shop.example.net",
+      readHostname: "example.com",
+    })
+    expect(otherSite.doc.matchesRead).toBe(false)
+    expect(otherSite.doc.history?.[0]?.detail).toBe("challenge created for an address Atai did not read")
+  })
+
+  it("leaves the read-match unknown when the caller has no read address", async () => {
+    const doc = await register()
+    expect(doc.matchesRead).toBeUndefined()
+  })
+
   it("rejects a malformed address as a 422 validation error", async () => {
     await expect(registerDomain({ ...OWNER, rawUrl: "ftp://example.com" })).rejects.toMatchObject({
       code: "DOMAIN_SCHEME",
@@ -285,6 +308,14 @@ describe("toDomainView", () => {
     const doc = await register()
     const view = toDomainView({ ...doc, tokenExpiresAt: Date.now() - 1 })
     expect(view.status).toBe("expired")
+  })
+
+  it("answers 'is this the site we read?' from the address the caller supplies", async () => {
+    const doc = await register()
+    expect(toDomainView(doc, { readHostname: "example.com" }).matchesRead).toBe(true)
+    expect(toDomainView(doc, { readHostname: "another-shop.example.net" }).matchesRead).toBe(false)
+    // No read address and nothing stored: unknown, never a guess.
+    expect(toDomainView(doc).matchesRead).toBeNull()
   })
 
   it("carries when the last check ran, so the page can say it", async () => {
@@ -399,6 +430,28 @@ describe("verifyDomainOwnership — meta tag", () => {
     const outcome = await verifyDomainOwnership({ ...OWNER, domainId: doc.id })
     expect(outcome.failure?.code).toBe("NOT_FOUND")
     expect(outcome.failure?.message).not.toContain("10.0.0.9")
+  })
+
+  it("names the address that answered a refused redirect, so the founder can act on it", async () => {
+    const doc = await register()
+    fetchMock.mockRejectedValue(new DomainFetchError("REDIRECT_HOST", "raw internal detail", "shop.example.net"))
+    const outcome = await verifyDomainOwnership({ ...OWNER, domainId: doc.id })
+    expect(outcome.failure?.code).toBe("REDIRECT_HOST")
+    expect(outcome.failure?.hostname).toBe("shop.example.net")
+    expect(outcome.failure?.message).toContain("example.com")
+    expect(outcome.failure?.message).toContain("shop.example.net")
+    expect(outcome.failure?.message).not.toContain("raw internal detail")
+    // The record keeps it, so the card still offers the address after a reload.
+    expect(outcome.doc.lastFailure?.hostname).toBe("shop.example.net")
+  })
+
+  it("keeps the generic redirect copy when no address can be named", async () => {
+    const doc = await register()
+    fetchMock.mockRejectedValue(new DomainFetchError("REDIRECT_HOST", "raw internal detail"))
+    const outcome = await verifyDomainOwnership({ ...OWNER, domainId: doc.id })
+    expect(outcome.failure?.hostname).toBeUndefined()
+    expect(outcome.failure?.message).toContain("redirects to a different domain")
+    expect(outcome.doc.lastFailure?.hostname).toBeUndefined()
   })
 
   it("wraps unexpected errors as UNREACHABLE without leaking the message", async () => {

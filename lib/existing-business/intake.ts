@@ -38,7 +38,7 @@ import {
   registerDomain,
   reserveBusinessClaim,
 } from "@/lib/domain/service"
-import { isSharedHostingHost, registrableDomainOf } from "@/lib/domain/host"
+import { hostnameOfUrl, isSameSiteHost } from "@/lib/domain/host"
 import { resolveCofounderModel } from "@/lib/cofounder/model"
 import {
   businessStartingPointOf,
@@ -297,16 +297,6 @@ async function readWebsite(project: MirrorProject, intake: BusinessIntake): Prom
 /** A refusal the run must honour, or `ok` to carry on. */
 type DomainClaimOutcome = { ok: true } | { ok: false; code: string; message: string }
 
-/** Two hosts that are the same site under another name: apex↔www, or a
- * sibling subdomain of one business. Never true across a shared hosting
- * platform, where every subdomain is a different owner. */
-function isSameSite(a: string, b: string): boolean {
-  if (!a || !b) return false
-  if (a === b) return true
-  if (isSharedHostingHost(a) || isSharedHostingHost(b)) return false
-  return registrableDomainOf(a) === registrableDomainOf(b)
-}
-
 /** A URL reduced to its host, for a sentence a founder reads. */
 function hostLabel(url: string): string {
   try {
@@ -329,9 +319,15 @@ function claimRecord(hostname: string | undefined, state: "yours" | "held_by_oth
 async function claimOneDomain(
   project: MirrorProject,
   rawUrl: string,
+  readHostname?: string,
 ): Promise<{ ok: true; doc: BusinessDomainDoc } | { ok: false; code: string; message: string }> {
   try {
-    const { doc } = await registerDomain({ userId: project.userId, projectId: project.id, rawUrl })
+    const { doc } = await registerDomain({
+      userId: project.userId,
+      projectId: project.id,
+      rawUrl,
+      ...(readHostname ? { readHostname } : {}),
+    })
     return { ok: true, doc }
   } catch (error) {
     const code = (error as { code?: string })?.code ?? "DOMAIN_UNAVAILABLE"
@@ -361,7 +357,8 @@ async function registerIntakeDomain(
   const primaryUrl = submitted || target
   if (!primaryUrl || intake.website?.status !== "completed") return { ok: true }
 
-  const primary = await claimOneDomain(project, primaryUrl)
+  const readHostname = hostnameOfUrl(submitted)
+  const primary = await claimOneDomain(project, primaryUrl, readHostname)
   if (!primary.ok) {
     if (primary.code === "BUSINESS_ALREADY_CONNECTED") {
       await patchIntake(project.id, {
@@ -409,13 +406,13 @@ async function registerIntakeDomain(
     target &&
     targetHost &&
     targetHost !== (primary.doc.canonicalHostname ?? canonicalHostFromInput(primaryUrl)) &&
-    isSameSite(primaryHost, targetHost)
+    isSameSiteHost(primaryHost, targetHost)
   ) {
-    const alias = await claimOneDomain(project, target)
+    const alias = await claimOneDomain(project, target, readHostname)
     if (!alias.ok) {
       logger.info("intake.domain", "redirect target not claimed", { projectId: project.id, code: alias.code })
     }
-  } else if (target && targetHost && !isSameSite(primaryHost, targetHost)) {
+  } else if (target && targetHost && !isSameSiteHost(primaryHost, targetHost)) {
     logger.info("intake.domain", "cross-site redirect left unclaimed", { projectId: project.id, primaryHost, targetHost })
   }
   return { ok: true }

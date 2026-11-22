@@ -27,6 +27,7 @@ function domain(overrides: Partial<DomainView> = {}): DomainView {
     verifiedMethod: "meta_tag",
     needsAttention: false,
     lastFailure: null,
+    matchesRead: null,
     history: [],
     createdAt: Date.now() - 4 * 24 * 60 * MINUTE,
     updatedAt: Date.now() - 5 * MINUTE,
@@ -34,9 +35,13 @@ function domain(overrides: Partial<DomainView> = {}): DomainView {
   }
 }
 
-function render(records: DomainView[]): string {
+function render(records: DomainView[], defaultUrl?: string): string {
   return renderToStaticMarkup(
-    createElement(DomainVerification, { projectId: "proj-1", initialDomains: records }),
+    createElement(DomainVerification, {
+      projectId: "proj-1",
+      initialDomains: records,
+      ...(defaultUrl ? { defaultUrl } : {}),
+    }),
   )
 }
 
@@ -129,5 +134,62 @@ describe("DomainVerification — choosing how to check", () => {
   it("shows the method radios only when there is nothing to switch yet", () => {
     const html = render([domain({ status: "revoked", verifiedAt: null, verifiedMethod: null })])
     expect(html).toContain("How do you want to verify?")
+  })
+})
+
+describe("DomainVerification — the address Atai read is the one being verified", () => {
+  it("offers the read address as a single click, with no typing", () => {
+    const html = render([], "https://bakery.example")
+    expect(html).toContain("1 · The site your co-founder read")
+    expect(html).toContain("Read by your co-founder")
+    expect(html).toContain("Verify this address")
+    // The free-text input is behind the deliberate "different address" path.
+    expect(html).toContain("A different address?")
+    expect(html).toContain("Verify this address instead")
+    expect(html).not.toContain("Tell Atai which site")
+  })
+
+  it("keeps the plain input when nothing was read", () => {
+    const html = render([])
+    expect(html).toContain("1 · Tell Atai which site")
+    expect(html).toContain("Start verification")
+    expect(html).not.toContain("A different address?")
+  })
+
+  it("labels a claim that is not the site the co-founder read", () => {
+    const html = render(
+      [domain({ hostname: "another-shop.example.net", status: "verified" })],
+      "https://bakery.example",
+    )
+    expect(html).toContain("Not the address Atai read")
+    expect(html).toContain("nothing Atai wrote describes this site yet")
+  })
+
+  it("does not label the read address itself, or a sibling subdomain of it", () => {
+    expect(render([domain()], "https://bakery.example")).not.toContain("Not the address Atai read")
+    expect(render([domain({ hostname: "shop.bakery.example" })], "https://bakery.example")).not.toContain(
+      "Not the address Atai read",
+    )
+  })
+
+  it("turns a refused redirect into the address worth verifying", () => {
+    const html = render(
+      [
+        domain({
+          status: "failed",
+          verifiedAt: null,
+          verifiedMethod: null,
+          lastFailure: {
+            code: "REDIRECT_HOST",
+            message: "bakery.example redirects to shop.example.net, so a tag or file found there would prove you own shop.example.net — not bakery.example. If shop.example.net is your site, verify it instead.",
+            at: Date.now() - 5 * MINUTE,
+            hostname: "shop.example.net",
+          },
+        }),
+      ],
+      "https://bakery.example",
+    )
+    expect(html).toContain("Verify shop.example.net instead")
+    expect(html).toContain("redirects to shop.example.net")
   })
 })

@@ -222,6 +222,43 @@ export function sameBusinessHost(a: string, b: string): boolean {
 }
 
 /**
+ * Are these two hostnames one site, so a proof of one is a fact about the
+ * other's business? Apex↔www and sibling subdomains qualify; a shared hosting
+ * platform never does, because every customer there owns only their own
+ * subdomain. IP literals are never the same site — they have no registrable
+ * domain to share.
+ *
+ * This answers "is this the business we read?", never "is this verified?".
+ */
+export function isSameSiteHost(a: string, b: string): boolean {
+  let left: string
+  let right: string
+  try {
+    left = normalizeHostname(a)
+    right = normalizeHostname(b)
+  } catch {
+    return false
+  }
+  if (!left || !right) return false
+  if (left === right) return true
+  if (isIpLiteralHost(left) || isIpLiteralHost(right)) return false
+  if (isSharedHostingHost(left) || isSharedHostingHost(right)) return false
+  return registrableDomainOf(left) === registrableDomainOf(right)
+}
+
+/** The hostname of an address we stored earlier, or `undefined` when it is not
+ * one we can read. Used to ask "is this claim the site the co-founder read?" */
+export function hostnameOfUrl(raw: string | null | undefined): string | undefined {
+  const value = (raw ?? "").trim()
+  if (!value) return undefined
+  try {
+    return normalizeHostname(new URL(value.includes("://") ? value : `https://${value}`).hostname)
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * Parse a submitted website address into the exact origin we will verify.
  * Only http/https, no credentials, no path/query, and only the default web
  * ports — anything else is rejected before a socket is ever opened.

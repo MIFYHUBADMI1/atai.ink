@@ -23,22 +23,19 @@
 import http from "node:http"
 import https from "node:https"
 import { assertPublicHttpUrl, isPrivateIpv4, isPrivateIpv6 } from "@/lib/runtime/router/adapters/shared/ssrf"
-import {
-  assertSiteUrl,
-  formatHostForUrl,
-  isIpLiteralHost,
-  isSharedHostingHost,
-  normalizeHostname,
-  registrableDomainOf,
-  type SiteTarget,
-} from "./host"
+import { assertSiteUrl, formatHostForUrl, isIpLiteralHost, isSameSiteHost, normalizeHostname, type SiteTarget } from "./host"
 
 export class DomainFetchError extends Error {
   code: string
-  constructor(code: string, message: string) {
+  /** For REDIRECT_HOST: the public hostname the site actually served, so the
+   * founder can be pointed at the address worth verifying. Absent whenever that
+   * host is not a destination we would ever name. */
+  hostname?: string
+  constructor(code: string, message: string, hostname?: string) {
     super(message)
     this.name = "DomainFetchError"
     this.code = code
+    if (hostname) this.hostname = hostname
   }
 }
 
@@ -109,6 +106,18 @@ function assertPublicAddressLiteral(address: string): void {
     return
   }
   if (isPrivateIpv4(address)) throw new DomainFetchError("UNSAFE_DESTINATION", "That address is not publicly reachable.")
+}
+
+/** The host a redirect landed on, but only when it is a destination we would
+ * ever name out loud: a redirect to `10.0.0.5` or `metadata.google.internal`
+ * must never reach a founder-facing message. */
+function publicHostOrUndefined(url: URL, hostname: string): string | undefined {
+  try {
+    assertPublicHttpUrl(`${url.protocol}//${formatHostForUrl(hostname)}:${url.port || 443}/`)
+    return hostname
+  } catch {
+    return undefined
+  }
 }
 
 /**
@@ -285,15 +294,13 @@ export async function safeFetchDocument(
       }
       if (!limits.allowHostnameChange && normalizeHostname(nextUrl.hostname) !== originHostname) {
         const nextHost = normalizeHostname(nextUrl.hostname)
-        const sameSite =
-          limits.allowSameSiteRedirects === true &&
-          !isIpLiteralHost(originHostname) &&
-          !isIpLiteralHost(nextHost) &&
-          !isSharedHostingHost(originHostname) &&
-          !isSharedHostingHost(nextHost) &&
-          registrableDomainOf(nextHost) === registrableDomainOf(originHostname)
+        const sameSite = limits.allowSameSiteRedirects === true && isSameSiteHost(originHostname, nextHost)
         if (!sameSite) {
-          throw new DomainFetchError("REDIRECT_HOST", "That address redirected to a different website, so verification stopped.")
+          throw new DomainFetchError(
+            "REDIRECT_HOST",
+            "That address redirected to a different website, so verification stopped.",
+            publicHostOrUndefined(nextUrl, nextHost),
+          )
         }
       }
       redirects += 1

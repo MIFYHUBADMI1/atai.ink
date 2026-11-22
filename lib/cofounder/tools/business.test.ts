@@ -188,7 +188,20 @@ describe("get_business_assessment tool", () => {
         method: "meta_tag",
         verifiedAt: 90,
         needsAttention: false,
+        matchesRead: true,
       })
+    }
+  })
+
+  it("tells the model when a verified address is not the site the read describes", async () => {
+    mocks.listDomains.mockResolvedValue([
+      { ...domainDoc, hostname: "another-shop.example.net", registrableDomain: "example.net", submittedUrl: "https://another-shop.example.net" },
+    ])
+    const result = await getBusinessAssessmentTool.execute!({ projectId: "proj_1" }, ctx)
+    expect(result.success).toBe(true)
+    if (result.success) {
+      const domains = (result.data as { domains: Array<Record<string, unknown>> }).domains
+      expect(domains[0]?.matchesRead).toBe(false)
     }
   })
 
