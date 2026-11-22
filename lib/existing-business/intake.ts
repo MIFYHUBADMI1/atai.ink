@@ -434,6 +434,7 @@ async function resolveAssessmentEngine(userId: string): Promise<AssessmentEngine
       tierId: resolved.tier.id,
       tierName: resolved.tier.name,
       modelId: resolved.modelId,
+      creditsPerMessage: resolved.tier.creditsPerMessage,
       model: resolved.model,
     }
   } catch (error) {
@@ -453,13 +454,21 @@ async function runAssessment(
 ): Promise<boolean> {
   const engine = await resolveAssessmentEngine(project.userId)
   const engineRef = engine
-    ? { tierId: engine.tierId, tierName: engine.tierName, modelId: engine.modelId }
+    ? {
+        tierId: engine.tierId,
+        tierName: engine.tierName,
+        modelId: engine.modelId,
+        creditsPerMessage: engine.creditsPerMessage,
+      }
     : undefined
+  // One attempt id for the record and the charge: a retry must bill again,
+  // because the failed attempt's charge was refunded.
+  const attemptedAt = Date.now()
   await patchIntake(project.id, {
     "intake.assessment": compact({
       ...intake.assessment,
       status: "processing",
-      attemptedAt: Date.now(),
+      attemptedAt,
       ...(engineRef ? { engine: engineRef } : {}),
     }),
   })
@@ -470,6 +479,7 @@ async function runAssessment(
       displayName: intake.displayName || project.name,
       evidence,
       ...(engine ? { engine } : {}),
+      attemptId: String(attemptedAt),
     },
     { actions },
   )
@@ -517,8 +527,12 @@ export type IntakeRunResult =
 export interface BusinessJourneyCost {
   /** Credits the read alone costs. */
   readCost: number
-  /** Credits the co-founder's read alone costs. */
+  /** The flat price of the co-founder's write. */
   assessmentCost: number
+  /** The chosen engine's price per turn, added to the write. */
+  engineCost: number
+  /** That engine's name, for the breakdown. Null when the default is used. */
+  engineName: string | null
   /** What is still unpaid from here — a finished stage is never charged twice. */
   required: number
   /** Credits the founder can spend right now. */
@@ -545,15 +559,33 @@ export async function businessJourneyCost(project: MirrorProject, intake: Busine
   const websitePending =
     Boolean(intake.website?.url) && intake.website?.status !== "skipped" && intake.website?.status !== "completed"
   const assessmentPending = intake.assessment?.status !== "completed"
-  const required = (websitePending ? costs.readCost : 0) + (assessmentPending ? costs.assessmentCost : 0)
+  const surcharge = assessmentPending
+    ? await assessmentEngineSurcharge(project.userId)
+    : { cost: 0, name: null }
+  const required =
+    (websitePending ? costs.readCost : 0) + (assessmentPending ? costs.assessmentCost + surcharge.cost : 0)
   const available = await getAvailableCredits(project.userId)
   return {
     readCost: costs.readCost,
     assessmentCost: costs.assessmentCost,
+    engineCost: surcharge.cost,
+    engineName: surcharge.name,
     required,
     available,
     shortfall: Math.max(0, required - available),
   }
+}
+
+/**
+ * The engine's surcharge on the write, resolved exactly the way the run will
+ * resolve it — a quote the charge does not match is a billing bug, not a
+ * rounding error.
+ */
+export async function assessmentEngineSurcharge(
+  userId: string,
+): Promise<{ cost: number; name: string | null }> {
+  const engine = await resolveAssessmentEngine(userId)
+  return engine ? { cost: Math.max(0, engine.creditsPerMessage ?? 0), name: engine.tierName } : { cost: 0, name: null }
 }
 
 /**

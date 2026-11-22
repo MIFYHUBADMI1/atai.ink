@@ -77,6 +77,13 @@ vi.mock("@/lib/billing/runtime-config", () => ({
 vi.mock("@/lib/billing/credit-service", () => ({
   getAvailableCredits: vi.fn(async () => 1_000),
 }))
+vi.mock("@/lib/cofounder/model", () => ({
+  resolveCofounderModel: vi.fn(async () => ({
+    tier: { id: "spark", name: "Spark", strength: "Everyday", modelId: "vendor/spark", creditsPerMessage: 0 },
+    modelId: "vendor/spark",
+    model: "spark-handle",
+  })),
+}))
 vi.mock("@/lib/domain/service", () => ({
   BUSINESS_ALREADY_CONNECTED_MESSAGE:
     "This website is already connected to another Atai account. Only that account can disconnect it. If this is the business you own, contact support to recover it.",
@@ -123,6 +130,7 @@ import { checkRateLimit } from "@/lib/auth/rate-limit"
 import { chargeBusinessReadCredits, hasSufficientCredits } from "@/lib/credits/credits"
 import { getExistingBusinessCosts } from "@/lib/billing/runtime-config"
 import { getAvailableCredits } from "@/lib/billing/credit-service"
+import { resolveCofounderModel } from "@/lib/cofounder/model"
 import { registerDomain, listProjectDomains, canonicalClaimFor, reserveBusinessClaim } from "@/lib/domain/service"
 import { collectWebsiteFacts } from "./website-facts"
 import { generateBusinessAssessment } from "./assessment"
@@ -136,9 +144,22 @@ import {
   startIntakeRun,
 } from "./intake"
 
+const SPARK_ENGINE = {
+  tier: { id: "spark", name: "Spark", strength: "Everyday", modelId: "vendor/spark", creditsPerMessage: 0 },
+  modelId: "vendor/spark",
+  model: "spark-handle",
+} as unknown as Awaited<ReturnType<typeof resolveCofounderModel>>
+
+const EMBER_ENGINE = {
+  tier: { id: "ember", name: "Ember", strength: "Sharper", modelId: "vendor/ember-1", creditsPerMessage: 5 },
+  modelId: "vendor/ember-1",
+  model: "ember-handle",
+} as unknown as Awaited<ReturnType<typeof resolveCofounderModel>>
+
 const rateMock = vi.mocked(checkRateLimit)
 const chargeMock = vi.mocked(chargeBusinessReadCredits)
 const costsMock = vi.mocked(getExistingBusinessCosts)
+const engineMock = vi.mocked(resolveCofounderModel)
 const availableMock = vi.mocked(getAvailableCredits)
 const affordableMock = vi.mocked(hasSufficientCredits)
 const registerMock = vi.mocked(registerDomain)
@@ -188,6 +209,7 @@ beforeEach(() => {
   } as Awaited<ReturnType<typeof generateBusinessAssessment>>)
   affordableMock.mockResolvedValue(true)
   availableMock.mockResolvedValue(1_000)
+  engineMock.mockResolvedValue(SPARK_ENGINE)
   costsMock.mockResolvedValue({ readCost: 40, assessmentCost: 60 })
   rateMock.mockResolvedValue(undefined as never)
   domainsMock.mockResolvedValue([])
@@ -342,6 +364,39 @@ describe("runBusinessIntake — gates", () => {
     expect(result).toMatchObject({ ok: true, status: "completed", assessmentCompleted: true })
     expect(rateMock).not.toHaveBeenCalled()
     expect(websiteMock).not.toHaveBeenCalled()
+    expect(assessmentMock).not.toHaveBeenCalled()
+  })
+
+  it("quotes the founder's engine on top of the write, so the price is never a surprise", async () => {
+    engineMock.mockResolvedValue(EMBER_ENGINE)
+    availableMock.mockResolvedValue(35)
+    const result = await runBusinessIntake("proj-1")
+    expect(result).toMatchObject({
+      ok: false,
+      code: "INSUFFICIENT_CREDITS",
+      meta: { assessmentCost: 60, engineCost: 5, engineName: "Ember", required: 105, shortfall: 70 },
+    })
+    expect(assessmentMock).not.toHaveBeenCalled()
+  })
+
+  it("hands the run the same engine it priced, with the attempt id the charge is keyed on", async () => {
+    engineMock.mockResolvedValue(EMBER_ENGINE)
+    await runBusinessIntake("proj-1")
+    const passed = assessmentMock.mock.calls[0][0]
+    expect(passed.engine).toMatchObject({ tierId: "ember", creditsPerMessage: 5 })
+    expect(passed.attemptId).toBe(String(stages().assessment?.attemptedAt))
+    expect(stages().assessment?.engine).toMatchObject({ tierId: "ember", creditsPerMessage: 5 })
+  })
+
+  it("does not add the engine's price to a read that is already paid for", async () => {
+    engineMock.mockResolvedValue(EMBER_ENGINE)
+    seedProject({
+      ...buildIntakeRecord({ description: "d", websiteUrl: "https://bakery.example" }),
+      website: { status: "completed", url: "https://bakery.example" },
+      assessment: { status: "completed", result: { generatedAt: 1 } },
+    } as BusinessIntake)
+    const result = await runBusinessIntake("proj-1")
+    expect(result).toMatchObject({ ok: true, status: "completed" })
     expect(assessmentMock).not.toHaveBeenCalled()
   })
 

@@ -1,14 +1,18 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowRight, Coins, Globe, Sparkles } from "lucide-react"
+import { ArrowRight, Coins, Cpu, Globe, Sparkles } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 export interface JourneyCost {
   readCost: number
+  /** Flat price of the co-founder's write. */
   assessmentCost: number
+  /** The chosen engine's price per turn, added to the write. */
+  engineCost?: number
+  engineName?: string | null
   required: number
   available: number
   shortfall: number
@@ -21,7 +25,7 @@ const credits = (n: number) => `${n.toLocaleString()} credit${n === 1 ? "" : "s"
 export interface ShortfallRow {
   label: string
   value: number
-  icon: "site" | "cofounder" | null
+  icon: "site" | "cofounder" | "engine" | null
   tone: "plain" | "total" | "balance" | "gap"
 }
 
@@ -48,6 +52,16 @@ export function describeShortfall(cost: JourneyCost, businessName: string): Shor
     rows: [
       { label: "Reading your live site", value: cost.readCost, icon: "site", tone: "plain" },
       { label: "Your co-founder's first read", value: cost.assessmentCost, icon: "cofounder", tone: "plain" },
+      ...((cost.engineCost ?? 0) > 0
+        ? [
+            {
+              label: cost.engineName ? `Your engine — ${cost.engineName}` : "Your engine",
+              value: cost.engineCost ?? 0,
+              icon: "engine" as const,
+              tone: "plain" as const,
+            },
+          ]
+        : []),
       { label: "Total to connect", value: cost.required, icon: null, tone: "total" },
       { label: "Your balance", value: cost.available, icon: null, tone: "balance" },
       { label: "Still needed", value: cost.shortfall, icon: null, tone: "gap" },
@@ -110,6 +124,7 @@ export function CreditsShortfallDialog({
                 <dt className="flex items-center gap-2">
                   {row.icon === "site" ? <Globe className="size-3.5" /> : null}
                   {row.icon === "cofounder" ? <Sparkles className="size-3.5" /> : null}
+                  {row.icon === "engine" ? <Cpu className="size-3.5" /> : null}
                   {row.label}
                 </dt>
                 <dd className="font-mono tabular-nums">{row.value.toLocaleString()}</dd>

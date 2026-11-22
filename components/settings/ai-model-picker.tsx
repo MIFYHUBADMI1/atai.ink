@@ -109,8 +109,8 @@ export function AiModelPicker({ tiers, currentTierId, envTierId }: Props) {
       </div>
 
       <p className="text-xs leading-5 text-muted-foreground">
-        Paid engines charge their listed cost — once per message, from your credit balance. If a turn fails, the
-        charge is refunded automatically. See{" "}
+        Paid engines charge their listed cost once per message, and the same amount is added to the price of your
+        first read of a business. If a turn fails, the charge is refunded automatically. See{" "}
         <Link href="/settings/billing" className="text-primary hover:underline">
           billing
         </Link>{" "}

@@ -394,6 +394,79 @@ describe("generateBusinessAssessment — billing and failure honesty", () => {
     expect(expectedKey).not.toBe(collaborationIdempotencyKey("user-1", "proj-1", "plan", "analysis", 10))
   })
 
+  it("charges the write plus the founder's engine, and records both parts", async () => {
+    textMock.mockResolvedValue({ text: JSON.stringify(validPayload()) } as Awaited<ReturnType<typeof generateText>>)
+    const outcome = await generateBusinessAssessment(
+      {
+        ...input,
+        engine: {
+          tierId: "ember",
+          tierName: "Ember",
+          modelId: "vendor/ember-1",
+          creditsPerMessage: 5,
+          model: "ember-handle" as never,
+        },
+      },
+      { actions },
+    )
+    expect(outcome.ok).toBe(true)
+    expect(consumeMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amount: 65,
+        metadata: expect.objectContaining({ baseCost: 60, engineCost: 5, engine: "ember" }),
+      }),
+    )
+  })
+
+  it("refunds the engine's share too, so a failed premium read costs nothing", async () => {
+    textMock.mockRejectedValue(new Error("provider 502"))
+    await generateBusinessAssessment(
+      {
+        ...input,
+        engine: {
+          tierId: "ember",
+          tierName: "Ember",
+          modelId: "vendor/ember-1",
+          creditsPerMessage: 5,
+          model: "ember-handle" as never,
+        },
+      },
+      { actions },
+    )
+    expect(grantMock).toHaveBeenCalledWith(expect.objectContaining({ amount: 65 }))
+  })
+
+  it("refuses before charging when the balance cannot cover the engine too", async () => {
+    availableMock.mockResolvedValueOnce(62)
+    const outcome = await generateBusinessAssessment(
+      {
+        ...input,
+        engine: {
+          tierId: "ember",
+          tierName: "Ember",
+          modelId: "vendor/ember-1",
+          creditsPerMessage: 5,
+          model: "ember-handle" as never,
+        },
+      },
+      { actions },
+    )
+    expect(outcome).toMatchObject({ ok: false, code: "INSUFFICIENT_CREDITS" })
+    expect(consumeMock).not.toHaveBeenCalled()
+  })
+
+  it("bills a retry again instead of replaying the refunded charge", async () => {
+    textMock.mockRejectedValue(new Error("provider 502"))
+    await generateBusinessAssessment({ ...input, attemptId: "1000" }, { actions })
+    await generateBusinessAssessment({ ...input, attemptId: "2000" }, { actions })
+    const keys = consumeMock.mock.calls.map((call) => call[0].idempotencyKey)
+    expect(keys).toHaveLength(2)
+    expect(keys[0]).not.toBe(keys[1])
+    // The refund of each attempt matches its own charge, never the other's.
+    const refunds = grantMock.mock.calls.map((call) => call[0].idempotencyKey)
+    expect(refunds).toEqual([`collab_refund_${keys[0]}`, `collab_refund_${keys[1]}`])
+  })
+
   it("refunds the debit when the model call fails", async () => {
     textMock.mockRejectedValue(new Error("provider 502"))
     const outcome = await generateBusinessAssessment(input, { actions })

@@ -124,7 +124,9 @@ export default function AdminCofounderModelsPage() {
           <h2 className="mt-1 text-2xl font-semibold tracking-tight">Co-founder engines</h2>
           <p className="mt-1 max-w-xl text-sm text-muted-foreground">
             The named modes founders pick in Settings → AI co-founder. Rename them, change the model behind them,
-            or adjust the credit cost — founders get an email whenever an engine is added or visibly changed.
+            or adjust the credit cost — founders get an email whenever an engine is added or visibly changed. The
+            cost is charged per co-founder message and added to the price of a founder's first read of a business,
+            so it is the whole per-turn cost of that engine, not a markup.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => void mutate()} className="gap-1.5 self-start">
@@ -255,7 +257,8 @@ export default function AdminCofounderModelsPage() {
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
           Founders see the name and strength — the model id powers it behind the scenes. Setting credits to 0 makes
-          it free; anything above charges that many credits per co-founder message.
+          it free; anything above charges that many credits per co-founder message, and the same amount is added to
+          the price of a founder's first read of a business.
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <input

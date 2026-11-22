@@ -523,8 +523,12 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
 
                 <p className="text-xs leading-relaxed text-muted-foreground">
                   {journeyCost
-                    ? `Connecting costs ${journeyCost.required.toLocaleString()} credits — ${journeyCost.readCost.toLocaleString()} to read your live site and ${journeyCost.assessmentCost.toLocaleString()} for your co-founder's first read. A failed read is refunded in full, and a page Atai read in the last 7 days is never charged twice.`
-                    : "Connecting uses Atai credits: one read of your live site, then your co-founder's first read. A failed read is refunded in full."}
+                    ? `Connecting costs ${journeyCost.required.toLocaleString()} credits — ${journeyCost.readCost.toLocaleString()} to read your live site and ${journeyCost.assessmentCost.toLocaleString()} for your co-founder's first read${
+                        (journeyCost.engineCost ?? 0) > 0
+                          ? `, plus ${journeyCost.engineCost?.toLocaleString()} for your engine (${journeyCost.engineName ?? "the one you picked"})`
+                          : ""
+                      }. A failed read is refunded in full, and a page Atai read in the last 7 days is never charged twice.`
+                    : "Connecting uses Atai credits: one read of your live site, then your co-founder's first read — plus whatever engine you picked costs. A failed read is refunded in full."}
                 </p>
 
                 {journeyCost && journeyCost.shortfall > 0 ? (

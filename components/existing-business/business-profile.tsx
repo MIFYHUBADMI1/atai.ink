@@ -179,6 +179,8 @@ export function BusinessProfile({ projectId, initialView }: { projectId: string;
         setShortfall({
           readCost: Number(meta.readCost ?? 0),
           assessmentCost: Number(meta.assessmentCost ?? 0),
+          engineCost: Number(meta.engineCost ?? 0),
+          engineName: meta.engineName ?? null,
           required: Number(meta.required ?? 0),
           available: Number(meta.available ?? 0),
           shortfall: meta.shortfall,
@@ -627,8 +629,11 @@ function AssessmentStep({
           {cost.readCost > 0 && !website.analyzed
             ? `${cost.readCost.toLocaleString()} credits to read your live site, then `
             : ""}
-          {cost.assessmentCost.toLocaleString()} credits for the read. You have{" "}
-          {cost.available.toLocaleString()}
+          {cost.assessmentCost.toLocaleString()} credits for the read
+          {(cost.engineCost ?? 0) > 0
+            ? `, plus ${cost.engineCost?.toLocaleString()} for ${cost.engineName ?? "your engine"}`
+            : ""}
+          . You have {cost.available.toLocaleString()}
           {cost.shortfall > 0
             ? ` — ${cost.shortfall.toLocaleString()} short of finishing.`
             : " — enough to finish."}

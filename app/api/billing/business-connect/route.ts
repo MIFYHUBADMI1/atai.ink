@@ -3,7 +3,7 @@ import { ok, fail, handleRouteError } from "@/lib/api/respond"
 import { store } from "@/lib/store/store"
 import { getExistingBusinessCosts } from "@/lib/billing/runtime-config"
 import { getAvailableCredits } from "@/lib/billing/credit-service"
-import { buildIntakeRecord, businessJourneyCost } from "@/lib/existing-business/intake"
+import { assessmentEngineSurcharge, buildIntakeRecord, businessJourneyCost } from "@/lib/existing-business/intake"
 
 /**
  * GET /api/billing/business-connect[?projectId=…]
@@ -28,10 +28,13 @@ export async function GET(req: Request) {
 
     const costs = await getExistingBusinessCosts()
     const available = await getAvailableCredits(user.id)
-    const required = costs.readCost + costs.assessmentCost
+    const surcharge = await assessmentEngineSurcharge(user.id)
+    const required = costs.readCost + costs.assessmentCost + surcharge.cost
     return ok({
       readCost: costs.readCost,
       assessmentCost: costs.assessmentCost,
+      engineCost: surcharge.cost,
+      engineName: surcharge.name,
       required,
       available,
       shortfall: Math.max(0, required - available),

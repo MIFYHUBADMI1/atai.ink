@@ -297,6 +297,8 @@ export interface AssessmentEngine {
   tierId: string
   tierName: string
   modelId: string
+  /** Admin-set price for one turn on this engine, added to the write. */
+  creditsPerMessage?: number
   model: LanguageModel
 }
 
@@ -306,6 +308,9 @@ export interface AssessmentInput {
   displayName: string
   evidence: AssessmentEvidence
   engine?: AssessmentEngine
+  /** Identifies one attempt for billing: a retry after a refunded attempt
+   * must be a new charge, not a replay of the refunded one. */
+  attemptId?: string
 }
 
 /** Which sources really back this run. Everything the honesty filters key off. */
@@ -632,9 +637,14 @@ export async function generateBusinessAssessment(
   }
 
   const costs = await getExistingBusinessCosts()
-  const amount = costs.assessmentCost
+  // The read is priced in two parts: the flat write, plus the engine the
+  // founder chose — an admin-managed per-message cost, so a premium engine
+  // costs what it costs. The quote in `businessJourneyCost` adds the same two.
+  const engineCost = Math.max(0, input.engine?.creditsPerMessage ?? 0)
+  const amount = costs.assessmentCost + engineCost
   const feature = "existing-business-intake"
   const kind = "assessment"
+  const chargeKey = collaborationIdempotencyKey(input.userId, input.projectId, feature, kind, amount, input.attemptId)
   let charged = false
   if (amount > 0) {
     const available = await getAvailableCredits(input.userId)
@@ -649,11 +659,17 @@ export async function generateBusinessAssessment(
       userId: input.userId,
       amount,
       transactionType: "ai_collaboration",
-      idempotencyKey: collaborationIdempotencyKey(input.userId, input.projectId, feature, kind, amount),
+      idempotencyKey: chargeKey,
       projectId: input.projectId,
       referenceType: "project",
       referenceId: input.projectId,
-      metadata: { reason: "AI existing-business assessment", feature },
+      metadata: {
+        reason: "AI existing-business assessment",
+        feature,
+        engine: input.engine?.tierId,
+        engineCost,
+        baseCost: costs.assessmentCost,
+      },
     })
     if (!result.success) {
       return {
@@ -673,7 +689,7 @@ export async function generateBusinessAssessment(
         creditType: "permanent",
         amount,
         transactionType: "other_reversal",
-        idempotencyKey: `collab_refund_${collaborationIdempotencyKey(input.userId, input.projectId, feature, kind, amount)}`,
+        idempotencyKey: `collab_refund_${chargeKey}`,
         projectId: input.projectId,
         referenceType: "project",
         referenceId: input.projectId,

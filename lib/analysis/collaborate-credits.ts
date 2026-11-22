@@ -21,8 +21,13 @@ export function collaborationIdempotencyKey(
   feature: string,
   kind: string,
   amount: number,
+  /** Distinguishes one attempt from the next when the earlier one was
+   * refunded: without it, a retry after a refund matches the original ledger
+   * entry, is treated as a replay and runs for free. */
+  attempt?: string,
 ): string {
-  return `collab_${feature.slice(0, 32)}_${kind.slice(0, 32)}_${userId.slice(0, 32)}_${projectId.slice(0, 32)}_${amount}`
+  const base = `collab_${feature.slice(0, 32)}_${kind.slice(0, 32)}_${userId.slice(0, 32)}_${projectId.slice(0, 32)}_${amount}`
+  return attempt ? `${base}_${attempt.slice(0, 24)}` : base
 }
 
 /** Resolve a stable project-side idempotency identity for collaboration

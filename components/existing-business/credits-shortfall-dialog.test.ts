@@ -25,6 +25,26 @@ describe("describeShortfall", () => {
     expect(copy.coveredPct).toBe(0)
   })
 
+  it("shows the founder's engine as its own line, named", () => {
+    const copy = describeShortfall(
+      { readCost: 40, assessmentCost: 60, engineCost: 5, engineName: "Ember", required: 105, available: 100, shortfall: 5 },
+      "Corner Bakery",
+    )
+    expect(copy.rows.map((r) => [r.label, r.value])).toEqual([
+      ["Reading your live site", 40],
+      ["Your co-founder's first read", 60],
+      ["Your engine — Ember", 5],
+      ["Total to connect", 105],
+      ["Your balance", 100],
+      ["Still needed", 5],
+    ])
+  })
+
+  it("keeps the old three lines when the engine is free", () => {
+    const copy = describeShortfall({ ...short, engineCost: 0 }, "Bakery")
+    expect(copy.rows.some((r) => r.label.startsWith("Your engine"))).toBe(false)
+  })
+
   it("counts a single credit without pluralising it", () => {
     expect(describeShortfall({ ...short, shortfall: 1 }, "Bakery").cta).toBe("Add 1 credit")
   })

@@ -69,6 +69,8 @@ export interface IntakeEngineRef {
   tierId: string
   tierName: string
   modelId: string
+  /** The engine's price when this run was charged, kept for the audit trail. */
+  creditsPerMessage?: number
 }
 
 export interface IntakeStage {
