@@ -22,9 +22,11 @@ import { patchJson, postJson } from "@/lib/client/api"
 import { relativeDeadline, relativeTime } from "@/lib/client/format"
 import { trackConnectVerified } from "@/lib/analytics/connect-funnel"
 import { hostnameOfUrl, isSameSiteHost } from "@/lib/domain/host"
+import { unresolvedDomainClaims } from "@/lib/existing-business/steps"
 import type { DomainView } from "@/lib/domain/service"
 import type { BusinessDomainMethod, BusinessDomainStatus } from "@/lib/types/business-intake"
 import { cn } from "@/lib/utils"
+import { DomainReleaseDialog, UnresolvedDomainsDialog } from "./domain-claim-dialogs"
 import { VerificationGuideDialog } from "./verification-guide-dialog"
 
 const STATUS_LABEL: Record<BusinessDomainStatus, string> = {
@@ -81,7 +83,10 @@ export function DomainVerification({
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
-  const [confirmRelease, setConfirmRelease] = useState<string | null>(null)
+  // Removing a claim always goes through the warning dialog, so nothing is
+  // released as a side effect of a mis-click.
+  const [releaseTargets, setReleaseTargets] = useState<DomainView[]>([])
+  const [promptUnresolved, setPromptUnresolved] = useState(false)
   const [showHistory, setShowHistory] = useState<string | null>(null)
   // The method is a view choice, not a server fact: both artifacts come from the
   // same token, so switching must be instant. It is sent with the check, which
@@ -142,10 +147,14 @@ export function DomainVerification({
         delete next[domain.id]
         return next
       })
-      setDomains((current) => current.map((d) => (d.id === domain.id ? data.domain : d)))
+      const next = domains.map((d) => (d.id === domain.id ? data.domain : d))
+      setDomains(next)
       if (data.verified) {
         setNotice(`${domain.hostname} is verified as yours in Atai.`)
         trackConnectVerified({ method: data.domain.method ?? "meta_tag", attempts: data.domain.attempts })
+        // One proof does not settle the addresses still waiting: ask now,
+        // rather than letting the step look finished while they linger.
+        if (unresolvedDomainClaims(next).length > 0) setPromptUnresolved(true)
       } else if (data.failure) {
         setError(data.failure.message)
       }
@@ -165,13 +174,21 @@ export function DomainVerification({
     })
   }
 
-  async function release(domain: DomainView) {
-    await run(`release-${domain.id}`, async () => {
-      const data = await patchJson<{ domain: DomainView }>(`${base}/${domain.id}`, { action: "release" })
-      setDomains((current) => current.map((d) => (d.id === domain.id ? data.domain : d)))
-      setConfirmRelease(null)
+  async function release(targets: DomainView[]) {
+    if (targets.length === 0) return
+    const key = targets.length === 1 ? `release-${targets[0].id}` : "release-many"
+    await run(key, async () => {
+      for (const target of targets) {
+        const data = await patchJson<{ domain: DomainView }>(`${base}/${target.id}`, { action: "release" })
+        setDomains((current) => current.map((d) => (d.id === target.id ? data.domain : d)))
+        // Drop each one as it lands, so a failure halfway leaves the dialog
+        // showing only what is still claimed.
+        setReleaseTargets((current) => current.filter((d) => d.id !== target.id))
+      }
       setNotice(
-        `${domain.hostname} was released. The website is no longer claimed by this business, so another Atai account can connect it.`,
+        targets.length === 1
+          ? `${targets[0].hostname} was removed. This business no longer claims it, so another Atai account can connect it.`
+          : `${targets.length} addresses were removed. This business no longer claims them, so another Atai account can connect them.`,
       )
       onChanged?.()
     })
@@ -197,6 +214,10 @@ export function DomainVerification({
   const readHostname = hostnameOfUrl(defaultUrl)
   const matchesRead = (domain: DomainView): boolean | null =>
     readHostname ? isSameSiteHost(domain.hostname, readHostname) : domain.matchesRead ?? null
+  // Proved and still-waiting at the same time: the founder has to settle the
+  // rest before this step can close.
+  const proved = active.filter((d) => d.status === "verified")
+  const unresolved = unresolvedDomainClaims(active)
 
   return (
     <div data-atai-tour="existing-business-domains" className="flex flex-col gap-5">
@@ -317,6 +338,72 @@ export function DomainVerification({
         >
           {error}
         </p>
+      ) : null}
+
+      {proved.length > 0 && unresolved.length > 0 ? (
+        <div
+          role="status"
+          className="flex flex-col gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-800 dark:text-amber-300"
+        >
+          <p className="flex items-center gap-1.5 text-xs font-semibold">
+            <TriangleAlert className="size-3.5 shrink-0" />
+            {proved.length === 1 ? "One address is proved" : `${proved.length} addresses are proved`} —{" "}
+            {unresolved.length === 1 ? "one is still waiting" : `${unresolved.length} are still waiting`}
+          </p>
+          <p className="text-xs leading-relaxed break-words">
+            This step stays open until every address you added is proved or removed. A waiting address keeps that site
+            reserved for your business, so nobody else can connect it.
+          </p>
+          <ul className="flex flex-col gap-2">
+            {unresolved.map((domain) => {
+              const stale = !domain.token || domain.status === "expired"
+              return (
+                <li
+                  key={domain.id}
+                  className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-background/60 px-3 py-2"
+                >
+                  <span className="min-w-0 break-all font-mono text-xs text-foreground">{domain.hostname}</span>
+                  <span className="text-[11px] text-muted-foreground">{STATUS_LABEL[domain.status]}</span>
+                  <span className="ml-auto flex flex-wrap items-center gap-1.5">
+                    {stale ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => regenerate(domain)}
+                        disabled={busy === `regen-${domain.id}`}
+                      >
+                        {busy === `regen-${domain.id}` ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <RefreshCw className="size-3.5" />
+                        )}
+                        New challenge
+                      </Button>
+                    ) : (
+                      <Button type="button" size="sm" variant="outline" onClick={() => setGuideFor(domain.id)}>
+                        <ListChecks className="size-3.5" />
+                        Prove this one
+                      </Button>
+                    )}
+                    <Button type="button" size="sm" variant="ghost" onClick={() => setReleaseTargets([domain])}>
+                      <Trash2 className="size-3.5" />
+                      Remove
+                    </Button>
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+          {unresolved.length > 1 ? (
+            <div>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setReleaseTargets(unresolved)}>
+                <Trash2 className="size-3.5" />
+                Remove all {unresolved.length}
+              </Button>
+            </div>
+          ) : null}
+        </div>
       ) : null}
 
       <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">2 · Add the tag, then check</p>
@@ -548,24 +635,10 @@ export function DomainVerification({
                 {busy === `regen-${domain.id}` ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
                 New challenge
               </Button>
-              {confirmRelease === domain.id ? (
-                <span className="inline-flex items-center gap-2 text-xs">
-                  <span className="text-muted-foreground">
-                    Release this claim? The website becomes connectable by any Atai account.
-                  </span>
-                  <Button type="button" size="sm" variant="destructive" onClick={() => release(domain)} disabled={busy === `release-${domain.id}`}>
-                    Yes, release
-                  </Button>
-                  <Button type="button" size="sm" variant="outline" onClick={() => setConfirmRelease(null)}>
-                    Keep it
-                  </Button>
-                </span>
-              ) : (
-                <Button type="button" size="sm" variant="ghost" onClick={() => setConfirmRelease(domain.id)}>
-                  <Trash2 className="size-3.5" />
-                  Release
-                </Button>
-              )}
+              <Button type="button" size="sm" variant="ghost" onClick={() => setReleaseTargets([domain])}>
+                <Trash2 className="size-3.5" />
+                Remove
+              </Button>
               {domain.history?.length ? (
                 <Button type="button" size="sm" variant="ghost" onClick={() => setShowHistory(showHistory === domain.id ? null : domain.id)}>
                   {showHistory === domain.id ? "Hide history" : "History"}
@@ -611,13 +684,31 @@ export function DomainVerification({
       />
     ) : null}
 
+    <UnresolvedDomainsDialog
+      domains={unresolved}
+      open={promptUnresolved && unresolved.length > 0}
+      onOpenChange={setPromptUnresolved}
+      onRemove={() => {
+        setPromptUnresolved(false)
+        setReleaseTargets(unresolved)
+      }}
+    />
+
+    <DomainReleaseDialog
+      domains={releaseTargets}
+      open={releaseTargets.length > 0}
+      busy={busy === "release-many" || releaseTargets.some((d) => busy === `release-${d.id}`)}
+      onCancel={() => setReleaseTargets([])}
+      onConfirm={() => void release(releaseTargets)}
+    />
+
     {released.length ? (
       <div className="text-[11px] text-muted-foreground">
-        <p className="font-medium">Released claims</p>
+        <p className="font-medium">Removed claims</p>
         <ul className="mt-1 flex flex-col gap-0.5">
           {released.map((domain) => (
             <li key={domain.id}>
-              {domain.hostname} — released {formatDate(domain.updatedAt)}
+              {domain.hostname} — removed {formatDate(domain.updatedAt)}
             </li>
           ))}
         </ul>

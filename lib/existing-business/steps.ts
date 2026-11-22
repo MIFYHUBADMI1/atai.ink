@@ -1,3 +1,4 @@
+import type { DomainView } from "@/lib/domain/service"
 import type { TourTargetId } from "@/lib/tour/targets"
 import type { IntakeView } from "./view"
 
@@ -26,7 +27,19 @@ export interface BusinessSteps {
   current: number
 }
 
+/**
+ * Addresses the founder added but has not proved. Each one reserves a hostname
+ * for 72 hours, so leaving it behind is not harmless bookkeeping: nobody else
+ * can connect that site while it waits. Proving one address does not settle the
+ * others — the domain step is finished only when every address is proved or
+ * removed.
+ */
+export function unresolvedDomainClaims(records: DomainView[]): DomainView[] {
+  return records.filter((record) => record.status !== "verified" && record.status !== "revoked")
+}
+
 export function businessSteps(view: IntakeView): BusinessSteps {
+  const unresolved = unresolvedDomainClaims(view.domain.records)
   const steps: BusinessStep[] = [
     {
       id: "assessment",
@@ -38,8 +51,9 @@ export function businessSteps(view: IntakeView): BusinessSteps {
     {
       id: "domain",
       title: "Prove the website is yours",
-      requirement: "Add the meta tag or file Atai gives you, then press Check.",
-      done: view.domain.verified,
+      requirement:
+        "Add the meta tag or file Atai gives you, then press Check. Every address you add has to be proved or removed.",
+      done: view.domain.verified && unresolved.length === 0,
       tour: "existing-business-domains",
     },
     {

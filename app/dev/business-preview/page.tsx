@@ -51,8 +51,9 @@ const ASSESSMENT = {
 
 /** The domain step, with a challenge created before file names were shortened,
  * so the long-token layout can be checked on a phone. `mismatch` previews a
- * claim on an address the co-founder never read. */
-function domainState(mismatch = false): IntakeView {
+ * claim on an address the co-founder never read; `waiting` previews one proved
+ * address next to one that still needs a decision. */
+function domainState({ mismatch = false, waiting = false } = {}): IntakeView {
   return view({
     website: mismatch
       ? { submitted: true, analyzed: true, status: "completed", url: "https://cornerbakery.com", pagesCrawled: 3 }
@@ -66,14 +67,14 @@ function domainState(mismatch = false): IntakeView {
     overall: "partially_completed",
     assessment: { status: "completed", result: ASSESSMENT as never, generatedAt: 1 },
     domain: {
-      verified: false,
+      verified: waiting,
       records: [
         {
           id: "dom-preview",
           hostname: "study-iota-lime.vercel.app",
           registrableDomain: "vercel.app",
           submittedUrl: "https://study-iota-lime.vercel.app",
-          status: "pending",
+          status: waiting ? "verified" : "pending",
           method: "html_file",
           token: "hvM3s0PY_Um29Ecfsc66WLGOgQzZdUWmdrftgydfeuw",
           metaSnippet:
@@ -84,8 +85,8 @@ function domainState(mismatch = false): IntakeView {
           lastAttemptAt: null,
           lastCheckedAt: null,
           claimExpiresAt: Date.now() + 172_800_000,
-          verifiedAt: null,
-          verifiedMethod: null,
+          verifiedAt: waiting ? Date.now() - 60_000 : null,
+          verifiedMethod: waiting ? "html_file" : null,
           needsAttention: false,
           lastFailure: null,
           matchesRead: !mismatch,
@@ -93,6 +94,34 @@ function domainState(mismatch = false): IntakeView {
           createdAt: Date.now() - 3_600_000,
           updatedAt: Date.now() - 3_600_000,
         },
+        ...(waiting
+          ? [
+              {
+                id: "dom-preview-2",
+                hostname: "shop.cornerbakery.com",
+                registrableDomain: "cornerbakery.com",
+                submittedUrl: "https://shop.cornerbakery.com",
+                status: "pending" as const,
+                method: "meta_tag" as const,
+                token: "Qm3s0PY_Um29Ecfsc66WLGOgQzZdUWmdrftgydfeuw",
+                metaSnippet: '<meta name="atai-verification" content="Qm3s0PY_Um29Ecfsc66WLGOgQzZdUWmdrftgydfeuw">',
+                fileName: null,
+                tokenExpiresAt: Date.now() + 86_400_000,
+                attempts: 1,
+                lastAttemptAt: Date.now() - 300_000,
+                lastCheckedAt: Date.now() - 300_000,
+                claimExpiresAt: Date.now() + 172_800_000,
+                verifiedAt: null,
+                verifiedMethod: null,
+                needsAttention: false,
+                lastFailure: null,
+                matchesRead: false,
+                history: [],
+                createdAt: Date.now() - 3_000_000,
+                updatedAt: Date.now() - 300_000,
+              },
+            ]
+          : []),
       ],
     },
   })
@@ -105,7 +134,9 @@ export default async function PreviewPage({ searchParams }: { searchParams: Prom
     state === "domain"
       ? domainState()
       : state === "domain-mismatch"
-        ? domainState(true)
+        ? domainState({ mismatch: true })
+        : state === "domain-waiting"
+          ? domainState({ waiting: true })
         : state === "unread"
         ? view({ website: { submitted: true, analyzed: false, status: "failed", url: "https://cornerbakery.com" } })
         : view()

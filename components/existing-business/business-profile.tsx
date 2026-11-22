@@ -360,7 +360,9 @@ export function BusinessProfile({ projectId, initialView }: { projectId: string;
                 ) : (
                   <>
                     <Lock className="size-3.5" />
-                    The next step stays closed until this one is verified.
+                    {active.id === "domain" && view.domain.verified
+                      ? "One address is proved. Prove or remove the rest to finish this step."
+                      : "The next step stays closed until this one is verified."}
                   </>
                 )}
               </p>

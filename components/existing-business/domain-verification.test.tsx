@@ -193,3 +193,48 @@ describe("DomainVerification — the address Atai read is the one being verified
     expect(html).toContain("redirects to shop.example.net")
   })
 })
+
+describe("DomainVerification — a proved address does not settle the others", () => {
+  const pending = (overrides: Partial<DomainView> = {}) =>
+    domain({
+      id: "dom-2",
+      hostname: "shop.bakery.example",
+      status: "pending",
+      verifiedAt: null,
+      verifiedMethod: null,
+      ...overrides,
+    })
+
+  it("asks for a decision on every address that is still waiting", () => {
+    const html = render([domain(), pending()], "https://bakery.example")
+    expect(html).toContain("One address is proved — one is still waiting")
+    expect(html).toContain("shop.bakery.example")
+    expect(html).toContain("Prove this one")
+    expect(html).toContain("Remove")
+    expect(html).toContain("This step stays open until every address you added is proved or removed")
+  })
+
+  it("offers a new challenge instead of proof when the challenge expired", () => {
+    const html = render([domain(), pending({ status: "expired", token: null })], "https://bakery.example")
+    expect(html).toContain("New challenge")
+    expect(html).not.toContain("Prove this one")
+  })
+
+  it("offers to remove all of them at once when more than one is waiting", () => {
+    const html = render([domain(), pending(), pending({ id: "dom-3", hostname: "old.bakery.example" })])
+    expect(html).toContain("One address is proved — 2 are still waiting")
+    expect(html).toContain("Remove all 2")
+  })
+
+  it("stays quiet when nothing is waiting", () => {
+    const html = render([domain()], "https://bakery.example")
+    expect(html).not.toContain("still waiting")
+    expect(html).not.toContain("Prove this one")
+  })
+
+  it("stays quiet while nothing is proved yet", () => {
+    const html = render([pending()], "https://bakery.example")
+    expect(html).not.toContain("still waiting")
+    expect(html).not.toContain("This step stays open until every address")
+  })
+})
