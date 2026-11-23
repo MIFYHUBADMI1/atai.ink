@@ -27,6 +27,8 @@ const {
   mockTotalumProject,
   mockAppend,
   mockAuthorizeProductionWork,
+  mockReserveSubdomainSlot,
+  mockReleaseSubdomainSlot,
 } = vi.hoisted(() => {
   const mockUser = { id: "u_dep", email: "dep@example.com" }
   return {
@@ -41,6 +43,8 @@ const {
     mockTotalumProject: vi.fn(async () => ({ id: "tp_1" })),
     mockAppend: vi.fn(async () => undefined),
     mockAuthorizeProductionWork: vi.fn(async () => null),
+    mockReserveSubdomainSlot: vi.fn(async () => ({ holdId: "subdomain_hold" })),
+    mockReleaseSubdomainSlot: vi.fn(async () => undefined),
   }
 })
 
@@ -101,6 +105,8 @@ vi.mock("@/lib/runtime/provisioning", () => ({
 // deploy credit lifecycle these tests are about.
 vi.mock("@/lib/billing/entitlements/require", () => ({
   authorizeProductionWork: mockAuthorizeProductionWork,
+  reserveSubdomainSlot: mockReserveSubdomainSlot,
+  releaseSubdomainSlot: mockReleaseSubdomainSlot,
 }))
 
 import { GET, POST } from "./deploy/route"
@@ -125,6 +131,7 @@ describe("POST /api/projects/:id/deploy — atomic claim", () => {
     mockClaimBuildSlot.mockReset()
     mockGetProject.mockResolvedValue(project as never)
     mockAuthorizeProductionWork.mockResolvedValue(null)
+    mockReserveSubdomainSlot.mockResolvedValue({ holdId: "subdomain_hold" })
   })
 
   it("refuses expired paid infrastructure before claiming or reserving credits", async () => {
@@ -165,6 +172,19 @@ describe("POST /api/projects/:id/deploy — atomic claim", () => {
     expect(mockReserveCredits).not.toHaveBeenCalled()
   })
 
+  it("refuses a first deploy when the atomic subdomain reservation is denied", async () => {
+    mockReserveSubdomainSlot.mockResolvedValueOnce({
+      denial: { code: "SUBDOMAIN_LIMIT", message: "Subdomain limit reached for your plan." },
+    })
+
+    const res = await post()
+
+    expect(res.status).toBe(402)
+    await expect(res.json()).resolves.toMatchObject({ error: { code: "SUBDOMAIN_LIMIT" } })
+    expect(mockClaimBuildSlot).not.toHaveBeenCalled()
+    expect(mockReserveCredits).not.toHaveBeenCalled()
+  })
+
   it("lets an existing production URL be republished without spending a new subdomain slot", async () => {
     mockGetProject.mockResolvedValue({
       ...project,
@@ -175,6 +195,7 @@ describe("POST /api/projects/:id/deploy — atomic claim", () => {
 
     expect((await post()).status).toBe(200)
     expect(mockAuthorizeProductionWork).toHaveBeenCalledWith("u_dep", "deploy", { hasExistingSubdomain: true })
+    expect(mockReserveSubdomainSlot).not.toHaveBeenCalled()
   })
 
   it("rejects with 409 when the atomic claim loses to a concurrent op, without touching credits", async () => {
@@ -185,6 +206,7 @@ describe("POST /api/projects/:id/deploy — atomic claim", () => {
     expect(res.status).toBe(409)
     expect(mockClaimBuildSlot).toHaveBeenCalledWith("p_dep", { state: "deploying" })
     expect(mockReserveCredits).not.toHaveBeenCalled()
+    expect(mockReleaseSubdomainSlot).toHaveBeenCalledWith("u_dep", "p_dep")
   })
 
   it("claims the slot before reserving credits on the success path", async () => {
@@ -193,8 +215,10 @@ describe("POST /api/projects/:id/deploy — atomic claim", () => {
     const res = await post()
 
     expect(res.status).toBe(200)
+    expect(mockReserveSubdomainSlot).toHaveBeenCalledWith("u_dep", "p_dep")
     expect(mockClaimBuildSlot).toHaveBeenCalled()
     expect(mockReserveCredits).toHaveBeenCalledTimes(1)
+    expect(mockReleaseSubdomainSlot).not.toHaveBeenCalled()
   })
 })
 
@@ -232,6 +256,7 @@ describe("GET /api/projects/:id/deploy — failed deployments return the reserva
     expect(mockRelease.mock.invocationCallOrder[0]).toBeLessThan(mockUpdateDeploy.mock.invocationCallOrder[0])
     expect(current.deploymentHistory[0].status).toBe("failed")
     expect(current.state).toBe("ready")
+    expect(mockReleaseSubdomainSlot).toHaveBeenCalledWith("u_dep", "p_dep")
     expect(JSON.stringify(current.events)).toContain("Credits were refunded")
 
     await get() // state is now ready — the error branch must not run again

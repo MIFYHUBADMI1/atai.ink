@@ -8,7 +8,7 @@ import { deployProject, isTotalumConfigured, getDeploymentStatus, getProject } f
 import { publishEventsCol } from "@/lib/db/collections"
 import { logger } from "@/lib/logging/logger"
 import { ensureRuntimeProvisioned, environmentForLifecycle, RuntimeProvisioningError } from "@/lib/runtime/provisioning"
-import { authorizeProductionWork } from "@/lib/billing/entitlements/require"
+import { authorizeProductionWork, releaseSubdomainSlot, reserveSubdomainSlot } from "@/lib/billing/entitlements/require"
 import type { ProjectEvent } from "@/lib/types/project"
 import type { PublishEventDoc } from "@/lib/types/db"
 import { infrastructureDenial } from "@/lib/infrastructure/access"
@@ -78,24 +78,41 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
         message: `Deploying requires ${deployCost.toLocaleString()} credits. Available: ${available.toLocaleString()}.`,
       })
 
+    // A first production deployment consumes a subdomain slot. Reserve it
+    // atomically before the project enters `deploying`; an existing URL is
+    // only a republish and needs no new slot.
+    const subdomainReservation = hasExistingSubdomain ? {} : await reserveSubdomainSlot(user.id, id)
+    if (subdomainReservation.denial) {
+      return fail(subdomainReservation.denial.code, subdomainReservation.denial.message, 402)
+    }
+    if (subdomainReservation.busy) {
+      return fail(subdomainReservation.busy.code, subdomainReservation.busy.message, 409)
+    }
+    const subdomainHoldId = subdomainReservation.holdId
+
     const previousState = project.state
     // Atomic claim: the state check above is check-then-act, so two
     // concurrent deploys could both pass it and both debit credits.
     // claimBuildSlot transitions from any state outside {building, deploying}
     // in one document operation (same pattern the build route uses).
     const claimed = await store.claimBuildSlot(id, { state: "deploying" })
-    if (!claimed) return fail("BUSY", "Please wait for the current operation to finish.", 409)
+    if (!claimed) {
+      if (subdomainHoldId) await releaseSubdomainSlot(user.id, id)
+      return fail("BUSY", "Please wait for the current operation to finish.", 409)
+    }
 
     // Check if already deployed
     try {
       const deployStatus = await getDeploymentStatus(project.totalumProjectId)
       if (deployStatus.status === "deploying") {
+        if (subdomainHoldId) await releaseSubdomainSlot(user.id, id)
         await store.updateProject(id, { state: previousState })
         return fail("DEPLOYMENT_RUNNING", "A deployment is already in progress.", 409)
       }
     } catch (err) {
       // If project not found in Totalum, the build may have failed or the project ID is invalid
       if (err instanceof Error && err.message.includes("PROJECT_NOT_FOUND")) {
+        if (subdomainHoldId) await releaseSubdomainSlot(user.id, id)
         await store.updateProject(id, { state: previousState })
         return fail("TOTALUM_PROJECT_NOT_FOUND", "This project wasn't found in the deployment service. Try rebuilding the project first.", 404)
       }
@@ -106,6 +123,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     const runId = cryptoId()
     const reserved = await reserveCredits({ userId: user.id, amount: deployCost, buildId: runId, reason: "Production deployment", projectId: id })
     if (!reserved) {
+      if (subdomainHoldId) await releaseSubdomainSlot(user.id, id)
       await store.updateProject(id, { state: previousState })
       return failInsufficientCredits({
         required: deployCost,
@@ -162,6 +180,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     } catch (providerError) {
       // Refund on failure
       await releaseReservation({ userId: user.id, amount: deployCost, buildId: runId, reason: "Deployment failure", projectId: id })
+      if (subdomainHoldId) await releaseSubdomainSlot(user.id, id)
 
       // Better error message for project not found
       const errorMessage = providerError instanceof Error ? providerError.message : "Deployment failed"
@@ -216,6 +235,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       ])
 
       // Sync deployment state back to Atai
+      // The actual deployment has resolved; the real project state now counts
+      // the slot, so the pending hold can be released.
+      if (deployStatus.status === "success" || deployStatus.status === "error") {
+        await releaseSubdomainSlot(project.userId, id)
+      }
+
       if (deployStatus.status === "success" && project.state === "deploying") {
         const productionUrl = totalumProject.productionProjectUrl
         // Update deployment history (best-effort)

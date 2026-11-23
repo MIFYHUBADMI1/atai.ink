@@ -9,7 +9,8 @@ const h = vi.hoisted(() => ({
   upload: vi.fn(),
   insert: vi.fn(),
   storage: vi.fn(),
-  usage: vi.fn(),
+  reserveStorage: vi.fn(),
+  releaseStorage: vi.fn(),
   refresh: vi.fn(),
 }))
 vi.mock("@/lib/auth/session", () => ({ requireUser: h.user }))
@@ -17,7 +18,13 @@ vi.mock("@/lib/store/store", () => ({ store: { getProject: h.project }, cryptoId
 vi.mock("@/lib/auth/rate-limit", () => ({ checkRateLimit: h.limit }))
 vi.mock("@/lib/api/ai-lease", () => ({ acquireAiLease: h.lease }))
 vi.mock("@/lib/imagekit/upload", () => ({ uploadImageToImageKit: h.upload }))
-vi.mock("@/lib/db/collections", () => ({ ensureIndexes: async () => {}, projectAssetsCol: async () => ({ insertOne: h.insert }) }))
+vi.mock("@/lib/db/collections", () => ({
+  ensureIndexes: async () => {},
+  projectAssetsCol: async () => ({
+    insertOne: h.insert,
+    find: () => ({ sort: () => ({ toArray: async () => [] }) }),
+  }),
+}))
 vi.mock("@/lib/logging/logger", () => ({ logger: { warn: vi.fn(), error: vi.fn() } }))
 vi.mock("@/lib/billing/entitlements/require", () => ({
   authorizeStorage: h.storage,
@@ -27,10 +34,13 @@ vi.mock("@/lib/billing/entitlements/require", () => ({
       : null,
 }))
 vi.mock("@/lib/infrastructure/service", () => ({
-  getProjectStorageUsage: h.usage,
   refreshProjectStorageUsage: h.refresh,
 }))
-import { POST } from "./route"
+vi.mock("@/lib/infrastructure/storage-reservations", () => ({
+  reserveProjectStorage: h.reserveStorage,
+  releaseProjectStorage: h.releaseStorage,
+}))
+import { GET, POST } from "./route"
 import { AppError } from "@/lib/errors"
 
 const context = { params: Promise.resolve({ id: "owned" }) }
@@ -47,7 +57,8 @@ beforeEach(() => {
   h.project.mockResolvedValue({ id: "owned", userId: "owner" })
   h.lease.mockResolvedValue(h.release)
   h.storage.mockResolvedValue(null)
-  h.usage.mockResolvedValue({ usedBytes: 0, limitBytes: null, withinLimit: true })
+  h.reserveStorage.mockResolvedValue({ holdId: "storage_hold" })
+  h.releaseStorage.mockResolvedValue(undefined)
   h.refresh.mockResolvedValue({ usedBytes: 0, limitBytes: null, withinLimit: true })
   h.upload.mockResolvedValue({ fileId: "image", filePath: "/Atai/projects/owned/image.png", url: "https://ik.imagekit.io/test/image.png" })
 })
@@ -84,6 +95,7 @@ describe("project upload ownership and resource admission", () => {
     expect((await POST(request(), context)).status).toBeGreaterThanOrEqual(400)
     expect(h.insert).not.toHaveBeenCalled()
     expect(h.release).toHaveBeenCalledOnce()
+    expect(h.releaseStorage).toHaveBeenCalledWith("storage_hold")
   })
   it("refuses storage the plan does not include before reading or uploading bytes", async () => {
     h.storage.mockResolvedValueOnce({ allowed: false, code: "STORAGE_UNAVAILABLE", reason: "No storage on this plan." })
@@ -93,16 +105,25 @@ describe("project upload ownership and resource admission", () => {
     expect(h.upload).not.toHaveBeenCalled()
     expect(h.insert).not.toHaveBeenCalled()
   })
-  it("refuses an upload that would exceed the infrastructure storage quota", async () => {
-    h.usage.mockResolvedValueOnce({ usedBytes: 49, limitBytes: 50, withinLimit: true })
+  it("refuses an upload whose atomic reservation would exceed the quota", async () => {
+    h.reserveStorage.mockResolvedValueOnce({
+      denial: { code: "STORAGE_LIMIT_REACHED", message: "No room." },
+    })
     const response = await POST(request(), context)
     expect(response.status).toBe(402)
     await expect(response.json()).resolves.toMatchObject({ error: { code: "STORAGE_LIMIT_REACHED" } })
     expect(h.upload).not.toHaveBeenCalled()
     expect(h.insert).not.toHaveBeenCalled()
   })
-  it("refreshes observed usage after a successful upload", async () => {
+  it("refreshes observed usage and releases the reservation after a successful upload", async () => {
     expect((await POST(request(), context)).status).toBe(200)
     expect(h.refresh).toHaveBeenCalledWith("owned")
+    expect(h.releaseStorage).toHaveBeenCalledWith("storage_hold")
+  })
+
+  it("keeps existing assets readable without checking storage entitlement again", async () => {
+    const response = await GET(new Request("http://localhost/api/projects/owned/assets"), context)
+    expect(response.status).toBe(200)
+    expect(h.storage).not.toHaveBeenCalled()
   })
 })

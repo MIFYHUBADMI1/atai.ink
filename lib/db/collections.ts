@@ -1,5 +1,5 @@
 import { getDb } from "@/lib/db/mongodb"
-import type { UserDoc, SessionDoc, VerificationTokenDoc, RateLimitDoc, ProjectAssetDoc, ProjectAttachmentDoc, ProviderUsageDoc, TopUpDoc, PublishEventDoc, ReferralDoc, DocFeedbackDoc, WebhookEventDoc, PlanningRunDoc, ProjectLikeDoc, UserFollowDoc, ProjectForkDoc, ProjectGitHubDoc, SeoAuditDoc, ContentItemDoc, BrandProfileDoc, GrowthTaskDoc, GrowthTaskHistoryDoc, CampaignDoc, CampaignHistoryDoc, AnalyticsEventDoc } from "@/lib/types/db"
+import type { UserDoc, SessionDoc, VerificationTokenDoc, RateLimitDoc, ProjectAssetDoc, ProjectAttachmentDoc, ProviderUsageDoc, TopUpDoc, PublishEventDoc, ReferralDoc, DocFeedbackDoc, WebhookEventDoc, PlanningRunDoc, ProjectLikeDoc, UserFollowDoc, ProjectForkDoc, ProjectGitHubDoc, SeoAuditDoc, ContentItemDoc, BrandProfileDoc, GrowthTaskDoc, GrowthTaskHistoryDoc, CampaignDoc, CampaignHistoryDoc, AnalyticsEventDoc, BillingResourceLockDoc, BillingResourceHoldDoc } from "@/lib/types/db"
 import type {
   FeatureRequestDoc,
   FeatureRequestInternalNoteDoc,
@@ -189,6 +189,19 @@ export async function dodoProductMappingsCol() {
 /** A7.0 commercial catalog: immutable publication snapshots. */
 export async function commercialCatalogVersionsCol() {
   return (await getDbCached()).collection<CommercialCatalogVersionDoc>("commercial_catalog_versions")
+}
+
+/**
+ * Short-lived locks and holds for entitlement capacity. Locks serialize a
+ * check-and-reserve section; holds are the durable capacity claim that bridges
+ * authorization, provider work and the final project/asset write.
+ */
+export async function billingResourceLocksCol() {
+  return (await getDbCached()).collection<BillingResourceLockDoc>("billing_resource_locks")
+}
+
+export async function billingResourceHoldsCol() {
+  return (await getDbCached()).collection<BillingResourceHoldDoc>("billing_resource_holds")
 }
 
 export async function planningRunsCol() {
@@ -773,6 +786,30 @@ async function runEnsureIndexes(): Promise<void> {
     mappings: dodoProductMappings,
     catalogVersions: commercialCatalogVersions,
   })
+
+  // Entitlement capacity locks/holds. Locks are deleted on release or by the
+  // next contender once expired; holds are queried by scope+kind (slots) or
+  // project (storage) and are never trusted after `expiresAt`.
+  const resourceLocks = await billingResourceLocksCol()
+  const resourceHolds = await billingResourceHoldsCol()
+  await batchedIndexCreation([
+    resourceLocks.createIndex(
+      { expiresAt: 1 },
+      { name: "billing_resource_locks_expiry_ttl", expireAfterSeconds: 0 },
+    ),
+    resourceHolds.createIndex(
+      { scopeKey: 1, kind: 1, expiresAt: 1 },
+      { name: "billing_resource_holds_scope_kind" },
+    ),
+    resourceHolds.createIndex(
+      { resourceId: 1, kind: 1, expiresAt: 1 },
+      { name: "billing_resource_holds_resource_kind" },
+    ),
+    resourceHolds.createIndex(
+      { expiresAt: 1 },
+      { name: "billing_resource_holds_expiry_ttl", expireAfterSeconds: 0 },
+    ),
+  ])
 
   // Planning run indexes
   const planningRuns = await planningRunsCol()

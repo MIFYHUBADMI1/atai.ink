@@ -234,6 +234,34 @@ export interface ProjectAssetDoc {
   metadata?: Record<string, unknown>
 }
 
+/** A short-lived, database-backed lock for entitlement capacity checks. */
+export interface BillingResourceLockDoc {
+  _id: string
+  holder: string
+  expiresAt: number
+}
+
+export type BillingResourceKind = "customDomain" | "subdomain" | "storage"
+
+/**
+ * A pending capacity claim. A slot hold counts toward the plan limit until the
+ * provider succeeds and the real resource is persisted; a storage hold counts
+ * bytes until the write completes or fails.
+ */
+export interface BillingResourceHoldDoc {
+  _id: string
+  scopeKey: string
+  kind: BillingResourceKind
+  resourceId: string
+  userId: string
+  /** Storage only. */
+  bytes?: number
+  /** Request context used for idempotent retries and recovery. */
+  metadata?: Record<string, unknown>
+  createdAt: number
+  expiresAt: number
+}
+
 export interface ProviderUsageDoc {
   _id: ObjectId
   id: string

@@ -30,6 +30,7 @@ export const INFRASTRUCTURE_PERIOD_MS = 30 * 24 * 60 * 60 * 1000
 export const INFRASTRUCTURE_LOCK_TTL_MS = 5 * 60 * 1000
 
 const DEFAULT_PLAN: InfrastructurePlanId = "testing"
+const DEFAULT_STORAGE_LIMIT_BYTES = getInfrastructurePlan(DEFAULT_PLAN)?.storageBytes ?? 50 * 1024 * 1024
 
 function snapshotPlan(plan: InfrastructurePlan, now: number): InfrastructurePurchasedTerms {
   return {
@@ -754,10 +755,13 @@ export async function getProjectStorageUsage(projectId: string): Promise<Project
   const sum = (rows: Array<{ size?: unknown }>) =>
     rows.reduce((total, row) => total + (typeof row.size === "number" && Number.isFinite(row.size) ? row.size : 0), 0)
   const usedBytes = sum(assets) + sum(attachments)
-  const limitBytes =
-    infra && Number.isFinite(infra.storageLimitBytes) && infra.storageLimitBytes > 0
+  // An uninitialized project still gets the free Testing allowance. Leaving it
+  // unlimited would let uploads bypass the quota before the first build.
+  const limitBytes = infra
+    ? Number.isFinite(infra.storageLimitBytes) && infra.storageLimitBytes > 0
       ? infra.storageLimitBytes
       : null
+    : DEFAULT_STORAGE_LIMIT_BYTES
   return {
     usedBytes,
     limitBytes,

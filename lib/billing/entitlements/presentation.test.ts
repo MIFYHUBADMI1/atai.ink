@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const h = vi.hoisted(() => ({
   set: vi.fn(),
@@ -30,6 +30,10 @@ function project(overrides: Partial<MirrorProject> = {}): MirrorProject {
     ...overrides,
   } as MirrorProject
 }
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -75,6 +79,32 @@ describe("project access view", () => {
   it("turns an over-quota storage observation into an explicit denial", async () => {
     h.storage.mockResolvedValue({ usedBytes: 101, limitBytes: 100, withinLimit: false })
     const view = await buildProjectAccessView("u1", project())
+    expect(view.storage.allowed).toBe(false)
+    expect(view.storage.code).toBe("STORAGE_LIMIT_REACHED")
+  })
+
+  it("fails open on plan capabilities when enforcement is OFF", async () => {
+    vi.stubEnv("ENTITLEMENT_ENFORCEMENT_ENABLED", "false")
+    h.set.mockResolvedValue(buildEntitlementSet("explorer", zero))
+
+    const view = await buildProjectAccessView("u1", project())
+
+    expect(view.customDomain.allowed).toBe(true)
+    expect(view.subdomain.allowed).toBe(true)
+    expect(view.database.allowed).toBe(true)
+    expect(view.specialistTeam.allowed).toBe(true)
+    expect(view.competition.allowed).toBe(true)
+    expect(view.agent.allowed).toBe(true)
+    expect(view.storage.allowed).toBe(true)
+  })
+
+  it("still reports the infrastructure quota when enforcement is OFF", async () => {
+    vi.stubEnv("ENTITLEMENT_ENFORCEMENT_ENABLED", "false")
+    h.storage.mockResolvedValue({ usedBytes: 101, limitBytes: 100, withinLimit: false })
+
+    const view = await buildProjectAccessView("u1", project())
+
+    expect(view.customDomain.allowed).toBe(true)
     expect(view.storage.allowed).toBe(false)
     expect(view.storage.code).toBe("STORAGE_LIMIT_REACHED")
   })

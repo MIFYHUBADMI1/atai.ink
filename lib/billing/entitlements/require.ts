@@ -8,7 +8,25 @@
  * @module lib/billing/entitlements/require
  */
 
-import { authorize, authorizeOperations } from "./service"
+import {
+  authorize,
+  authorizeOperations,
+  countDeployingProjectsForScope,
+  resolveScope,
+  scopeKey,
+} from "./service"
+import { checkEntitlement } from "./catalog"
+import {
+  DOMAIN_HOLD_TTL_MS,
+  SUBDOMAIN_HOLD_TTL_MS,
+  ResourceLockBusyError,
+  countActiveSlotHolds,
+  createResourceHold,
+  findActiveResourceHold,
+  releaseResourceHold,
+  slotHoldId,
+  withResourceLock,
+} from "./reservations"
 import type { EntitlementCheck } from "./types"
 
 /**
@@ -19,8 +37,11 @@ import type { EntitlementCheck } from "./types"
  * `ENTITLEMENT_ENFORCEMENT_ENABLED=false` to fall back to unrestricted
  * creation (emergency rollback only).
  */
-export const ENTITLEMENT_ENFORCEMENT_ENABLED =
-  process.env.ENTITLEMENT_ENFORCEMENT_ENABLED !== "false"
+export function isEntitlementEnforcementEnabled(): boolean {
+  return process.env.ENTITLEMENT_ENFORCEMENT_ENABLED !== "false"
+}
+
+export const ENTITLEMENT_ENFORCEMENT_ENABLED = isEntitlementEnforcementEnabled()
 
 // ADR-8: security-sensitive operations resolve fresh (cache bypass) rather than
 // trust a (possibly stale) 60s cached entitlement.
@@ -53,7 +74,7 @@ export async function authorizeProductionWork(
   op: "buildProduction" | "deploy",
   opts: { hasExistingSubdomain?: boolean } = {},
 ): Promise<EntitlementCheck | null> {
-  if (!ENTITLEMENT_ENFORCEMENT_ENABLED) return null
+  if (!isEntitlementEnforcementEnabled()) return null
   try {
     // A production build also provisions the application database and engages
     // the specialist team; resolve all three against one fresh snapshot.
@@ -81,7 +102,7 @@ export async function authorizeProductionWork(
 }
 
 export async function authorizeAgent(userId: string, agent: "start" | "scout" | "optimize"): Promise<EntitlementCheck> {
-  if (!ENTITLEMENT_ENFORCEMENT_ENABLED) return { allowed: true }
+  if (!isEntitlementEnforcementEnabled()) return { allowed: true }
   return authorize(userId, "useAgent", { agent }, { fresh: true })
 }
 
@@ -90,7 +111,7 @@ async function checkOperation(
   op: Parameters<typeof authorize>[1],
   ctx?: Parameters<typeof authorize>[2],
 ): Promise<EntitlementCheck | null> {
-  if (!ENTITLEMENT_ENFORCEMENT_ENABLED) return null
+  if (!isEntitlementEnforcementEnabled()) return null
   const [check] = await authorizeOperations(userId, [{ op, ctx }], { fresh: true })
   return check.allowed ? null : check
 }
@@ -114,6 +135,131 @@ export async function authorizeSubdomain(
 ): Promise<EntitlementCheck | null> {
   if (hasExistingSubdomain) return null
   return checkOperation(userId, "connectSubdomain")
+}
+
+export interface SlotReservation {
+  /** Present when the slot was reserved (or an idempotent retry found it). */
+  holdId?: string
+  /** True when the same project already owns an unexpired hold. */
+  existing?: boolean
+  /** 402-style denial, including the stable entitlement limit code. */
+  denial?: { code: string; message: string }
+  /** 409-style refusal while another request holds the capacity lock. */
+  busy?: { code: string; message: string }
+}
+
+function slotDenial(check: EntitlementCheck): SlotReservation {
+  return { denial: entitlementDenial(check) ?? { code: "ENTITLEMENT_DENIED", message: "Your plan does not include this operation." } }
+}
+
+async function reserveSlot(
+  userId: string,
+  projectId: string,
+  kind: "customDomain" | "subdomain",
+  hostname?: string,
+): Promise<SlotReservation> {
+  if (!isEntitlementEnforcementEnabled()) return {}
+  const scope = scopeKey({ kind: "user", userId })
+  const lockKey = `entitlement:${scope}:${kind}`
+
+  try {
+    return await withResourceLock(lockKey, async () => {
+      // A retry for the same project already owns its slot. Return that hold
+      // before the cap check; otherwise the retry would see its own hold as a
+      // competing registration and be denied.
+      const existing = await findActiveResourceHold(slotHoldId(scope, kind, projectId))
+      if (existing) {
+        const heldHostname = existing.metadata?.hostname
+        if (kind === "customDomain" && hostname && typeof heldHostname === "string" && heldHostname !== hostname) {
+          return {
+            busy: {
+              code: "DOMAIN_CHANGE_IN_PROGRESS",
+              message: "A custom-domain change is already in progress for this project. Wait for it to finish.",
+            },
+          }
+        }
+        return { holdId: existing._id, existing: true }
+      }
+
+      const set = await resolveScope({ kind: "user", userId }, { fresh: true })
+      const held = await countActiveSlotHolds(scope, kind)
+      // A deploying project is already counted in `current`; its own hold must
+      // not count a second time. The overlap is bounded by the number of
+      // deploying projects and the number of active holds.
+      const overlap = kind === "subdomain"
+        ? Math.min(held, await countDeployingProjectsForScope({ kind: "user", userId }))
+        : 0
+      const check = kind === "customDomain"
+        ? checkEntitlement(
+            { ...set, customDomainsIncluded: { ...set.customDomainsIncluded, consumed: set.customDomainsIncluded.consumed + held } },
+            "registerCustomDomain",
+          )
+        : checkEntitlement(
+            { ...set, subdomains: { ...set.subdomains, current: set.subdomains.current + held - overlap } },
+            "connectSubdomain",
+          )
+      if (!check.allowed) return slotDenial(check)
+
+      const hold = await createResourceHold({
+        scopeKey: scope,
+        kind,
+        resourceId: projectId,
+        userId,
+        metadata: hostname ? { hostname } : undefined,
+        ttlMs: kind === "customDomain" ? DOMAIN_HOLD_TTL_MS : SUBDOMAIN_HOLD_TTL_MS,
+      })
+
+      // A different hostname while a custom-domain change is in flight must
+      // wait; reusing the same hostname is an idempotent retry.
+      if (hold.existing && kind === "customDomain" && hostname) {
+        const heldHostname = hold.hold.metadata?.hostname
+        if (typeof heldHostname === "string" && heldHostname !== hostname) {
+          return {
+            busy: {
+              code: "DOMAIN_CHANGE_IN_PROGRESS",
+              message: "A custom-domain change is already in progress for this project. Wait for it to finish.",
+            },
+          }
+        }
+      }
+
+      return { holdId: hold.holdId, existing: hold.existing }
+    })
+  } catch (error) {
+    if (error instanceof ResourceLockBusyError) {
+      return { busy: { code: error.code, message: error.message } }
+    }
+    return {
+      denial: {
+        code: "ENTITLEMENT_UNAVAILABLE",
+        message: "We couldn't confirm your plan just now. Please try again.",
+      },
+    }
+  }
+}
+
+/** Reserve the last custom-domain registration before the provider is called. */
+export async function reserveCustomDomainSlot(
+  userId: string,
+  projectId: string,
+  hostname: string,
+): Promise<SlotReservation> {
+  return reserveSlot(userId, projectId, "customDomain", hostname)
+}
+
+/** Reserve a first production subdomain before the deploy starts. */
+export async function reserveSubdomainSlot(userId: string, projectId: string): Promise<SlotReservation> {
+  return reserveSlot(userId, projectId, "subdomain")
+}
+
+export async function releaseCustomDomainSlot(userId: string, projectId: string): Promise<void> {
+  if (!isEntitlementEnforcementEnabled()) return
+  await releaseResourceHold(slotHoldId(scopeKey({ kind: "user", userId }), "customDomain", projectId)).catch(() => {})
+}
+
+export async function releaseSubdomainSlot(userId: string, projectId: string): Promise<void> {
+  if (!isEntitlementEnforcementEnabled()) return
+  await releaseResourceHold(slotHoldId(scopeKey({ kind: "user", userId }), "subdomain", projectId)).catch(() => {})
 }
 
 export async function authorizeProvisionDatabase(userId: string): Promise<EntitlementCheck | null> {

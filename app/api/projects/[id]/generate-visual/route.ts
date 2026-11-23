@@ -25,10 +25,12 @@ import {
 import { getPlanSection } from "@/lib/analysis/plan-sections"
 import { authorizeStorage, entitlementDenial } from "@/lib/billing/entitlements/require"
 import { infrastructureDenial } from "@/lib/infrastructure/access"
-import { getProjectStorageUsage } from "@/lib/infrastructure/service"
+import { releaseProjectStorage, reserveProjectStorage } from "@/lib/infrastructure/storage-reservations"
 
 /** Generous ceiling — flagship image models can take minutes to render. */
 const GENERATION_TIMEOUT_MS = 120_000
+/** Generated images are validated/uploaded with the same 5MB ceiling as uploads. */
+const VISUAL_STORAGE_RESERVE_BYTES = 5 * 1024 * 1024
 
 /** Provider refusal carrying its HTTP status so the route can explain it. */
 class ImageProviderError extends Error {
@@ -90,6 +92,7 @@ async function post(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  let storageHoldId: string | undefined
   try {
     const user = await requireUser()
     const { id: projectId } = await params
@@ -128,14 +131,6 @@ async function post(
     if (infrastructureBlocked) return fail(infrastructureBlocked.code, infrastructureBlocked.message, 402)
     const storageDenied = entitlementDenial(await authorizeStorage(user.id))
     if (storageDenied) return fail(storageDenied.code, storageDenied.message, 402)
-    const storageUsage = await getProjectStorageUsage(projectId)
-    if (storageUsage.limitBytes !== null && storageUsage.usedBytes >= storageUsage.limitBytes) {
-      return fail(
-        "STORAGE_LIMIT_REACHED",
-        "This project has reached its infrastructure storage limit. Upgrade the infrastructure plan to add more.",
-        402,
-      )
-    }
 
     const sectionDef = getPlanSection(sectionId)
     if (!sectionDef) {
@@ -188,8 +183,18 @@ async function post(
       })
     }
 
+    const storageReservation = await reserveProjectStorage({
+      userId: user.id,
+      projectId,
+      bytes: VISUAL_STORAGE_RESERVE_BYTES,
+      operationId: intentKey ?? cryptoId(),
+    })
+    if (storageReservation.denial) return fail(storageReservation.denial.code, storageReservation.denial.message, 402)
+    if (storageReservation.busy) return fail(storageReservation.busy.code, storageReservation.busy.message, 409)
+    storageHoldId = storageReservation.holdId
+
     const startTime = Date.now()
-    let result: { imageUrl: string; cost?: number }
+    let result: { imageUrl: string; cost?: number; imageBytes?: number }
     try {
       result = await generateImageViaOpenRouter({
         model,
@@ -229,6 +234,13 @@ async function post(
       )
     }
     const generationTime = Date.now() - startTime
+    if (result.imageBytes !== undefined && result.imageBytes > VISUAL_STORAGE_RESERVE_BYTES) {
+      return fail(
+        "STORAGE_LIMIT_REACHED",
+        "The generated image is larger than the project's remaining storage allowance.",
+        402,
+      )
+    }
 
     // Pricing: default model = flat 100 credits; premium = provider cost +
     // 45% margin at $1 = 4000 credits; premium without a reported cost = 1600.
@@ -287,7 +299,7 @@ async function post(
         fileName: `${sectionDef.label}-visual-${Date.now()}.png`,
         url: result.imageUrl,
         mimeType: "image/png",
-        size: 0,
+        size: result.imageBytes ?? VISUAL_STORAGE_RESERVE_BYTES,
         createdAt: Date.now(),
         metadata: {
           sectionId,
@@ -298,6 +310,7 @@ async function post(
           finalCost: finalCost ?? null,
           prompt: prompt.slice(0, 1000),
           aspectRatio: aspectRatioApplied ?? "auto",
+          storageBytesEstimated: result.imageBytes === undefined,
         },
       })
     } catch (saveError) {
@@ -308,6 +321,8 @@ async function post(
   } catch (error) {
     console.error("[generate-visual] Error:", error)
     return handleRouteError("api.projects.generate-visual", error)
+  } finally {
+    await releaseProjectStorage(storageHoldId)
   }
 }
 
@@ -334,7 +349,7 @@ async function generateImageViaOpenRouter(params: {
   aspectRatio?: string
   projectId: string
   sectionLabel: string
-}): Promise<{ imageUrl: string; cost?: number }> {
+}): Promise<{ imageUrl: string; cost?: number; imageBytes?: number }> {
   const { model, prompt, aspectRatio, projectId, sectionLabel } = params
 
   const response = await fetch(`${getOpenRouterBaseUrl()}/images`, {
@@ -368,10 +383,13 @@ async function generateImageViaOpenRouter(params: {
   }
 
   let imageUrl = typeof first.url === "string" ? first.url : ""
+  let imageBytes: number | undefined
   if (!imageUrl && typeof first.b64_json === "string" && first.b64_json.length > 0) {
     const base64 = first.b64_json.replace(/^data:[^;]+;base64,/, "")
     const mimeType = typeof first.media_type === "string" ? first.media_type : "image/png"
-    imageUrl = await persistGeneratedImage({ base64, mimeType, projectId, sectionLabel })
+    const persisted = await persistGeneratedImage({ base64, mimeType, projectId, sectionLabel })
+    imageUrl = persisted.url
+    imageBytes = persisted.bytes
   }
   if (!imageUrl) {
     throw new Error("OpenRouter returned an empty image")
@@ -392,7 +410,7 @@ async function generateImageViaOpenRouter(params: {
   if (cost == null && typeof data.usage?.total_cost === "number") cost = data.usage.total_cost
   if (cost != null && (!Number.isFinite(cost) || cost <= 0)) cost = undefined
 
-  return { imageUrl, cost }
+  return { imageUrl, cost, imageBytes }
 }
 
 /**
@@ -405,7 +423,7 @@ async function persistGeneratedImage(params: {
   mimeType: string
   projectId: string
   sectionLabel: string
-}): Promise<string> {
+}): Promise<{ url: string; bytes: number }> {
   const { base64, mimeType, projectId, sectionLabel } = params
   const buffer = Buffer.from(base64, "base64")
   const image = await validateImage(buffer, mimeType)
@@ -416,10 +434,10 @@ async function persistGeneratedImage(params: {
       mimeType,
       folder: `/Atai/projects/${projectId}/visuals`,
     })
-    return upload.url
+    return { url: upload.url, bytes: image.file.length }
   } catch {
     console.error("[generate-visual] ImageKit upload failed, using validated inline image")
-    return `data:${image.mimeType};base64,${image.file.toString("base64")}`
+    return { url: `data:${image.mimeType};base64,${image.file.toString("base64")}`, bytes: image.file.length }
   }
 }
 

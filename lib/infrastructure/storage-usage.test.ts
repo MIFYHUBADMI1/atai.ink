@@ -55,12 +55,23 @@ describe("project storage usage", () => {
     })
   })
 
-  it("treats a project without infrastructure as unlimited for the advisory view", async () => {
+  it("gives a project without infrastructure the free Testing 50MB cap", async () => {
     h.project.mockResolvedValue({ id: "p1" })
     await expect(getProjectStorageUsage("p1")).resolves.toEqual({
       usedBytes: 60,
-      limitBytes: null,
+      limitBytes: 50 * 1024 * 1024,
       withinLimit: true,
+    })
+  })
+
+  it("reports an uninitialized project over the default Testing cap", async () => {
+    h.project.mockResolvedValue({ id: "p1" })
+    h.assets.mockReturnValue(cursor([{ size: 50 * 1024 * 1024 + 1 }]))
+    h.attachments.mockReturnValue(cursor([]))
+    await expect(checkStorageLimit("p1")).resolves.toEqual({
+      withinLimit: false,
+      used: 50 * 1024 * 1024 + 1,
+      limit: 50 * 1024 * 1024,
     })
   })
 

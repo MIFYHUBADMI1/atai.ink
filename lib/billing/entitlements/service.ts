@@ -105,8 +105,21 @@ async function countSubdomainsForScope(scope: EntitlementScope): Promise<number>
         { "deployment.status": "success" },
         { "deployment.productionUrl": { $exists: true, $ne: "" } },
         { state: "deployed" },
+        // A first deploy in flight has already claimed its slot; the hold is
+        // released only when the deployment fails or resolves.
+        { state: "deploying" },
       ],
     })
+  } catch {
+    return 0
+  }
+}
+
+/** Projects currently in the first-deploy window; their slot is also held. */
+export async function countDeployingProjectsForScope(scope: EntitlementScope): Promise<number> {
+  try {
+    const col = await projectsCol()
+    return await col.countDocuments({ ...scopeFilter(scope), state: "deploying" })
   } catch {
     return 0
   }

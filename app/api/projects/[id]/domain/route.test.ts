@@ -8,7 +8,8 @@ const h = vi.hoisted(() => ({
   addDomain: vi.fn(),
   removeDomain: vi.fn(),
   deployStatus: vi.fn(),
-  authorize: vi.fn(),
+  reserve: vi.fn(),
+  release: vi.fn(),
 }))
 
 vi.mock("@/lib/auth/session", () => ({ requireUser: h.user }))
@@ -23,11 +24,8 @@ vi.mock("@/lib/integrations/totalum/service", () => ({
   getDeploymentStatus: h.deployStatus,
 }))
 vi.mock("@/lib/billing/entitlements/require", () => ({
-  authorizeCustomDomain: h.authorize,
-  entitlementDenial: (check: { allowed: boolean; code?: string; reason?: string } | null) =>
-    check && !check.allowed
-      ? { code: check.code ?? "ENTITLEMENT_DENIED", message: check.reason ?? "denied" }
-      : null,
+  reserveCustomDomainSlot: h.reserve,
+  releaseCustomDomainSlot: h.release,
 }))
 
 import { DELETE, PUT } from "./route"
@@ -56,7 +54,10 @@ beforeEach(() => {
   vi.clearAllMocks()
   h.user.mockResolvedValue({ id: "u1" })
   h.project.mockResolvedValue(project())
-  h.authorize.mockResolvedValue(null)
+  h.updateProject.mockResolvedValue(project())
+  h.appendEvent.mockResolvedValue(undefined)
+  h.reserve.mockResolvedValue({ holdId: "domain_hold" })
+  h.release.mockResolvedValue(undefined)
   h.deployStatus.mockResolvedValue({ status: "success" })
   h.addDomain.mockResolvedValue({ hostname: "app.example.com", status: "pending", dnsRecordsToAdd: [] })
   h.removeDomain.mockResolvedValue({ message: "removed" })
@@ -64,7 +65,9 @@ beforeEach(() => {
 
 describe("PUT /api/projects/:id/domain — entitlement", () => {
   it("refuses a plan without a custom-domain registration before calling the provider", async () => {
-    h.authorize.mockResolvedValue({ allowed: false, code: "CUSTOM_DOMAIN_NOT_INCLUDED", reason: "No custom domain on this plan." })
+    h.reserve.mockResolvedValue({
+      denial: { code: "CUSTOM_DOMAIN_NOT_INCLUDED", message: "No custom domain on this plan." },
+    })
     const response = await PUT(request(), context)
     expect(response.status).toBe(402)
     await expect(response.json()).resolves.toMatchObject({ error: { code: "CUSTOM_DOMAIN_NOT_INCLUDED" } })
@@ -72,10 +75,11 @@ describe("PUT /api/projects/:id/domain — entitlement", () => {
     expect(h.addDomain).not.toHaveBeenCalled()
   })
 
-  it("checks a new domain against the purchased cap and records the active hostname", async () => {
+  it("reserves a new domain slot and records the active hostname", async () => {
     const response = await PUT(request(), context)
     expect(response.status).toBe(200)
-    expect(h.authorize).toHaveBeenCalledWith("u1", false)
+    expect(h.reserve).toHaveBeenCalledWith("u1", "p1", "app.example.com")
+    expect(h.release).toHaveBeenCalledWith("u1", "p1")
     expect(h.addDomain).toHaveBeenCalledWith("tp_1", { hostname: "app.example.com" })
     expect(h.updateProject).toHaveBeenCalledWith(
       "p1",
@@ -88,20 +92,29 @@ describe("PUT /api/projects/:id/domain — entitlement", () => {
   it("treats an existing domain as a management action, not a second registration", async () => {
     h.project.mockResolvedValue(project({ deployment: { id: "d1", status: "success", customDomain: "old.example.com", updatedAt: 1 } }))
     expect((await PUT(request("new.example.com"), context)).status).toBe(200)
-    expect(h.authorize).toHaveBeenCalledWith("u1", true)
+    expect(h.reserve).not.toHaveBeenCalled()
   })
 
   it("returns the same 404 for an absent or foreign project and never checks entitlement", async () => {
     h.project.mockResolvedValueOnce(null)
     expect((await PUT(request(), context)).status).toBe(404)
-    expect(h.authorize).not.toHaveBeenCalled()
+    expect(h.reserve).not.toHaveBeenCalled()
   })
 
-  it("does not record a domain or event when the provider fails", async () => {
+  it("does not record a domain or event when the provider fails, and releases the hold", async () => {
     h.addDomain.mockRejectedValueOnce(new Error("provider down"))
     expect((await PUT(request(), context)).status).toBeGreaterThanOrEqual(500)
     expect(h.updateProject).not.toHaveBeenCalled()
     expect(h.appendEvent).not.toHaveBeenCalled()
+    expect(h.release).toHaveBeenCalledWith("u1", "p1")
+  })
+
+  it("keeps the hold when the provider succeeds but the project write fails", async () => {
+    h.updateProject.mockRejectedValueOnce(new Error("database unavailable"))
+    const response = await PUT(request(), context)
+    expect(response.status).toBe(503)
+    await expect(response.json()).resolves.toMatchObject({ error: { code: "DOMAIN_SAVE_FAILED" } })
+    expect(h.release).not.toHaveBeenCalled()
   })
 })
 
@@ -111,7 +124,8 @@ describe("DELETE /api/projects/:id/domain — existing resource management", () 
     const response = await DELETE(new Request("http://localhost/api/projects/p1/domain", { method: "DELETE" }), context)
     expect(response.status).toBe(200)
     expect(h.removeDomain).toHaveBeenCalledWith("tp_1")
-    expect(h.authorize).not.toHaveBeenCalled()
+    expect(h.reserve).not.toHaveBeenCalled()
+    expect(h.release).toHaveBeenCalledWith("u1", "p1")
     expect(h.updateProject).toHaveBeenCalledWith(
       "p1",
       expect.objectContaining({ deployment: expect.objectContaining({ customDomain: undefined }) }),

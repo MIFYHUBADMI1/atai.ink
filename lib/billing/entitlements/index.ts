@@ -33,10 +33,19 @@ export {
   authorizeStorage,
   authorizeSpecialistTeam,
   authorizeCompetitionIntel,
+  reserveCustomDomainSlot,
+  reserveSubdomainSlot,
+  releaseCustomDomainSlot,
+  releaseSubdomainSlot,
   entitlementDenial,
   EntitlementError,
   ENTITLEMENT_ENFORCEMENT_ENABLED,
+  isEntitlementEnforcementEnabled,
 } from "./require"
+export type { SlotReservation } from "./require"
+
+export { sweepResourceHolds } from "./hold-maintenance"
+export type { HoldSweepAction, HoldSweepReport } from "./hold-maintenance"
 
 // Gate 4 — legacy → commercial migration
 export {

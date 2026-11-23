@@ -1,4 +1,5 @@
 import { checkEntitlement } from "./catalog"
+import { isEntitlementEnforcementEnabled } from "./require"
 import { resolveEntitlements } from "./service"
 import type { EntitlementCheck, EntitlementSet, ProjectAccessView } from "./types"
 import { getProjectStorageUsage } from "@/lib/infrastructure/service"
@@ -34,13 +35,14 @@ export async function buildProjectAccessView(
   project: MirrorProject,
 ): Promise<ProjectAccessView> {
   const set: EntitlementSet = await resolveEntitlements(userId)
+  const enforcement = isEntitlementEnforcementEnabled()
   const existingDomain = hasExistingCustomDomain(project)
   const existingSubdomain = hasExistingSubdomain(project)
   const storageUsage = await getProjectStorageUsage(project.id)
 
-  const customDomainCheck = existingDomain ? allow() : checkEntitlement(set, "registerCustomDomain")
-  const subdomainCheck = existingSubdomain ? allow() : checkEntitlement(set, "connectSubdomain")
-  const storageCheck = checkEntitlement(set, "useStorage")
+  const customDomainCheck = existingDomain || !enforcement ? allow() : checkEntitlement(set, "registerCustomDomain")
+  const subdomainCheck = existingSubdomain || !enforcement ? allow() : checkEntitlement(set, "connectSubdomain")
+  const storageCheck = enforcement ? checkEntitlement(set, "useStorage") : allow()
   const storageAllowed =
     storageCheck.allowed &&
     (storageUsage.limitBytes === null || storageUsage.usedBytes < storageUsage.limitBytes)
@@ -69,9 +71,9 @@ export async function buildProjectAccessView(
       limitBytes: storageUsage.limitBytes,
       usedBytes: storageUsage.usedBytes,
     },
-    database: checkEntitlement(set, "provisionDatabase"),
-    specialistTeam: checkEntitlement(set, "useSpecialistTeam"),
-    competition: checkEntitlement(set, "useCompetitionIntel"),
-    agent: checkEntitlement(set, "useAgent", { agent: "start" }),
+    database: enforcement ? checkEntitlement(set, "provisionDatabase") : allow(),
+    specialistTeam: enforcement ? checkEntitlement(set, "useSpecialistTeam") : allow(),
+    competition: enforcement ? checkEntitlement(set, "useCompetitionIntel") : allow(),
+    agent: enforcement ? checkEntitlement(set, "useAgent", { agent: "start" }) : allow(),
   }
 }
