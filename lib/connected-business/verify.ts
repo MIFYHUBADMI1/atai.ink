@@ -66,7 +66,7 @@ export async function verifyConnectedBusinesses(): Promise<VerificationReport> {
     if (!businessIds.has(application.businessId)) {
       problems.push(`application ${application.id} points at missing business ${application.businessId}`)
     }
-    if (application.archivedAt !== undefined) continue
+    if (application.archivedAt != null) continue
 
     const origin = `${application.hostname}${application.basePath}`
     const key = `${application.businessId}\u0000${origin}`

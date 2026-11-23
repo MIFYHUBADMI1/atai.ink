@@ -93,7 +93,7 @@ export async function rollbackMigration(options: RollbackOptions): Promise<Rollb
       myApps.filter(
         (application) =>
           application.migration?.runId === options.runId &&
-          (application.archivedAt !== undefined || application.updatedAt > created),
+          (application.archivedAt != null || application.updatedAt > created),
       ).length
 
     return {

@@ -98,7 +98,12 @@ export interface ConnectedApplicationDoc {
   migration?: MigrationStamp
   createdAt: number
   updatedAt: number
-  archivedAt?: number
+  /**
+   * Missing means active. `null` is accepted as the same thing because the
+   * origin index is partial on `archivedAt: null` and MongoDB matches that
+   * predicate against missing fields too — the two must stay interchangeable.
+   */
+  archivedAt?: number | null
 }
 
 export interface BusinessMemberDoc {

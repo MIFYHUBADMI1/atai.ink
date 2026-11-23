@@ -310,4 +310,51 @@ describe.skipIf(!REPLICA_URI)("connected business on a real replica set", () => 
     const survivors = await (await businessMembersCol()).find({}).toArray()
     expect(survivors.map((member) => member.userId)).toEqual(["u_colleague"])
   })
+
+  it("H — answers the origin lookup from the partial index, not a collection scan", async () => {
+    const applications = await connectedApplicationsCol()
+    const now = Date.now()
+    await applications.insertMany(
+      Array.from({ length: 40 }, (_, index) => ({
+        id: `app_bulk_${index}`,
+        businessId: `biz_bulk_${index}`,
+        name: `app ${index}`,
+        kind: "other" as const,
+        primaryUrl: `https://bulk${index}.example`,
+        hostname: `bulk${index}.example`,
+        basePath: "/",
+        trustDomain: `bulk${index}.example`,
+        hostVerified: false,
+        connection: {},
+        createdAt: now,
+        updatedAt: now,
+      })),
+    )
+    await applications.insertOne({
+      id: "app_target",
+      businessId: "biz_target",
+      name: "target",
+      kind: "other",
+      primaryUrl: "https://target.example/shop",
+      hostname: "target.example",
+      basePath: "/shop",
+      trustDomain: "target.example",
+      hostVerified: false,
+      connection: {},
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    // The predicate the application actually uses. It must be `null`, not
+    // `$exists: false`: the index is partial on `archivedAt: null`, and the
+    // planner only uses a partial index when the query implies its predicate.
+    const explained = await applications
+      .find({ businessId: "biz_target", hostname: "target.example", basePath: "/shop", archivedAt: null })
+      .explain("executionStats")
+
+    const plan = JSON.stringify(explained.queryPlanner.winningPlan)
+    expect(plan).toContain("connected_applications_origin_unique")
+    expect(plan).not.toContain("COLLSCAN")
+    expect(explained.executionStats.totalDocsExamined).toBe(1)
+  })
 })

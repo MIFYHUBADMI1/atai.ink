@@ -86,7 +86,7 @@ async function assertApplicationInBusiness(businessId: string, applicationId: st
   const application = await (await connectedApplicationsCol()).findOne({
     id: applicationId,
     businessId,
-    archivedAt: { $exists: false },
+    archivedAt: null,
   })
   // Another business's application and an archived one are both "not found":
   // the caller has no business knowing which.

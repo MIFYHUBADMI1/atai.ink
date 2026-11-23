@@ -250,7 +250,7 @@ async function validateScope(businessId: string, scope: MemberScope): Promise<Me
   }
 
   const found = await (await connectedApplicationsCol())
-    .find({ id: { $in: ids }, businessId, archivedAt: { $exists: false } })
+    .find({ id: { $in: ids }, businessId, archivedAt: null })
     .toArray()
   if (found.length !== ids.length) {
     throw new AppError("VALIDATION", "Every application must belong to this business and be active.")

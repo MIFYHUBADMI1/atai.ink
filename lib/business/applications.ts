@@ -73,7 +73,7 @@ export async function createApplication(input: CreateApplicationInput): Promise<
     businessId: input.businessId,
     hostname,
     basePath,
-    archivedAt: { $exists: false },
+    archivedAt: null,
   })
   if (existing) throw duplicateOrigin()
 
@@ -124,7 +124,7 @@ export async function archiveApplication(input: {
   const col = await connectedApplicationsCol()
   const now = input.now ?? Date.now()
   const result = await col.updateOne(
-    { id: input.applicationId, businessId: input.businessId, archivedAt: { $exists: false } },
+    { id: input.applicationId, businessId: input.businessId, archivedAt: null },
     { $set: { archivedAt: now, updatedAt: now } },
   )
   if (result.matchedCount === 0) throw new AppError("NOT_FOUND")
@@ -147,7 +147,7 @@ export async function getApplication(input: {
   return (await connectedApplicationsCol()).findOne({
     id: input.applicationId,
     businessId: input.businessId,
-    archivedAt: { $exists: false },
+    archivedAt: null,
   })
 }
 
@@ -163,7 +163,7 @@ export async function listApplications(input: {
   })
 
   const filter: Record<string, unknown> = { businessId: input.businessId }
-  if (!input.includeArchived) filter.archivedAt = { $exists: false }
+  if (!input.includeArchived) filter.archivedAt = null
   const rows = await (await connectedApplicationsCol()).find(filter).toArray()
 
   const scope = access.member?.scope

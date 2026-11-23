@@ -66,6 +66,10 @@ function field(doc: object, key: string): unknown {
 function matches(doc: object, filter: Filter): boolean {
   return Object.entries(filter).every(([key, expected]) => {
     const actual = field(doc, key)
+    // MongoDB matches a null predicate against both an explicit null and a
+    // missing field. The partial origin index relies on that equivalence, so
+    // the model must not diverge from it.
+    if (expected === null) return actual === null || actual === undefined
     if (expected && typeof expected === "object" && !Array.isArray(expected)) {
       const operator = expected as Record<string, unknown>
       if ("$in" in operator) return (operator.$in as unknown[]).includes(actual)
