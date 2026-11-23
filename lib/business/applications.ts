@@ -10,7 +10,9 @@ import {
   type ConnectedApplicationDoc,
   type MigrationStamp,
 } from "@/lib/types/business"
+import { requireBusinessAccess } from "./access"
 import { PathInputError, applicationOrigin, canonicalBasePath } from "./paths"
+import type { Actor } from "./permissions"
 
 /**
  * Connected applications (ADR-8 §8, D1).
@@ -18,6 +20,10 @@ import { PathInputError, applicationOrigin, canonicalBasePath } from "./paths"
  * Identity is (businessId, hostname, basePath). Paths are organisational: every
  * application on one hostname shares `trustDomain`, because a key for /shop is
  * only as safe as the server that also holds the key for /dashboard.
+ *
+ * Every operation authorises itself through the business gate, with the
+ * application id supplied whenever the operation targets one application, so a
+ * member's application scope is always applied.
  *
  * @module lib/business/applications
  */
@@ -28,6 +34,7 @@ export function isApplicationKind(value: string): value is ApplicationKind {
 
 export interface CreateApplicationInput {
   businessId: string
+  actor: Actor
   name: string
   kind: ApplicationKind
   url: string
@@ -39,6 +46,12 @@ export interface CreateApplicationInput {
 }
 
 export async function createApplication(input: CreateApplicationInput): Promise<ConnectedApplicationDoc> {
+  await requireBusinessAccess({
+    businessId: input.businessId,
+    actor: input.actor,
+    permission: "apps.manage",
+  })
+
   if (!isApplicationKind(input.kind)) {
     throw new AppError("VALIDATION", "That application type isn't recognised.")
   }
@@ -89,8 +102,16 @@ export async function createApplication(input: CreateApplicationInput): Promise<
 export async function archiveApplication(input: {
   businessId: string
   applicationId: string
+  actor: Actor
   now?: number
 }): Promise<ConnectedApplicationDoc> {
+  await requireBusinessAccess({
+    businessId: input.businessId,
+    actor: input.actor,
+    permission: "apps.manage",
+    applicationId: input.applicationId,
+  })
+
   const col = await connectedApplicationsCol()
   const now = input.now ?? Date.now()
   const result = await col.updateOne(
@@ -103,23 +124,37 @@ export async function archiveApplication(input: {
   return updated
 }
 
-export async function getApplication(
-  businessId: string,
-  applicationId: string,
-): Promise<ConnectedApplicationDoc | null> {
+export async function getApplication(input: {
+  businessId: string
+  applicationId: string
+  actor: Actor
+}): Promise<ConnectedApplicationDoc | null> {
+  await requireBusinessAccess({
+    businessId: input.businessId,
+    actor: input.actor,
+    permission: "apps.read",
+    applicationId: input.applicationId,
+  })
   return (await connectedApplicationsCol()).findOne({
-    id: applicationId,
-    businessId,
+    id: input.applicationId,
+    businessId: input.businessId,
     archivedAt: { $exists: false },
   })
 }
 
-export async function listApplications(
-  businessId: string,
-  options: { includeArchived?: boolean } = {},
-): Promise<ConnectedApplicationDoc[]> {
-  const filter: Record<string, unknown> = { businessId }
-  if (!options.includeArchived) filter.archivedAt = { $exists: false }
+export async function listApplications(input: {
+  businessId: string
+  actor: Actor
+  includeArchived?: boolean
+}): Promise<ConnectedApplicationDoc[]> {
+  await requireBusinessAccess({
+    businessId: input.businessId,
+    actor: input.actor,
+    permission: "apps.read",
+  })
+
+  const filter: Record<string, unknown> = { businessId: input.businessId }
+  if (!input.includeArchived) filter.archivedAt = { $exists: false }
   const rows = await (await connectedApplicationsCol()).find(filter).toArray()
   return rows.sort((a, b) => a.createdAt - b.createdAt)
 }
