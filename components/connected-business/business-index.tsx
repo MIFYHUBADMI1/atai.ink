@@ -43,9 +43,14 @@ export function BusinessIndex({ initialBusinesses }: { initialBusinesses: Busine
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Businesses</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Connected businesses</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           One business holds your applications, the people who work on them, and everything Atai knows about them.
+          They are listed beside your other businesses on{" "}
+          <Link href="/projects" className="text-primary underline-offset-4 hover:underline">
+            All businesses
+          </Link>
+          .
         </p>
       </div>
 

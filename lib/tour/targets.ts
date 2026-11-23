@@ -46,11 +46,11 @@ export const TOUR_TARGETS = {
   "projects-new": { label: "New business", shell: "workspace", risk: "none" },
   "nav-help": { label: "Help & support", shell: "workspace", risk: "none" },
   "nav-tours": { label: "Guided tours", shell: "workspace", risk: "none" },
-  "nav-business-card": { label: "A business in the sidebar", shell: "workspace", risk: "none" },
   "nav-collapse": { label: "Collapse the sidebar", shell: "workspace", risk: "none" },
   "dashboard-overview": { label: "Your command centre", shell: "workspace", risk: "none" },
   "dashboard-journey": { label: "Business journey", shell: "workspace", risk: "none" },
   "dashboard-actions": { label: "Next actions", shell: "workspace", risk: "none" },
+  "dashboard-connected-business": { label: "Your connected businesses", shell: "workspace", risk: "none" },
   "projects-list": { label: "Your businesses", shell: "workspace", risk: "none" },
   "projects-empty": { label: "Start your first business", shell: "workspace", risk: "none" },
 

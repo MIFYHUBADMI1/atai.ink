@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
-  ArrowLeft, ArrowRight, Globe2, Lightbulb, GitBranch, Search, Trash2,
+  ArrowLeft, ArrowRight, Building2, Globe2, Lightbulb, GitBranch, Search, Trash2,
   Loader2, LayoutGrid, List, SlidersHorizontal, FolderOpen,
   Clock, CheckCircle2, AlertCircle, Zap, Plus, Rocket, Brain,
   DollarSign, TrendingUp, TrendingDown, AlertTriangle,
@@ -15,7 +15,20 @@ import { ProjectThumbnail } from "@/components/project-thumbnail"
 import { deleteJson } from "@/lib/client/api"
 import { selectOrphanedBuilds } from "@/lib/projects/build-recovery"
 import { cn } from "@/lib/utils"
-import { type ProjectState, type ProjectSummary } from "@/lib/types/project"
+import type { BusinessStatus } from "@/lib/types/business"
+import {
+  countTabs,
+  filterPortfolio,
+  isConnectedBusinessItem,
+  itemHref,
+  itemLabel,
+  itemMode,
+  type BusinessTab,
+  type ConnectedBusinessItem,
+  type EnrichedProject,
+  type PortfolioItem,
+  type SortKey,
+} from "./portfolio"
 import type { FinanceTotals } from "@/lib/finances/project-finances"
 import {
   AlertDialog,
@@ -30,15 +43,8 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface EnrichedProject extends ProjectSummary {
-  financialSummary?: {
-    earningsMinor: number | null
-    creditsCharged: number
-    providerCostUsd: number | null
-    currency: string | null
-    hasFinancialData: boolean
-  }
-}
+/** Re-exported so the server page and its tests share one type. */
+export type { ConnectedBusinessItem, PortfolioItem } from "./portfolio"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -64,62 +70,49 @@ function formatMoney(minor: number | null, currency: string | null): string {
   return currency ? `${currency} ${formatted}` : `$${formatted}`
 }
 
-function modeLabel(mode: string): string {
-  if (mode === "website") return "Reference build"
-  if (mode === "github") return "GitHub build"
-  return "Idea build"
-}
-
 function ModeIcon({ mode, className }: { mode: string; className?: string }) {
+  if (mode === "connected") return <Building2 className={className} />
   if (mode === "website") return <Globe2 className={className} />
   if (mode === "github") return <GitBranch className={className} />
   return <Lightbulb className={className} />
 }
 
+const BUSINESS_STATUS_LABEL: Record<BusinessStatus, string> = {
+  draft: "Draft",
+  active: "Active",
+  suspended: "Suspended",
+  archived: "Archived",
+}
+
+const BUSINESS_STATUS_CLASS: Record<BusinessStatus, string> = {
+  draft: "bg-muted text-muted-foreground",
+  active: "bg-success/15 text-success border-success/30",
+  suspended: "bg-amber-500/10 text-amber-600 border-amber-500/30",
+  archived: "bg-muted text-muted-foreground",
+}
+
+function BusinessStatusBadge({ status }: { status: BusinessStatus }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border border-transparent px-2.5 py-0.5 font-mono text-xs uppercase tracking-wider",
+        BUSINESS_STATUS_CLASS[status],
+      )}
+    >
+      {BUSINESS_STATUS_LABEL[status]}
+    </span>
+  )
+}
+
 // ─── Business-oriented navigation ─────────────────────────────────────────────
 
-type BusinessTab = "all" | "in-progress" | "live" | "needs-attention" | "archived"
-
-const BUSINESS_TABS: {
-  id: BusinessTab
-  label: string
-  icon: React.ElementType
-  matches: (p: EnrichedProject) => boolean
-}[] = [
-  { id: "all", label: "All", icon: FolderOpen, matches: () => true },
-  {
-    id: "in-progress",
-    label: "In progress",
-    icon: Zap,
-    matches: (p) =>
-      ["created", "analyzing", "analysis_complete", "specification_ready", "plan_ready", "awaiting_build_confirmation", "pending_plan", "building", "build_complete", "deploying"].includes(p.state),
-  },
-  {
-    id: "live",
-    label: "Live",
-    icon: CheckCircle2,
-    matches: (p) => ["ready", "deployed"].includes(p.state),
-  },
-  {
-    id: "needs-attention",
-    label: "Needs attention",
-    icon: AlertTriangle,
-    matches: (p) =>
-      p.state === "plan_ready" || // Plan ready for review
-      p.state === "analysis_failed" ||
-      p.state === "plan_failed" ||
-      p.state === "build_failed" ||
-      p.state === "deployment_failed",
-  },
-  {
-    id: "archived",
-    label: "Archived",
-    icon: FolderOpen,
-    matches: () => false, // No archived state yet; placeholder for future
-  },
+const BUSINESS_TABS: { id: BusinessTab; label: string; icon: React.ElementType }[] = [
+  { id: "all", label: "All", icon: FolderOpen },
+  { id: "in-progress", label: "In progress", icon: Zap },
+  { id: "live", label: "Live", icon: CheckCircle2 },
+  { id: "needs-attention", label: "Needs attention", icon: AlertTriangle },
+  { id: "archived", label: "Archived", icon: FolderOpen },
 ]
-
-type SortKey = "updatedAt" | "name" | "revenue" | "profit"
 
 // ─── Delete dialog ────────────────────────────────────────────────────────────
 
@@ -268,42 +261,49 @@ function RecoveringNote({ className }: { className?: string }) {
 }
 
 function BusinessCard({
-  project,
+  item,
   recovering = false,
   onDeleteRequest,
 }: {
-  project: EnrichedProject
+  item: PortfolioItem
   recovering?: boolean
   onDeleteRequest: (p: EnrichedProject) => void
 }) {
-  const hasThumbnail = Boolean(project.thumbnailUrl)
-  const isPlanReady = project.state === "plan_ready"
-  const finance = project.financialSummary
+  const connected = isConnectedBusinessItem(item)
+  const hasThumbnail = !connected && Boolean(item.thumbnailUrl)
+  const isPlanReady = !connected && item.state === "plan_ready"
+  const finance = connected ? undefined : item.financialSummary
+  const badge = isConnectedBusinessItem(item) ? (
+    <BusinessStatusBadge status={item.status} />
+  ) : (
+    <StateBadge state={item.state} />
+  )
 
   return (
     <div className="group relative flex flex-col overflow-hidden rounded-2xl border border-border bg-card transition-all hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5">
-      {/* Delete trigger */}
-      <button
-        aria-label="Delete business"
-        onClick={(e) => { e.preventDefault(); onDeleteRequest(project) }}
-        className="absolute right-3 top-3 z-10 flex size-7 items-center justify-center rounded-md bg-card/80 text-muted-foreground opacity-0 backdrop-blur-sm transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-      >
-        <Trash2 className="size-3.5" />
-      </button>
+      {/* Delete trigger — archiving a connected business is reversible and lives
+          in its own workspace, so the card only offers it for projects. */}
+      {!connected ? (
+        <button
+          aria-label="Delete business"
+          onClick={(e) => { e.preventDefault(); onDeleteRequest(item) }}
+          className="absolute right-3 top-3 z-10 flex size-7 items-center justify-center rounded-md bg-card/80 text-muted-foreground opacity-0 backdrop-blur-sm transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+        >
+          <Trash2 className="size-3.5" />
+        </button>
+      ) : null}
 
-      <Link href={isPlanReady ? `/project/${project.id}/collaborate` : `/project/${project.id}`} className="flex flex-1 flex-col">
+      <Link href={itemHref(item)} className="flex flex-1 flex-col">
         {/* Thumbnail */}
         {hasThumbnail ? (
           <div className="relative aspect-[16/7] w-full overflow-hidden bg-muted">
             <ProjectThumbnail
-              src={project.thumbnailUrl}
-              alt={`Preview of ${project.name}`}
+              src={item.thumbnailUrl}
+              alt={`Preview of ${item.name}`}
               className="h-full w-full object-cover object-top transition-transform duration-500 group-hover:scale-105"
             />
             <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-card/80" />
-            <div className="absolute bottom-2 right-2">
-              <StateBadge state={project.state} />
-            </div>
+            <div className="absolute bottom-2 right-2">{badge}</div>
           </div>
         ) : null}
 
@@ -311,16 +311,16 @@ function BusinessCard({
           {!hasThumbnail && (
             <div className="flex items-center justify-between">
               <div className="flex size-9 items-center justify-center rounded-xl bg-primary/10">
-                <ModeIcon mode={project.mode} className="size-4 text-primary" />
+                <ModeIcon mode={itemMode(item)} className="size-4 text-primary" />
               </div>
-              <StateBadge state={project.state} />
+              {badge}
             </div>
           )}
 
           <div className="flex-1">
-            <p className="truncate font-semibold text-sm text-foreground leading-snug">{project.name}</p>
+            <p className="truncate font-semibold text-sm text-foreground leading-snug">{item.name}</p>
             <p className="mt-0.5 font-mono text-[10px] text-muted-foreground/70 uppercase tracking-widest">
-              {modeLabel(project.mode)}
+              {itemLabel(item)}
             </p>
             {recovering ? <RecoveringNote className="mt-1.5" /> : null}
           </div>
@@ -361,7 +361,7 @@ function BusinessCard({
           <div className="flex items-center justify-between border-t border-border pt-3">
             <span className="flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
               <Clock className="size-3" />
-              {relativeTime(project.updatedAt)}
+              {relativeTime(item.updatedAt)}
             </span>
             <span className="font-mono text-[10px] text-primary opacity-0 transition-opacity group-hover:opacity-100">
               {isPlanReady ? "Review →" : "Open →"}
@@ -376,31 +376,32 @@ function BusinessCard({
 // ─── List row ─────────────────────────────────────────────────────────────────
 
 function BusinessRow({
-  project,
+  item,
   recovering = false,
   onDeleteRequest,
 }: {
-  project: EnrichedProject
+  item: PortfolioItem
   recovering?: boolean
   onDeleteRequest: (p: EnrichedProject) => void
 }) {
-  const isPlanReady = project.state === "plan_ready"
-  const href = isPlanReady ? `/project/${project.id}/collaborate` : `/project/${project.id}`
-  const finance = project.financialSummary
+  const connected = isConnectedBusinessItem(item)
+  const isPlanReady = !connected && item.state === "plan_ready"
+  const href = itemHref(item)
+  const finance = connected ? undefined : item.financialSummary
 
   return (
     <div className="group relative flex items-center gap-4 rounded-xl border border-border bg-card px-5 py-4 transition-all hover:border-primary/30 hover:shadow-sm">
       <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-        <ModeIcon mode={project.mode} className="size-4 text-primary" />
+        <ModeIcon mode={itemMode(item)} className="size-4 text-primary" />
       </div>
 
       <div className="min-w-0 flex-1">
         <Link href={href} className="group/link">
           <p className="truncate font-semibold text-sm text-foreground transition-colors group-hover/link:text-primary">
-            {project.name}
+            {item.name}
           </p>
           <p className="mt-0.5 font-mono text-[10px] text-muted-foreground/60 uppercase tracking-widest">
-            {modeLabel(project.mode)}
+            {itemLabel(item)}
             {isPlanReady && <span className="ml-2 text-primary">· Plan ready</span>}
           </p>
           {recovering ? <RecoveringNote className="mt-1.5 normal-case tracking-normal" /> : null}
@@ -424,11 +425,11 @@ function BusinessRow({
       </div>
 
       <div className="hidden sm:block">
-        <StateBadge state={project.state} />
+        {connected ? <BusinessStatusBadge status={item.status} /> : <StateBadge state={item.state} />}
       </div>
 
       <span className="hidden shrink-0 font-mono text-xs text-muted-foreground md:block">
-        {relativeTime(project.updatedAt)}
+        {relativeTime(item.updatedAt)}
       </span>
 
       <div className="flex items-center gap-1">
@@ -439,13 +440,15 @@ function BusinessRow({
         >
           <ArrowRight className="size-3.5" />
         </Link>
-        <button
-          aria-label="Delete business"
-          onClick={() => onDeleteRequest(project)}
-          className="flex size-8 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-        >
-          <Trash2 className="size-3.5" />
-        </button>
+        {!connected ? (
+          <button
+            aria-label="Delete business"
+            onClick={() => onDeleteRequest(item)}
+            className="flex size-8 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+          >
+            <Trash2 className="size-3.5" />
+          </button>
+        ) : null}
       </div>
     </div>
   )
@@ -455,9 +458,15 @@ function BusinessRow({
 
 export function ProjectsWorkspace({
   projects,
+  businesses = [],
+  connectedBusinessEnabled = false,
   portfolioTotals,
 }: {
   projects: EnrichedProject[]
+  /** Connected businesses, already filtered by the rollout on the server. */
+  businesses?: ConnectedBusinessItem[]
+  /** Whether this account may see /business at all. */
+  connectedBusinessEnabled?: boolean
   portfolioTotals: FinanceTotals | null
 }) {
   const [search, setSearch] = useState("")
@@ -494,55 +503,15 @@ export function ProjectsWorkspace({
     })()
   }, [projects, router])
 
+  const items = useMemo<PortfolioItem[]>(() => [...projects, ...businesses], [projects, businesses])
+
   function requestDelete(p: EnrichedProject) {
     setDeleteTarget(p)
     setDeleteOpen(true)
   }
 
-  const displayed = useMemo(() => {
-    let result = [...projects]
-    const tabDef = BUSINESS_TABS.find((t) => t.id === tab)
-    if (tabDef) result = result.filter(tabDef.matches)
-    const q = search.trim().toLowerCase()
-    if (q) result = result.filter((p) => p.name.toLowerCase().includes(q) || (p.sourceUrl && String(p.sourceUrl).toLowerCase().includes(q)))
-    result.sort((a, b) => {
-      if (sort === "updatedAt") return b.updatedAt - a.updatedAt
-      if (sort === "name") return a.name.localeCompare(b.name)
-      if (sort === "revenue") {
-        const aRev = a.financialSummary?.earningsMinor ?? -1
-        const bRev = b.financialSummary?.earningsMinor ?? -1
-        return bRev - aRev
-      }
-      if (sort === "profit") {
-        const aProfit = a.financialSummary && a.financialSummary.earningsMinor !== null
-          ? a.financialSummary.earningsMinor / 100 - (a.financialSummary.providerCostUsd ?? 0)
-          : -Infinity
-        const bProfit = b.financialSummary && b.financialSummary.earningsMinor !== null
-          ? b.financialSummary.earningsMinor / 100 - (b.financialSummary.providerCostUsd ?? 0)
-          : -Infinity
-        return bProfit - aProfit
-      }
-      return 0
-    })
-    return result
-  }, [projects, tab, search, sort])
-
-  const tabCounts = useMemo(() => {
-    const counts: Record<BusinessTab, number> = {
-      all: 0,
-      "in-progress": 0,
-      live: 0,
-      "needs-attention": 0,
-      archived: 0,
-    }
-    projects.forEach((p) => {
-      counts.all++
-      for (const t of BUSINESS_TABS) {
-        if (t.id !== "all" && t.matches(p)) counts[t.id]++
-      }
-    })
-    return counts
-  }, [projects])
+  const displayed = useMemo(() => filterPortfolio(items, { tab, search, sort }), [items, tab, search, sort])
+  const tabCounts = useMemo(() => countTabs(items), [items])
 
   return (
     <>
@@ -555,13 +524,21 @@ export function ProjectsWorkspace({
           >
             <ArrowLeft className="size-3" /> Dashboard
           </Link>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Your businesses</h1>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">All businesses</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Manage your businesses, track performance, and decide what to do next — all in one place.
+            Everything you run, in one place — businesses Atai builds for you, and the ones you already run.
           </p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {connectedBusinessEnabled ? (
+            <Link
+              href="/business"
+              className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-primary/30 hover:bg-accent hover:text-foreground"
+            >
+              <Building2 className="size-4" /> Connected businesses
+            </Link>
+          ) : null}
           <Link
             href="/new/idea"
             className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-primary/30 hover:bg-accent hover:text-foreground"
@@ -580,7 +557,7 @@ export function ProjectsWorkspace({
 
       {/* ── Portfolio overview ── */}
       <div className="mb-8">
-        <PortfolioOverview totals={portfolioTotals} projectCount={projects.length} />
+        <PortfolioOverview totals={portfolioTotals} projectCount={items.length} />
       </div>
 
       {/* ── Business navigation ── */}
@@ -670,7 +647,7 @@ export function ProjectsWorkspace({
           <div className="flex size-16 items-center justify-center rounded-full bg-muted">
             <Rocket className="size-7 text-muted-foreground" />
           </div>
-          {projects.length === 0 ? (
+          {items.length === 0 ? (
             <>
               <div>
                 <p className="text-lg font-bold text-foreground">Your next business starts here</p>
@@ -723,8 +700,8 @@ export function ProjectsWorkspace({
         </div>
       ) : view === "grid" ? (
         <div data-atai-tour="projects-list" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {displayed.map((p) => (
-            <BusinessCard key={p.id} project={p} recovering={recoveringIds.includes(p.id)} onDeleteRequest={requestDelete} />
+          {displayed.map((item) => (
+            <BusinessCard key={item.id} item={item} recovering={recoveringIds.includes(item.id)} onDeleteRequest={requestDelete} />
           ))}
         </div>
       ) : (
@@ -736,14 +713,14 @@ export function ProjectsWorkspace({
             <span>Updated</span>
             <span />
           </div>
-          {displayed.map((p) => (
-            <BusinessRow key={p.id} project={p} recovering={recoveringIds.includes(p.id)} onDeleteRequest={requestDelete} />
+          {displayed.map((item) => (
+            <BusinessRow key={item.id} item={item} recovering={recoveringIds.includes(item.id)} onDeleteRequest={requestDelete} />
           ))}
         </div>
       )}
 
       {/* ── Stats footer ── */}
-      {projects.length > 0 && (
+      {items.length > 0 && (
         <div className="mt-10 flex flex-wrap items-center gap-6 border-t border-border pt-6 text-xs text-muted-foreground">
           {BUSINESS_TABS.filter((t) => t.id !== "all").map(({ id, label, icon: Icon }) => (
             tabCounts[id] > 0 && (
@@ -755,7 +732,7 @@ export function ProjectsWorkspace({
           ))}
           <div className="flex items-center gap-1.5 ml-auto">
             <FolderOpen className="size-3.5" />
-            <span>{projects.length} total business{projects.length !== 1 ? "es" : ""}</span>
+            <span>{items.length} total business{items.length !== 1 ? "es" : ""}</span>
           </div>
         </div>
       )}

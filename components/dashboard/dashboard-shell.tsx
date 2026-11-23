@@ -3,7 +3,6 @@
 import { useEffect, useId, useMemo, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import useSWR from "swr"
 import {
   Bell,
   BookOpen,
@@ -12,7 +11,6 @@ import {
   EyeOff,
   Gift,
   Home,
-  LayoutGrid,
   LifeBuoy,
   Lightbulb,
   Lock,
@@ -21,7 +19,6 @@ import {
   Network,
   PanelLeft,
   PanelLeftClose,
-  Plus,
   Search,
   Settings,
   Sparkles,
@@ -37,7 +34,7 @@ import { DashboardNotifications } from "@/components/dashboard/dashboard-notific
 import { CofounderPanel, useCofounderPanel } from "@/components/cofounder/cofounder-panel"
 import { PageTourLauncher } from "@/components/tour/page-tour-launcher"
 import { workspaceGrowNav, workspaceIntelligenceNav, workspaceProjectNav, type AtaiNavItem } from "@/components/workspace/atai-nav"
-import { jsonFetcher, useProjects } from "@/lib/client/api"
+import { useBusinessAccess, useProjects } from "@/lib/client/api"
 import { AuthGate } from "@/components/auth/auth-gate"
 import { interpretProjectState, selectActiveProject } from "@/lib/dashboard/view-model"
 import { projectIsBuilt } from "@/lib/dashboard/built-states"
@@ -47,7 +44,7 @@ import { cn } from "@/lib/utils"
 
 const NAV = [
   { href: "/dashboard", label: "Home", icon: Home, tour: "nav-dashboard" },
-  { href: "/projects", label: "Businesses", icon: Building2, tour: "nav-businesses" },
+  { href: "/projects", label: "All businesses", icon: Building2, tour: "nav-businesses" },
   { href: "/finances", label: "Finances", icon: Wallet, tour: "nav-finances", requires: "built" },
   { href: "/notifications", label: "Notifications", icon: Bell, tour: "nav-notifications" },
   { href: "/contributions", label: "Contributions", icon: Gift, tour: "nav-contributions" },
@@ -100,12 +97,8 @@ export function DashboardShell({
   const workspaceProject = resolvedProjectId ? projects.find((p) => p.id === resolvedProjectId) ?? null : null
   const active = workspaceProject ?? selectActiveProject(projects)
   const askHref = active ? `/project/${active.id}/collaborate` : "/new"
-  const { data: businessAccess } = useSWR<{ enabled: boolean }>("/api/business/access", jsonFetcher, {
-    revalidateOnFocus: false,
-    shouldRetryOnError: false,
-    dedupingInterval: 60_000,
-  })
-  const nav = useMemo(() => shellNavigation(businessAccess?.enabled === true), [businessAccess])
+  const { enabled: connectedBusinessEnabled } = useBusinessAccess()
+  const nav = useMemo(() => shellNavigation(connectedBusinessEnabled), [connectedBusinessEnabled])
   const hasBuilt = projects.some((p) => projectIsBuilt(p.state))
   // A connected business is a real business even though Atai did not build it.
   const hasRealBusiness = projects.some((p) => projectIsBuilt(p.state) || isConnectedBusiness(p))
@@ -134,8 +127,6 @@ export function DashboardShell({
     }
   }, [collapsed, hidden])
 
-  const recent = [...projects].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 5)
-
   return (
     <AuthGate next={pathname || "/dashboard"}>
     <div className="min-h-svh bg-background text-foreground">
@@ -151,8 +142,6 @@ export function DashboardShell({
           <SidebarBody
             collapsed={collapsed}
             pathname={pathname}
-            recent={recent}
-            projectCount={projects.length}
             active={active}
             askHref={askHref}
             projectId={resolvedProjectId}
@@ -213,7 +202,7 @@ export function DashboardShell({
                   <X className="size-4" />
                 </button>
               </div>
-              <SidebarBody collapsed={false} pathname={pathname} recent={recent} projectCount={projects.length} active={active} askHref={askHref} projectId={resolvedProjectId} workspaceName={title} hasBuilt={hasBuilt} hasRealBusiness={hasRealBusiness} nav={nav} />
+              <SidebarBody collapsed={false} pathname={pathname} active={active} askHref={askHref} projectId={resolvedProjectId} workspaceName={title} hasBuilt={hasBuilt} hasRealBusiness={hasRealBusiness} nav={nav} />
             </aside>
           </div>
         ) : null}
@@ -336,8 +325,6 @@ function SidebarLink({
 function SidebarBody({
   collapsed,
   pathname,
-  recent,
-  projectCount,
   active,
   askHref,
   projectId,
@@ -348,8 +335,6 @@ function SidebarBody({
 }: {
   collapsed: boolean
   pathname: string
-  recent: ProjectSummary[]
-  projectCount: number
   active: ProjectSummary | null
   askHref: string
   projectId?: string
@@ -474,59 +459,6 @@ function SidebarBody({
           <SidebarLink key={item.href} item={item} pathname={pathname} collapsed={collapsed} />
         ))}
       </nav>
-
-      {!collapsed ? (
-        <div>
-          <div className="flex items-center justify-between px-2">
-            <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Businesses</p>
-            {projectCount > 0 ? (
-              <span className="rounded-full bg-muted px-1.5 py-px font-mono text-[10px] tabular-nums text-muted-foreground">
-                {projectCount}
-              </span>
-            ) : null}
-          </div>
-          <ul className="mt-2 max-h-44 space-y-0.5 overflow-y-auto pr-1">
-            {recent.length === 0 ? (
-              <li className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground">
-                <Building2 className="size-3.5 shrink-0" />
-                No businesses yet
-              </li>
-            ) : (
-              recent.map((project) => {
-                const status = interpretProjectState(project.state, project.id)
-                return (
-                  <li key={project.id}>
-                    <Link
-                      href={`/project/${project.id}`}
-                      data-atai-tour="nav-business-card"
-                      className="block rounded-lg px-2 py-1.5 transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <span className="block truncate text-sm">{project.name}</span>
-                      <span className="block truncate text-[11px] text-muted-foreground">{status.founderLabel}</span>
-                    </Link>
-                  </li>
-                )
-              })
-            )}
-          </ul>
-          <div className="mt-1 flex flex-col gap-0.5 border-t border-border/70 pt-1.5">
-            <Link
-              href="/projects"
-              className="inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <LayoutGrid className="size-4 shrink-0" />
-              View all businesses
-            </Link>
-            <Link
-              href="/new"
-              className="inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <Plus className="size-4 shrink-0" />
-              Create new business
-            </Link>
-          </div>
-        </div>
-      ) : null}
 
       <div className="mt-auto flex flex-col gap-1">
         <Link

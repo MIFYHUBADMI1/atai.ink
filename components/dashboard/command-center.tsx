@@ -22,7 +22,14 @@ import { buttonVariants } from "@/components/ui/button"
 import { CofounderLauncherInline } from "@/components/cofounder/cofounder-launcher"
 import { PortfolioPanel } from "@/components/dashboard/portfolio-panel"
 import { relativeTime } from "@/lib/client/format"
-import { useProjectActivity, useProjects, useSession, type ActivityEvent } from "@/lib/client/api"
+import {
+  useBusinessAccess,
+  useBusinesses,
+  useProjectActivity,
+  useProjects,
+  useSession,
+  type ActivityEvent,
+} from "@/lib/client/api"
 import {
   filterMeaningfulActivity,
   getDashboardAttentionItems,
@@ -109,6 +116,8 @@ export function DashboardCommandCenter() {
 
         <CofounderLauncherInline />
 
+        <ConnectedBusinessesCard />
+
         <section className="flex flex-col gap-3 rounded-2xl border border-border bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Shape Atai</p>
@@ -178,6 +187,82 @@ export function DashboardCommandCenter() {
         </div>
       </div>
     </>
+  )
+}
+
+const BUSINESS_STATUS_LABEL: Record<string, string> = {
+  draft: "Draft",
+  active: "Active",
+  suspended: "Suspended",
+  archived: "Archived",
+}
+
+/**
+ * One click to the connected businesses. Rendered only when the rollout is open
+ * for this account — a dashboard card leading to a 404 is worse than no card.
+ */
+export function ConnectedBusinessesCard() {
+  const { enabled } = useBusinessAccess()
+  const { businesses, isLoading } = useBusinesses()
+  if (!enabled) return null
+
+  return (
+    <section
+      data-atai-tour="dashboard-connected-business"
+      className="rounded-2xl border border-border bg-card p-5"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+            Connected businesses
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            The businesses you already run. Atai reads them and connects their apps — nothing is rebuilt or moved.
+          </p>
+        </div>
+        <Link href="/business" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "shrink-0")}>
+          <Building2 className="size-3.5" />
+          Open workspace
+        </Link>
+      </div>
+
+      {isLoading ? (
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          <Skeleton className="h-14 rounded-xl" />
+          <Skeleton className="h-14 rounded-xl" />
+        </div>
+      ) : businesses.length === 0 ? (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-border px-4 py-3">
+          <p className="text-sm text-muted-foreground">No connected businesses yet.</p>
+          <Link href="/business" className={cn(buttonVariants({ size: "sm" }))}>
+            <Sparkles className="size-3.5" />
+            Connect a business
+          </Link>
+        </div>
+      ) : (
+        <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+          {businesses.map((business) => (
+            <li key={business.id}>
+              <Link
+                href={`/business/${business.id}`}
+                className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background px-4 py-3 transition-colors hover:border-primary/30 hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <span className="flex min-w-0 items-center gap-2.5">
+                  <Building2 className="size-4 shrink-0 text-primary" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium">{business.name}</span>
+                    <span className="block truncate font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                      {BUSINESS_STATUS_LABEL[business.status] ?? business.status}
+                    </span>
+                  </span>
+                </span>
+                <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   )
 }
 

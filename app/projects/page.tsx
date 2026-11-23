@@ -1,15 +1,18 @@
 import type { Metadata } from "next"
 import { DashboardShell } from "@/components/dashboard/dashboard-shell"
-import { ProjectsWorkspace } from "./workspace"
+import { ProjectsWorkspace, type ConnectedBusinessItem } from "./workspace"
 import { getCurrentUser } from "@/lib/auth/session"
 import { redirect } from "next/navigation"
 import { store } from "@/lib/store/store"
 import { getPlatformFinances } from "@/lib/finances/platform-finances"
 import { resolveProjectThumbnail } from "@/lib/media/project-thumbnail"
 import type { ProjectSummary } from "@/lib/types/project"
+import { isBusinessWorkspaceEnabled } from "@/lib/business/flags"
+import { userActor } from "@/lib/business/permissions"
+import { listBusinessesForUser } from "@/lib/business/service"
 
 export const metadata: Metadata = {
-  title: "Your businesses - Atai",
+  title: "All businesses - Atai",
   description: "Manage your businesses, track performance, and decide what to do next — all in one place.",
 }
 
@@ -25,10 +28,24 @@ export default async function ProjectsPage() {
   const user = await getCurrentUser()
   if (!user) redirect("/login?next=/projects")
 
-  // Fetch projects and platform finances in parallel
-  const [projects, platformFinances] = await Promise.all([
+  // Fetch projects, finances and — only when the rollout is open for this
+  // account — the connected businesses, in parallel.
+  let connectedBusinessEnabled = false
+  const [projects, platformFinances, businesses] = await Promise.all([
     store.listProjects(user.id),
     getPlatformFinances(user.id).catch(() => null), // Graceful degradation
+    (async (): Promise<ConnectedBusinessItem[]> => {
+      if (!(await isBusinessWorkspaceEnabled(user.id))) return []
+      connectedBusinessEnabled = true
+      const owned = await listBusinessesForUser({ actor: userActor(user.id) })
+      return owned.map((business) => ({
+        kind: "business" as const,
+        id: business.id,
+        name: business.name,
+        status: business.status,
+        updatedAt: business.updatedAt,
+      }))
+    })().catch(() => []),
   ])
 
   // Build a map of project finances for quick lookup
@@ -90,10 +107,12 @@ export default async function ProjectsPage() {
   const portfolioTotals = platformFinances?.totals ?? null
 
   return (
-    <DashboardShell title="Businesses">
+    <DashboardShell title="All businesses">
       <div className="mx-auto w-full max-w-7xl px-6 py-10 lg:px-10">
         <ProjectsWorkspace
           projects={enrichedProjects}
+          businesses={businesses}
+          connectedBusinessEnabled={connectedBusinessEnabled}
           portfolioTotals={portfolioTotals}
         />
       </div>

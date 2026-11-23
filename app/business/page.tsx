@@ -17,7 +17,7 @@ export default async function BusinessesPage() {
   const businesses = await listBusinessesForUser({ actor: userActor(user.id) })
 
   return (
-    <DashboardShell title="Businesses">
+    <DashboardShell title="Connected businesses">
       <div className="mx-auto w-full max-w-6xl px-4 pb-16 pt-6 sm:py-8 lg:px-8">
         <BusinessIndex initialBusinesses={businesses} />
       </div>

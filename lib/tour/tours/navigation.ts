@@ -43,20 +43,10 @@ export const navigationTour: TourDefinition = {
     {
       id: "businesses",
       kind: "info",
-      title: "Businesses — everything you run",
-      text: "One card per business, with its real state on it: still being planned, building, live, or stuck. This is the page to judge your whole portfolio from.",
+      title: "All businesses — everything you run",
+      text: "One card per business, with its real state on it: still being planned, building, live, or stuck. Businesses Atai builds and businesses you already run sit side by side.",
       target: "nav-businesses",
-      why: "Atai can run several businesses at once. This is the only place you see all of them together.",
-    },
-    {
-      id: "recent-list",
-      kind: "info",
-      title: "Your businesses, as quick links",
-      text: "Under the main links sits a short list of the businesses you touched most recently, each with its stage written underneath. Clicking one opens that business's own workspace.",
-      why: "Recent businesses are the ones you are most likely to need, without a search.",
-      target: "nav-business-card",
-      requiresProject: true,
-      instruction: "Notice the two links under the list: View all businesses, and Create new business.",
+      why: "Atai can run several businesses at once. This is the only place you see all of them together, so the sidebar stays a short list of destinations.",
     },
     {
       id: "new-business",

@@ -5,6 +5,7 @@ import useSWR from "swr"
 import { useClientStore } from "@/lib/store/client-store"
 import type { Project, ProjectSummary } from "@/lib/types/project"
 import type { ProjectAccessView } from "@/lib/billing/entitlements/types"
+import type { BusinessStatus } from "@/lib/types/business"
 
 export interface SessionUser {
   id: string
@@ -545,4 +546,40 @@ export function usePortfolioOverview(days: PortfolioRange = 30, enabled = true) 
     },
   )
   return { overview: data ?? null, error, isLoading, refresh: mutate }
+}
+
+// ─── Connected business ───────────────────────────────────────────────────────
+// The workspace sits behind an admin-controlled rollout, so every entry point
+// asks the server before rendering a link that would land on a 404. One SWR key
+// means the sidebar, the dashboard and the portfolio page all share one answer.
+
+export function useBusinessAccess() {
+  const { data, isLoading } = useSWR<{ enabled: boolean }>("/api/business/access", jsonFetcher, {
+    revalidateOnFocus: false,
+    shouldRetryOnError: false,
+    dedupingInterval: 60_000,
+  })
+  return { enabled: data?.enabled === true, isLoading }
+}
+
+export function useBusinesses() {
+  const { enabled, isLoading: accessLoading } = useBusinessAccess()
+  const { data, error, isLoading } = useSWR<{ businesses: BusinessSummary[] }>(
+    enabled ? "/api/businesses" : null,
+    jsonFetcher,
+    { revalidateOnFocus: false, keepPreviousData: true },
+  )
+  return {
+    businesses: data?.businesses ?? [],
+    error,
+    isLoading: enabled && (accessLoading || isLoading),
+  }
+}
+
+export interface BusinessSummary {
+  id: string
+  name: string
+  status: BusinessStatus
+  createdAt: number
+  updatedAt: number
 }
