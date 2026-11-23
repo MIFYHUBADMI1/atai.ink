@@ -14,6 +14,7 @@ import { buildInitialBuildPrompt } from "@/lib/analysis/prompt-builder"
 import { ApplicationSpecificationSchema } from "@/lib/types/specification"
 import { logger } from "@/lib/logging/logger"
 import type { BuildRun, ProjectEvent } from "@/lib/types/project"
+import { infrastructureDenial } from "@/lib/infrastructure/access"
 
 function event(stage: string, message: string, level: ProjectEvent["level"] = "info"): ProjectEvent {
   return { id: cryptoId(), at: Date.now(), level, stage, message }
@@ -41,6 +42,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const project = await store.getProject(id)
     if (!project || project.userId !== userId) return fail("UNAUTHORIZED_PROJECT_ACCESS", "We couldn't find this project.", 404)
+    const infrastructureBlocked = infrastructureDenial(project.infrastructure)
+    if (infrastructureBlocked) return fail(infrastructureBlocked.code, infrastructureBlocked.message, 402)
 
     // Fast-path check for a friendlier error; the actual guard against a
     // duplicate concurrent build is the atomic `claimBuildSlot` call below.

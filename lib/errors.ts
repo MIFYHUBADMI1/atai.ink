@@ -35,6 +35,8 @@ export type ErrorCode =
   | "BUSINESS_SUSPENDED"
   | "BUSINESS_NOT_MIGRATED"
   | "APPLICATION_ALREADY_EXISTS"
+  | "CATALOG_UNAVAILABLE"
+  | "CATALOG_CONFLICT"
   | "UNKNOWN"
 
 export const ERROR_MESSAGES: Record<ErrorCode, string> = {
@@ -64,6 +66,8 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   BUSINESS_SUSPENDED: "This business is suspended. Contact support to restore access.",
   BUSINESS_NOT_MIGRATED: "This business is being prepared. Try again shortly.",
   APPLICATION_ALREADY_EXISTS: "An application already exists at that address.",
+  CATALOG_UNAVAILABLE: "Pricing is temporarily unavailable. Please try again shortly.",
+  CATALOG_CONFLICT: "The catalog changed since you loaded it. Reload and try again.",
   UNKNOWN: "Something went wrong. Please try again.",
 }
 
@@ -94,6 +98,8 @@ const STATUS_BY_CODE: Record<ErrorCode, number> = {
   BUSINESS_SUSPENDED: 403,
   BUSINESS_NOT_MIGRATED: 409,
   APPLICATION_ALREADY_EXISTS: 409,
+  CATALOG_UNAVAILABLE: 503,
+  CATALOG_CONFLICT: 409,
   UNKNOWN: 500,
 }
 

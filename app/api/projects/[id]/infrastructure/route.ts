@@ -4,6 +4,7 @@ import { store } from "@/lib/store/store"
 import { activatePlan, getProjectInfrastructure } from "@/lib/infrastructure/service"
 import { getInfrastructurePlanWithRuntimePrice, ALL_PLAN_ORDER } from "@/lib/infrastructure/plans"
 import { scopedIntentKey } from "@/lib/billing/operation-identity"
+import { evaluateInfrastructureAccess } from "@/lib/infrastructure/access"
 import type { InfrastructurePlanId } from "@/lib/infrastructure/plans"
 
 /**
@@ -40,6 +41,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
     return ok({
       subscription,
+      access: evaluateInfrastructureAccess(subscription),
       plans,
       hasTotalumProject: Boolean(project.totalumProjectId),
     })
@@ -57,7 +59,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const user = await requireUser()
     const { id } = await params
 
-    const body = (await req.json().catch(() => ({}))) as { planId?: string; requestId?: unknown }
+    const body = (await req.json().catch(() => ({}))) as {
+      planId?: string
+      requestId?: unknown
+      renewal?: unknown
+    }
     const planId = body.planId?.trim().toLowerCase()
 
     if (!planId) return fail("VALIDATION", "Plan ID is required.", 422)
@@ -74,7 +80,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       projectId: id,
     })
 
-    const result = await activatePlan(id, user.id, planId as InfrastructurePlanId, intentKey)
+    const result = await activatePlan(id, user.id, planId as InfrastructurePlanId, intentKey, {
+      renewal: body.renewal === true,
+    })
 
     if (!result.success) return fail("ACTIVATION_FAILED", result.message, 400)
 

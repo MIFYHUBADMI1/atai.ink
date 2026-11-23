@@ -18,6 +18,7 @@ import { decisionForProposal } from "@/lib/analysis/cofounder"
 import type { PlanProposal, PlanFinding } from "@/lib/types/plan-analysis"
 import type { MirrorProject, ProjectEvent } from "@/lib/types/project"
 import { planIsLocked } from "@/lib/types/project"
+import { buildProjectAccessView } from "@/lib/billing/entitlements/presentation"
 
 /** Validated plan-section update request (accepted AI proposal or manual
  * section edit from the Collaborate workspace). The section allow-list and
@@ -77,7 +78,18 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         }
       }
 
-      return ok({ project }, creditBlockHeaders(project))
+      // Presentation-only access view. The mutating routes re-check every
+      // operation; this exists so the UI can disable and explain accurately.
+      let access: Awaited<ReturnType<typeof buildProjectAccessView>> | undefined
+      try {
+        access = await buildProjectAccessView(user.id, project)
+      } catch (error) {
+        logger.warn("api.projects.get", "access view unavailable", {
+          projectId: id,
+          message: (error as Error).message,
+        })
+      }
+      return ok({ project, ...(access ? { access } : {}) }, creditBlockHeaders(project))
     })
   } catch (e) {
     return handleRouteError("api.projects.get", e)

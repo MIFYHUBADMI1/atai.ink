@@ -12,6 +12,16 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 
 vi.mock("server-only", () => ({}))
 
+vi.mock("@/lib/db/mongodb", () => ({
+  getMongoClient: vi.fn(async () => ({
+    startSession: () => ({
+      inTransaction: () => true,
+      withTransaction: async (fn: () => Promise<unknown>) => fn(),
+      endSession: vi.fn(async () => {}),
+    }),
+  })),
+}))
+
 type Row = Record<string, unknown>
 
 const state = vi.hoisted(() => ({
@@ -41,10 +51,34 @@ function payColFake() {
       const id = (query.dodoPaymentId ?? query._id) as string
       const doc = state.payments.find((p) => p.dodoPaymentId === id)
       if (!doc) return { matchedCount: 0, modifiedCount: 0 }
+      const refundedFilter = query.refundedAmountMinor as { $gte?: number } | undefined
+      if (
+        refundedFilter &&
+        typeof refundedFilter === "object" &&
+        typeof refundedFilter.$gte === "number" &&
+        (((doc.refundedAmountMinor as number | undefined) ?? 0) < refundedFilter.$gte)
+      ) {
+        return { matchedCount: 0, modifiedCount: 0 }
+      }
+      const refundIdsFilter = query.refundIds as { $ne?: string } | undefined
+      if (
+        refundIdsFilter &&
+        typeof refundIdsFilter === "object" &&
+        refundIdsFilter.$ne !== undefined &&
+        Array.isArray(doc.refundIds) &&
+        (doc.refundIds as string[]).includes(refundIdsFilter.$ne)
+      ) {
+        return { matchedCount: 0, modifiedCount: 0 }
+      }
       const inc = (update.$inc ?? {}) as Record<string, number>
       for (const [k, v] of Object.entries(inc)) doc[k] = ((doc[k] as number) ?? 0) + v
       const set = (update.$set ?? {}) as Record<string, unknown>
       for (const [k, v] of Object.entries(set)) doc[k] = v
+      const addToSet = (update.$addToSet ?? {}) as Record<string, unknown>
+      for (const [k, v] of Object.entries(addToSet)) {
+        if (!Array.isArray(doc[k])) doc[k] = []
+        if (!(doc[k] as unknown[]).includes(v)) (doc[k] as unknown[]).push(v)
+      }
       return { matchedCount: 1, modifiedCount: 1 }
     },
   }

@@ -123,6 +123,10 @@ export interface DeploymentRecord {
   id: string
   status: "idle" | "building" | "deploying" | "success" | "failed"
   productionUrl?: string
+  /** Active custom domain attached to this deployment, if any. */
+  customDomain?: string
+  /** Provider status for the custom domain (e.g. pending, active). */
+  customDomainStatus?: string
   updatedAt: number
   error?: string
 }
@@ -152,7 +156,35 @@ export interface BuildSummary {
   secretKeysNeeded?: Record<string, { isProvided: boolean; description: string }>
 }
 
-export type InfrastructureSubscriptionStatus = "active" | "pending" | "expired" | "cancelled" | "past_due"
+export type InfrastructureSubscriptionStatus =
+  | "active"
+  | "pending"
+  | "expired"
+  | "cancelled"
+  | "past_due"
+  /** Historical record whose purchased terms or paid-through date cannot be established. */
+  | "needs_review"
+
+/**
+ * Snapshot of the terms actually purchased for an infrastructure plan.
+ * Future lifecycle decisions use this snapshot, never today's catalog.
+ */
+export interface InfrastructurePurchasedTerms {
+  planId: string
+  planName: string
+  storageLimitBytes: number
+  totalumInfrastructureCreditLimit: number
+  /** Credits charged for this period (0 for the free Testing plan). */
+  priceCredits: number
+  purchasedAt: number
+  /** Purchased period length in milliseconds. */
+  durationMs: number
+}
+
+export interface InfrastructureLifecycleLock {
+  token: string
+  acquiredAt: number
+}
 
 export interface InfrastructureSubscription {
   /** Current infrastructure plan ID. */
@@ -169,8 +201,29 @@ export interface InfrastructureSubscription {
   startedAt: number
   /** When the subscription expires. */
   expiresAt: number
-  /** Whether to auto-renew (for paid plans). */
+  /** Whether to auto-renew (for paid plans). Infrastructure is fixed-duration;
+   * this stays false unless a safe recurring-billing integration is added. */
   autoRenew: boolean
+  /** Terms captured at purchase time. Absent on legacy records. */
+  purchasedTerms?: InfrastructurePurchasedTerms
+  /** Last successful manual renewal, if any. */
+  renewedAt?: number
+  /** Number of successful manual renewals in the current subscription. */
+  renewalCount?: number
+  /** When the paid period ended and the downgrade was recorded. */
+  expiredAt?: number
+  /** Set when the user cancelled future renewal; paid-through access remains. */
+  cancelledAt?: number
+  /** Historical record that must not be auto-expired until reviewed. */
+  needsReview?: boolean
+  reviewReason?: string
+  /** Idempotency key of the last purchase/renewal applied to this record. */
+  lastPurchaseKey?: string
+  /** Recent applied purchase keys, kept across expiry/rebuild so an old retry
+   * can never grant a fresh entitlement after a newer purchase. */
+  appliedPurchaseKeys?: string[]
+  /** Short-lived lock serializing purchase/renewal and expiration. */
+  lifecycleLock?: InfrastructureLifecycleLock
   /** Last time usage was synced from Totalum. */
   lastUsageSyncAt?: number
   /** Totalum infrastructure credits used this period. */

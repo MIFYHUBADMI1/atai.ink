@@ -8,8 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { postJson } from "@/lib/client/api"
-import { getCommercialPlans } from "@/lib/billing/entitlements/commercial-plans"
-import { formatUSD } from "@/lib/billing/config"
+import { formatUSD, type SubscriptionPlan } from "@/lib/billing/config"
 import { cn } from "@/lib/utils"
 
 interface CancelSubscriptionButtonProps {
@@ -18,6 +17,8 @@ interface CancelSubscriptionButtonProps {
   monthlyCredits: number
   priceUSD: number
   currentPlanId: string
+  /** Server-resolved published catalog; never a second local catalog. */
+  plans: SubscriptionPlan[]
   className?: string
 }
 
@@ -38,6 +39,7 @@ export function CancelSubscriptionButton({
   monthlyCredits,
   priceUSD,
   currentPlanId,
+  plans,
   className,
 }: CancelSubscriptionButtonProps) {
   const router = useRouter()
@@ -54,8 +56,8 @@ export function CancelSubscriptionButton({
     year: "numeric",
   })
 
-  const currentPlan = getCommercialPlans().find((p) => p.id === currentPlanId)
-  const cheaperPlans = getCommercialPlans()
+  const currentPlan = plans.find((p) => p.id === currentPlanId)
+  const cheaperPlans = plans
     .filter((p) => !p.custom && p.priceUSD > 0 && p.priceUSD < (currentPlan?.priceUSD || 0))
     .sort((a, b) => b.priceUSD - a.priceUSD)
 

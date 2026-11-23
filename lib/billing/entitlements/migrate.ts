@@ -14,18 +14,23 @@
  */
 
 import { subscriptionRecordsCol, projectsCol } from "@/lib/db/collections"
-import { buildEntitlementSet, ENTITLEMENT_VERSION } from "./catalog"
-import { resolveCommercialPlan } from "./migration-map"
-import type { SubscriptionRecord } from "@/lib/billing/billing-types"
-import type { EntitlementSet } from "./types"
-
-const ZERO_COUNTS = { businesses: 0, productionApps: 0, subdomains: 0, customDomainsConsumed: 0 }
+import { ENTITLEMENT_VERSION } from "./catalog"
+import { resolveCommercialPlan, isCommercialPlanId } from "./migration-map"
+import { ensureCatalogVersionRecords } from "./versions"
+import { PRICE_BOOK_PRE_VERSIONING } from "./price-book"
+import { buildPurchasedTermsFromRecord } from "@/lib/billing/subscription-terms"
+import type { PurchasedTerms, SubscriptionRecord, SubscriptionTermsStatus } from "@/lib/billing/billing-types"
 
 export interface MigrationPayload {
   commercialPlanId: string
   legacyPlanId: string
   entitlementVersion: string
-  entitlementSnapshot: Record<string, unknown>
+  /**
+   * Only written when the record already carried a snapshot. A snapshot is
+   * never fabricated from the live catalog; the terms migration records a
+   * provisional review snapshot separately and flags the record.
+   */
+  entitlementSnapshot?: Record<string, unknown>
   pricingVersion: string
   grandfathered: boolean
   grandfatheredUntil?: number
@@ -54,35 +59,104 @@ export function computeMigrationForRecord(
 ): { changed: boolean; payload?: MigrationPayload } {
   const alreadyMigrated = !!sub.migrationBatchId && sub.commercialPlanId != null && !opts.force
   if (alreadyMigrated) return { changed: false }
+  // A record with pinned commercial terms already carries the authoritative
+  // snapshot. Never rebuild/overwrite it from the live catalog.
+  if (sub.purchasedTerms && !opts.force) return { changed: false }
 
-  const resolved = resolveCommercialPlan(sub.planId, {
-    hasProjects: opts.hasProjects,
-    hasPermanentCredits: opts.hasPermanentCredits,
-  })
+  // A stored commercial id is authoritative. Only a record without one is
+  // interpreted through the legacy id map (the two catalogs share names, and
+  // the legacy `explorer` id means the old paid plan, not the free one).
+  const resolved = isCommercialPlanId(sub.commercialPlanId)
+    ? {
+        commercialPlanId: sub.commercialPlanId,
+        legacyPlanId: sub.planId,
+        grandfathered: sub.grandfathered === true,
+        preserveLegacyBehavior: sub.grandfathered === true,
+      }
+    : resolveCommercialPlan(sub.planId, {
+        hasProjects: opts.hasProjects,
+        hasPermanentCredits: opts.hasPermanentCredits,
+      })
 
-  const snapshot: EntitlementSet = buildEntitlementSet(
-    resolved.commercialPlanId,
-    ZERO_COUNTS,
-    {
-      legacyPlanId: resolved.legacyPlanId,
-      grandfathered: resolved.grandfathered,
-      preserveLegacyBehavior: resolved.preserveLegacyBehavior,
-    },
-  )
+  const storedSnapshot = sub.entitlementSnapshot as Record<string, unknown> | undefined
 
   const payload: MigrationPayload = {
     commercialPlanId: resolved.commercialPlanId,
     legacyPlanId: resolved.legacyPlanId,
     entitlementVersion: ENTITLEMENT_VERSION,
-    // Mongo stores plain documents; strip the typed view to a plain object.
-    entitlementSnapshot: JSON.parse(JSON.stringify(snapshot)) as Record<string, unknown>,
-    pricingVersion: ENTITLEMENT_VERSION,
+    ...(storedSnapshot
+      ? {
+          // Preserve an existing historical snapshot verbatim. Never rebuild it
+          // from the live catalog.
+          entitlementSnapshot: JSON.parse(JSON.stringify(storedSnapshot)) as Record<string, unknown>,
+        }
+      : {}),
+    pricingVersion: PRICE_BOOK_PRE_VERSIONING,
     grandfathered: resolved.grandfathered,
     migratedAt: opts.now ?? Date.now(),
     migrationBatchId: opts.batchId,
   }
 
   return { changed: true, payload }
+}
+
+export interface TermsMigrationPayload {
+  purchasedTerms?: PurchasedTerms
+  termsStatus: SubscriptionTermsStatus
+  termsReviewReason?: string
+  termsMigratedAt: number
+  termsMigrationBatchId: string
+}
+
+/**
+ * Pure: decide whether a subscription needs its commercial terms pinned.
+ *
+ * Where the record carries reliable original purchase evidence (a known plan
+ * id plus its stored price and credit allocation), the terms are frozen from
+ * that evidence — never from today's catalog. Where the evidence is missing,
+ * the record is marked `needs_review` and nothing is fabricated.
+ *
+ * Idempotent: once a record carries a terms batch id and a status, re-running
+ * is a no-op unless `force` is set.
+ */
+export function computePinnedTermsForRecord(
+  sub: SubscriptionRecord,
+  opts: { batchId: string; now?: number; force?: boolean; hasProjects?: boolean; hasPermanentCredits?: boolean },
+): { changed: boolean; payload?: TermsMigrationPayload } {
+  if (sub.purchasedTerms) return { changed: false }
+  if (!opts.force && sub.termsMigrationBatchId && sub.termsStatus) return { changed: false }
+
+  const now = opts.now ?? Date.now()
+  const { terms, reviewReason } = buildPurchasedTermsFromRecord(sub, {
+    now,
+    hasProjects: opts.hasProjects,
+    hasPermanentCredits: opts.hasPermanentCredits,
+  })
+
+  if (terms) {
+    return {
+      changed: true,
+      payload: {
+        purchasedTerms: terms,
+        // Price/credits are reliable, but a missing entitlement snapshot must
+        // stay visible for review even though the terms are frozen.
+        termsStatus: reviewReason ? "needs_review" : "pinned",
+        termsReviewReason: reviewReason,
+        termsMigratedAt: now,
+        termsMigrationBatchId: opts.batchId,
+      },
+    }
+  }
+
+  return {
+    changed: true,
+    payload: {
+      termsStatus: "needs_review",
+      termsReviewReason: reviewReason ?? "insufficient_purchase_evidence",
+      termsMigratedAt: now,
+      termsMigrationBatchId: opts.batchId,
+    },
+  }
 }
 
 export interface MigrationReport {
@@ -92,6 +166,8 @@ export interface MigrationReport {
   changed: number
   skipped: number
   grandfathered: number
+  termsPinned: number
+  termsNeedsReview: number
   errors: Array<{ id: string; error: string }>
   details: Array<{
     id: string
@@ -99,6 +175,8 @@ export interface MigrationReport {
     commercialPlanId: string
     grandfathered: boolean
     changed: boolean
+    termsStatus?: SubscriptionTermsStatus
+    termsReviewReason?: string
   }>
 }
 
@@ -125,8 +203,15 @@ export async function migrateSubscriptionEntitlements(opts: MigrateOpts = {}): P
     changed: 0,
     skipped: 0,
     grandfathered: 0,
+    termsPinned: 0,
+    termsNeedsReview: 0,
     errors: [],
     details: [],
+  }
+
+  if (mode === "apply") {
+    // Publish the version documents the pinned terms reference (idempotent).
+    await ensureCatalogVersionRecords()
   }
 
   for (const sub of subs) {
@@ -144,14 +229,32 @@ export async function migrateSubscriptionEntitlements(opts: MigrateOpts = {}): P
         force: opts.force,
       })
 
-      if (changed && payload) {
-        report.changed++
-        if (payload.grandfathered) report.grandfathered++
-        if (mode === "apply") {
+      // Terms pinning is a separate, independently idempotent pass so records
+      // already migrated for entitlements still get their commercial terms.
+      const terms = computePinnedTermsForRecord(sub, {
+        batchId,
+        force: opts.force,
+        hasProjects,
+        hasPermanentCredits,
+      })
+
+      const recordChanged = changed || terms.changed
+      if (recordChanged) report.changed++
+      else report.skipped++
+      if (payload?.grandfathered) report.grandfathered++
+      if (terms.payload?.termsStatus === "pinned") report.termsPinned++
+      if (terms.payload?.termsStatus === "needs_review") report.termsNeedsReview++
+
+      if (mode === "apply") {
+        if (changed && payload) {
           await col.updateOne({ id: sub.id }, { $set: payload as unknown as Record<string, unknown> })
         }
-      } else {
-        report.skipped++
+        if (terms.changed && terms.payload) {
+          await col.updateOne(
+            { id: sub.id },
+            { $set: terms.payload as unknown as Record<string, unknown> },
+          )
+        }
       }
 
       report.details.push({
@@ -159,7 +262,9 @@ export async function migrateSubscriptionEntitlements(opts: MigrateOpts = {}): P
         legacyPlanId: sub.planId,
         commercialPlanId: payload?.commercialPlanId ?? sub.commercialPlanId ?? "(unchanged)",
         grandfathered: payload?.grandfathered ?? !!sub.grandfathered,
-        changed,
+        changed: recordChanged,
+        termsStatus: terms.payload?.termsStatus ?? sub.termsStatus,
+        termsReviewReason: terms.payload?.termsReviewReason ?? sub.termsReviewReason,
       })
     } catch (err) {
       report.errors.push({ id: sub.id, error: err instanceof Error ? err.message : String(err) })

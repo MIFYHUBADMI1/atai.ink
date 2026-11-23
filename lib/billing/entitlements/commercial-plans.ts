@@ -59,16 +59,18 @@ function commercialProductEnvVar(id: CommercialPlanId, cycle: "monthly" | "annua
 export function getCommercialDodoProductId(
   id: CommercialPlanId,
   cycle: "monthly" | "annual" = "monthly",
+  env: NodeJS.ProcessEnv = process.env,
 ): string | undefined {
-  return process.env[commercialProductEnvVar(id, cycle)] || undefined
+  return env[commercialProductEnvVar(id, cycle)] || undefined
 }
 
 /** A commercial Dodo product id (monthly OR annual variant) → plan + cycle. */
 export function resolveCommercialProduct(
   productId: string | undefined,
+  env: NodeJS.ProcessEnv = process.env,
 ): { plan: CommercialPlan; billingCycle: "monthly" | "annual" } | undefined {
   if (!productId) return undefined
-  for (const plan of getCommercialPlans()) {
+  for (const plan of getCommercialPlans(env)) {
     if (plan.dodoProductId === productId) return { plan, billingCycle: "monthly" }
     if (plan.annualDodoProductId && plan.annualDodoProductId === productId) {
       return { plan, billingCycle: "annual" }
@@ -85,14 +87,20 @@ export function resolveCommercialProduct(
  * name (the legacy set owns "Atai — Starter"), and it makes a price change
  * create a new product instead of silently reusing a stale-priced one.
  */
-export function commercialProductName(plan: CommercialPlan, cycle: "monthly" | "annual"): string {
+export function commercialProductName(
+  plan: Pick<SubscriptionPlan, "name" | "priceUSD" | "annualPriceUSD">,
+  cycle: "monthly" | "annual",
+): string {
   const price = cycle === "annual" ? plan.annualPriceUSD ?? plan.priceUSD : plan.priceUSD
   return cycle === "annual"
     ? `Atai — ${plan.name} — $${price}/yr`
     : `Atai — ${plan.name} — $${price}/mo`
 }
 
-export function commercialProductDescription(plan: CommercialPlan, cycle: "monthly" | "annual"): string {
+export function commercialProductDescription(
+  plan: Pick<SubscriptionPlan, "name" | "mirrorCredits">,
+  cycle: "monthly" | "annual",
+): string {
   const credits = plan.mirrorCredits.toLocaleString()
   return cycle === "annual"
     ? `${credits} Atai Credits per month, billed yearly. ${plan.name} plan.`
@@ -195,7 +203,7 @@ const COMMERCIAL_AVAILABILITY: Record<CommercialPlanId, PlanAvailability> = {
 
 const PLAN_ORDER: CommercialPlanId[] = ["explorer", "starter", "growth", "scale", "enterprise"]
 
-const PLAN_NAMES: Record<CommercialPlanId, string> = {
+export const PLAN_NAMES: Record<CommercialPlanId, string> = {
   explorer: "Explorer",
   starter: "Starter",
   growth: "Growth",
@@ -203,7 +211,7 @@ const PLAN_NAMES: Record<CommercialPlanId, string> = {
   enterprise: "Enterprise",
 }
 
-const PLAN_TAGLINES: Record<CommercialPlanId, string> = {
+export const PLAN_TAGLINES: Record<CommercialPlanId, string> = {
   explorer: "Map out your business, free. No card, no launch yet.",
   starter: "Launch your first real business and start selling.",
   growth: "Run several businesses and grow them with ads.",
@@ -218,13 +226,16 @@ function annualSavingsPct(monthly: number, annual: number | null): number | null
   return Math.round(((twelveMo - annual) / twelveMo) * 100)
 }
 
-function buildCommercialPlan(id: CommercialPlanId): CommercialPlan {
+function buildCommercialPlan(
+  id: CommercialPlanId,
+  env: NodeJS.ProcessEnv = process.env,
+): CommercialPlan {
   const pricing = PLAN_PRICING[id]
   const monthly = pricing.monthly
   const annual = pricing.annual
   const credits = PROVISIONAL_MONTHLY_CREDITS[id]
-  const dodoProductId = getCommercialDodoProductId(id)
-  const annualDodoProductId = getCommercialDodoProductId(id, "annual")
+  const dodoProductId = getCommercialDodoProductId(id, "monthly", env)
+  const annualDodoProductId = getCommercialDodoProductId(id, "annual", env)
   const isCustom = id === "enterprise"
   const isFree = id === "explorer"
 
@@ -277,12 +288,15 @@ function buildCommercialPlan(id: CommercialPlanId): CommercialPlan {
  * the environment, and a cached copy would keep serving a stale product id for
  * the life of the process. Building five small objects is not worth that.
  */
-export function getCommercialPlans(): CommercialPlan[] {
-  return PLAN_ORDER.map(buildCommercialPlan)
+export function getCommercialPlans(env: NodeJS.ProcessEnv = process.env): CommercialPlan[] {
+  return PLAN_ORDER.map((id) => buildCommercialPlan(id, env))
 }
 
-export function getCommercialPlanById(id: string): CommercialPlan | undefined {
-  return getCommercialPlans().find((p) => p.id === id)
+export function getCommercialPlanById(
+  id: string,
+  env: NodeJS.ProcessEnv = process.env,
+): CommercialPlan | undefined {
+  return getCommercialPlans(env).find((p) => p.id === id)
 }
 
 /**
@@ -291,8 +305,11 @@ export function getCommercialPlanById(id: string): CommercialPlan | undefined {
  * commercial plan maps to the product — so the legacy catalog remains the
  * authority for every pre-existing subscription.
  */
-export function resolveCommercialPlanByDodoProductId(productId: string): CommercialPlan | undefined {
-  return resolveCommercialProduct(productId)?.plan
+export function resolveCommercialPlanByDodoProductId(
+  productId: string,
+  env: NodeJS.ProcessEnv = process.env,
+): CommercialPlan | undefined {
+  return resolveCommercialProduct(productId, env)?.plan
 }
 
 /**

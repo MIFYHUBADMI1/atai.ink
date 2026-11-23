@@ -20,12 +20,14 @@ import { useBuildCosts } from "@/lib/client/build-costs"
 import { useCofounderPanel } from "@/components/cofounder/cofounder-panel"
 import { ensureProtocol, cn } from "@/lib/utils"
 import { toast } from "sonner"
+import type { ProjectAccessView } from "@/lib/billing/entitlements/types"
 
 // ─── Types ──────────────────────────────────────────────────────
 
 interface ProjectData {
   ok: boolean
   data: {
+    access?: ProjectAccessView
     project: {
       id: string
       name: string
@@ -384,6 +386,7 @@ export function EditWorkspace({ projectId, projectName, initialState }: EditWork
             projectName={projectName}
             totalumProjectId={project?.totalumProjectId}
             deploymentHistory={project?.deploymentHistory}
+            access={projectData?.data?.access}
             onRefresh={refreshProject}
           />
         )}
@@ -748,11 +751,12 @@ function QuickPrompts({ onSelect, disabled }: { onSelect: (text: string) => void
 // ─── Publish Panel ──────────────────────────────────────────────
 
 function PublishPanel({
-  projectId, projectName, totalumProjectId, deploymentHistory, onRefresh,
+  projectId, projectName, totalumProjectId, deploymentHistory, access, onRefresh,
 }: {
   projectId: string
   projectName: string
   totalumProjectId?: string
+  access?: ProjectAccessView
   deploymentHistory?: Array<{
     id: string; startedAt: number; completedAt?: number; status: string
     productionUrl?: string; customDomain?: string; creditsCharged?: number; error?: string
@@ -775,12 +779,18 @@ function PublishPanel({
   )
 
   const deployInfo = deployData?.data
+  const subdomainDenied = access?.subdomain.allowed === false ? access.subdomain.reason ?? "Your plan does not include a production subdomain." : null
+  const customDomainDenied = access?.customDomain.allowed === false ? access.customDomain.reason ?? "Your plan does not include a custom domain." : null
   const isDeployed = deployInfo?.status === "success"
   const isDeploying = deployInfo?.status === "deploying" || deploying
   const productionUrl = deployInfo?.productionUrl
   const customDomain = deployInfo?.customDomain
 
   async function handleDeploy() {
+    if (subdomainDenied) {
+      toast.error(subdomainDenied)
+      return
+    }
     setDeploying(true)
     try {
       const result = await postJson<{ message: string; creditsCharged: number }>(`/api/projects/${projectId}/deploy`, {})
@@ -795,6 +805,10 @@ function PublishPanel({
 
   async function handleAddDomain() {
     if (!domainHostname.trim()) return
+    if (customDomainDenied) {
+      toast.error(customDomainDenied)
+      return
+    }
     setDomainLoading(true)
     try {
       const result = await postJson<{
@@ -878,10 +892,16 @@ function PublishPanel({
         </div>
       )}
 
+      {subdomainDenied && (
+        <p role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400">
+          {subdomainDenied}
+        </p>
+      )}
+
       {/* Deploy button */}
       <Button
         onClick={handleDeploy}
-        disabled={isDeploying || !totalumProjectId}
+        disabled={isDeploying || !totalumProjectId || Boolean(subdomainDenied)}
         className="w-full gap-1.5"
       >
         {isDeploying ? (
@@ -907,6 +927,11 @@ function PublishPanel({
       {/* Custom domain */}
       <div className="space-y-2">
         <p className="text-xs font-medium">Custom Domain</p>
+        {customDomainDenied && (
+          <p role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400">
+            {customDomainDenied}
+          </p>
+        )}
         {customDomain && (
           <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2">
             <div className="flex items-center gap-2 min-w-0">
@@ -957,11 +982,11 @@ function PublishPanel({
             onChange={(e) => setDomainHostname(e.target.value)}
             placeholder="app.yourdomain.com"
             className="font-mono text-xs"
-            disabled={domainLoading}
+            disabled={domainLoading || Boolean(customDomainDenied)}
           />
           <Button
             onClick={handleAddDomain}
-            disabled={!domainHostname.trim() || domainLoading}
+            disabled={!domainHostname.trim() || domainLoading || Boolean(customDomainDenied)}
             variant="outline"
             size="sm"
             className="shrink-0 gap-1"

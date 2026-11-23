@@ -10,17 +10,19 @@ import { Badge } from "@/components/ui/badge"
 import { postJson, deleteJson, useProject } from "@/lib/client/api"
 import { ensureProtocol } from "@/lib/utils"
 import { toast } from "sonner"
+import type { ProjectAccessView } from "@/lib/billing/entitlements/types"
 
 interface PublishMenuProps {
   projectId: string
   projectName: string
   totalumProjectId?: string
+  access?: ProjectAccessView | null
   onDeployed?: () => void
 }
 
 type PublishStep = "closed" | "choose" | "deploying-subdomain" | "deploying-custom" | "custom-dns" | "confirm-remove-domain" | "done"
 
-export function PublishMenu({ projectId, projectName, totalumProjectId, onDeployed }: PublishMenuProps) {
+export function PublishMenu({ projectId, projectName, totalumProjectId, access, onDeployed }: PublishMenuProps) {
   const [step, setStep] = useState<PublishStep>("closed")
   const [deploying, setDeploying] = useState(false)
   const [domainHostname, setDomainHostname] = useState("")
@@ -33,6 +35,8 @@ export function PublishMenu({ projectId, projectName, totalumProjectId, onDeploy
   const [removingDomain, setRemovingDomain] = useState(false)
 
   const { project } = useProject(totalumProjectId ? projectId : null, { pollWhileBuilding: true })
+  const subdomainDenied = access?.subdomain.allowed === false ? access.subdomain.reason ?? "Your plan does not include a production subdomain." : null
+  const customDomainDenied = access?.customDomain.allowed === false ? access.customDomain.reason ?? "Your plan does not include a custom domain." : null
   const latestDeploy = [...(project?.deploymentHistory ?? [])].sort((a, b) => b.startedAt - a.startedAt)[0]
   const deployStatus = project?.deployment?.status ?? latestDeploy?.status ?? null
   const isDeployed = deployStatus === "success" || project?.state === "deployed"
@@ -43,6 +47,10 @@ export function PublishMenu({ projectId, projectName, totalumProjectId, onDeploy
     : null
 
   async function handleDeploySubdomain() {
+    if (subdomainDenied) {
+      toast.error(subdomainDenied)
+      return
+    }
     setDeploying(true)
     setStep("deploying-subdomain")
     try {
@@ -59,6 +67,14 @@ export function PublishMenu({ projectId, projectName, totalumProjectId, onDeploy
 
   async function handleDeployCustomDomain() {
     if (!domainHostname.trim()) return
+    if (customDomainDenied) {
+      toast.error(customDomainDenied)
+      return
+    }
+    if (!isDeployed && subdomainDenied) {
+      toast.error("This plan cannot publish the app to a production subdomain, so a custom domain cannot be attached yet.")
+      return
+    }
     setDomainLoading(true)
     try {
       // First deploy if not already deployed
@@ -341,6 +357,16 @@ export function PublishMenu({ projectId, projectName, totalumProjectId, onDeploy
               Choose how you want to publish your application. Both options cost 500 credits and include HTTPS, CDN, and lifetime hosting.
             </DialogDescription>
           </DialogHeader>
+          {subdomainDenied && (
+            <p role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+              {subdomainDenied}
+            </p>
+          )}
+          {customDomainDenied && (
+            <p role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+              {customDomainDenied}
+            </p>
+          )}
 
           {/* Two cards side by side */}
           <div className="grid gap-4 sm:grid-cols-2">
@@ -406,7 +432,7 @@ export function PublishMenu({ projectId, projectName, totalumProjectId, onDeploy
                 </div>
                 <Button
                   onClick={handleDeploySubdomain}
-                  disabled={isDeploying}
+                  disabled={isDeploying || Boolean(subdomainDenied)}
                   className="w-full gap-1.5"
                 >
                   {isDeploying ? (
@@ -496,6 +522,7 @@ export function PublishMenu({ projectId, projectName, totalumProjectId, onDeploy
                     }}
                     variant="outline"
                     className="w-full gap-1.5"
+                    disabled={Boolean(customDomainDenied)}
                   >
                     <Globe className="size-4" />
                     Add Custom Domain
@@ -503,7 +530,7 @@ export function PublishMenu({ projectId, projectName, totalumProjectId, onDeploy
                 ) : (
                   <Button
                     onClick={handleDeployCustomDomain}
-                    disabled={isDeploying || !domainHostname.trim()}
+                    disabled={isDeploying || !domainHostname.trim() || Boolean(customDomainDenied) || Boolean(subdomainDenied)}
                     variant="outline"
                     className="w-full gap-1.5"
                   >

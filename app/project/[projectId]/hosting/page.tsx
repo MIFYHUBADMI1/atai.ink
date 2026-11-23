@@ -8,6 +8,7 @@ import { store } from "@/lib/store/store"
 import { userHasBuiltBusiness } from "@/lib/dashboard/business-access"
 import { isConnectedBusiness } from "@/lib/connected-business/guards"
 import { BusinessLockedForProject, ConnectedBusinessNoBuildPage } from "@/components/workspace/business-locked"
+import { buildProjectAccessView } from "@/lib/billing/entitlements/presentation"
 
 export default async function ProjectHostingPage({ params }: { params: Promise<{ projectId: string }> }) {
   const user = await getCurrentUser()
@@ -19,6 +20,7 @@ export default async function ProjectHostingPage({ params }: { params: Promise<{
   if (!(await userHasBuiltBusiness(user.id))) return <BusinessLockedForProject section="Hosting" projectId={project.id} />
 
   const live = project.deploymentHistory?.some((d) => d.status === "success")
+  const access = await buildProjectAccessView(user.id, project).catch(() => null)
 
   return (
     <main className="min-h-svh bg-background text-foreground">
@@ -40,7 +42,7 @@ export default async function ProjectHostingPage({ params }: { params: Promise<{
         </div>
         {project.totalumProjectId ? (
           <div className="rounded-2xl border border-border/80 bg-card p-5">
-            <PublishMenu projectId={project.id} projectName={project.name} totalumProjectId={project.totalumProjectId} />
+            <PublishMenu projectId={project.id} projectName={project.name} totalumProjectId={project.totalumProjectId} access={access} />
           </div>
         ) : (
           <p className="rounded-2xl border border-border/80 bg-card p-5 text-sm text-muted-foreground">

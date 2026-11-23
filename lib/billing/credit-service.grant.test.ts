@@ -43,7 +43,7 @@ vi.mock("@/lib/logging/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 
-import { grantCredits } from "./credit-service"
+import { grantCredits, grantSubscriptionCredits } from "./credit-service"
 import type { ClientSession } from "mongodb"
 
 describe("grantCredits", () => {
@@ -138,6 +138,58 @@ describe("grantCredits", () => {
   it("rejects a caller session without an active transaction before any writes", async () => {
     const session = { inTransaction: () => false }
     await expect(grantCredits({ userId: "u1", creditType: "permanent", amount: 500, transactionType: "referral_bonus", idempotencyKey: "referral_verification_r", session: session as unknown as ClientSession })).rejects.toThrow("active transaction")
+    expect(userUpdateOne).not.toHaveBeenCalled()
+    expect(ledgerInsertOne).not.toHaveBeenCalled()
+  })
+
+  it("reads the subscription balance inside the transaction and records the applied before/after", async () => {
+    const result = await grantSubscriptionCredits({
+      userId: "u1",
+      amount: 500,
+      subscriptionId: "sub_1",
+      planId: "growth",
+      periodStart: 1_000,
+      periodEnd: 2_000,
+    })
+
+    expect(result).toBe(true)
+    expect(userFindOne).toHaveBeenCalledTimes(1)
+    const readOptions = userFindOne.mock.calls[0][1] as { session?: unknown }
+    expect(readOptions.session).toBeTruthy()
+    expect(ledgerInsertOne).toHaveBeenCalledTimes(1)
+    const entry = ledgerInsertOne.mock.calls[0][0] as Record<string, unknown>
+    expect(entry).toMatchObject({ balanceBefore: 100, balanceAfter: 600, amount: 500 })
+    expect(entry.metadata).toMatchObject({
+      totalBalanceBefore: 100,
+      totalBalanceAfter: 600,
+    })
+    const bucketPush = userUpdateOne.mock.calls.find((call) => call[1]?.$push?.creditBuckets)
+    expect(bucketPush?.[1].$push.creditBuckets).toMatchObject({
+      subscriptionId: "sub_1",
+      amount: 500,
+      originalAmount: 500,
+      expiresAt: 2_000,
+    })
+  })
+
+  it("replays a subscription grant without reading or writing a balance", async () => {
+    ledgerFindOne.mockResolvedValue({
+      id: "ledger_existing_sub",
+      idempotencyKey: `sub_grant_sub_1_period_${Math.floor(2_000 / 86400000)}`,
+      amount: 500,
+    })
+
+    const result = await grantSubscriptionCredits({
+      userId: "u1",
+      amount: 500,
+      subscriptionId: "sub_1",
+      planId: "growth",
+      periodStart: 1_000,
+      periodEnd: 2_000,
+    })
+
+    expect(result).toBe(true)
+    expect(userFindOne).not.toHaveBeenCalled()
     expect(userUpdateOne).not.toHaveBeenCalled()
     expect(ledgerInsertOne).not.toHaveBeenCalled()
   })

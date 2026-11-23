@@ -1,7 +1,6 @@
 import { getCurrentUser } from "@/lib/auth/session"
 import { getAvailableCredits } from "@/lib/billing/credit-service"
-import { PERMANENT_CREDIT_PACKS } from "@/lib/billing/config"
-import { getCommercialPlans } from "@/lib/billing/entitlements/commercial-plans"
+import { resolvePublicCommercialCatalog } from "@/lib/billing/catalog/published-resolver"
 import { adviseUpgrade, parseRequiredCredits } from "@/lib/billing/upgrade-options"
 import { fail, handleRouteError, ok } from "@/lib/api/respond"
 
@@ -17,14 +16,17 @@ export async function GET(req: Request) {
     if (!user) return fail("UNAUTHORIZED", "Sign in to see your credit options.", 401)
 
     const required = parseRequiredCredits(new URL(req.url).searchParams.get("required"))
-    const available = await getAvailableCredits(user.id)
+    const [available, catalog] = await Promise.all([
+      getAvailableCredits(user.id),
+      resolvePublicCommercialCatalog(),
+    ])
 
     return ok(
       adviseUpgrade({
         required,
         available,
-        plans: getCommercialPlans(),
-        packs: PERMANENT_CREDIT_PACKS,
+        plans: catalog.plans,
+        packs: catalog.packs,
       }),
     )
   } catch (e) {

@@ -42,7 +42,7 @@ const h = vi.hoisted(() => {
       case "$eq":
         return eq(value, arg)
       case "$ne":
-        return !eq(value, arg)
+        return Array.isArray(value) ? !value.some((v) => eq(v, arg)) : !eq(value, arg)
       case "$in":
         return (arg as unknown[]).some((a) => eq(value, a))
       case "$nin":
@@ -95,8 +95,15 @@ const h = vi.hoisted(() => {
   function applyUpdate(doc: Doc, update: Record<string, unknown>): void {
     const set = update.$set as Record<string, unknown> | undefined
     const inc = update.$inc as Record<string, number> | undefined
+    const add = update.$addToSet as Record<string, unknown> | undefined
     if (inc) for (const [k, v] of Object.entries(inc)) doc[k] = (typeof doc[k] === "number" ? (doc[k] as number) : 0) + v
     if (set) Object.assign(doc, set)
+    if (add) {
+      for (const [k, v] of Object.entries(add)) {
+        if (!Array.isArray(doc[k])) doc[k] = []
+        if (!(doc[k] as unknown[]).includes(v)) (doc[k] as unknown[]).push(v)
+      }
+    }
   }
 
   function sorted(rows: Doc[], sort: Record<string, 1 | -1> | undefined): Doc[] {
@@ -115,10 +122,23 @@ const h = vi.hoisted(() => {
 
   function makeCol(getDocs: () => Doc[]) {
     return {
-      async find(filter: Record<string, unknown> = {}, opts?: { sort?: Record<string, 1 | -1>; limit?: number }) {
-        const rows = sorted(getDocs().filter((d) => matches(d, filter)), opts?.sort)
-        const limited = opts?.limit ? rows.slice(0, opts.limit) : rows
-        return { async toArray() { return limited.slice() } }
+      find(filter: Record<string, unknown> = {}, opts?: { sort?: Record<string, 1 | -1>; limit?: number }) {
+        let rows = sorted(getDocs().filter((d) => matches(d, filter)), opts?.sort)
+        if (opts?.limit) rows = rows.slice(0, opts.limit)
+        const cursor = {
+          sort(spec: Record<string, 1 | -1>) {
+            rows = sorted(rows, spec)
+            return cursor
+          },
+          limit(n: number) {
+            rows = rows.slice(0, n)
+            return cursor
+          },
+          async toArray() {
+            return rows.slice()
+          },
+        }
+        return cursor
       },
       async findOne(filter: Record<string, unknown>) {
         return getDocs().find((d) => matches(d, filter)) ?? null
@@ -320,6 +340,15 @@ vi.mock("@/lib/db/collections", () => ({
   paymentRecordsCol: vi.fn().mockResolvedValue(h.cols.payments),
   subscriptionRecordsCol: vi.fn().mockResolvedValue(h.cols.subscriptions),
   creditLedgerCol: vi.fn().mockResolvedValue(h.cols.ledger),
+}))
+
+vi.mock("@/lib/db/mongodb", () => ({
+  getMongoClient: vi.fn(async () => ({
+    startSession: () => ({
+      withTransaction: async (fn: () => Promise<void>) => fn(),
+      endSession: vi.fn(async () => {}),
+    }),
+  })),
 }))
 
 vi.mock("@/lib/billing/credit-service", () => ({

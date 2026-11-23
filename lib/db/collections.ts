@@ -1,5 +1,5 @@
 import { getDb } from "@/lib/db/mongodb"
-import type { UserDoc, SessionDoc, VerificationTokenDoc, RateLimitDoc, ProjectAssetDoc, ProjectAttachmentDoc, ProviderUsageDoc, TopUpDoc, PublishEventDoc, ReferralDoc, DocFeedbackDoc, WebhookEventDoc, PlanningRunDoc, ProjectLikeDoc, UserFollowDoc, ProjectForkDoc, ProjectGitHubDoc, SeoAuditDoc, ContentItemDoc, BrandProfileDoc, GrowthTaskDoc, GrowthTaskHistoryDoc, CampaignDoc, CampaignHistoryDoc, AnalyticsEventDoc } from "@/lib/types/db"
+import type { UserDoc, SessionDoc, VerificationTokenDoc, RateLimitDoc, ProjectAssetDoc, ProjectAttachmentDoc, ProviderUsageDoc, TopUpDoc, PublishEventDoc, ReferralDoc, DocFeedbackDoc, WebhookEventDoc, PlanningRunDoc, ProjectLikeDoc, UserFollowDoc, ProjectForkDoc, ProjectGitHubDoc, SeoAuditDoc, ContentItemDoc, BrandProfileDoc, GrowthTaskDoc, GrowthTaskHistoryDoc, CampaignDoc, CampaignHistoryDoc, AnalyticsEventDoc, BillingResourceLockDoc, BillingResourceHoldDoc } from "@/lib/types/db"
 import type { BusinessDoc, BusinessMemberDoc, ConnectedApplicationDoc } from "@/lib/types/business"
 import type {
   FeatureRequestDoc,
@@ -13,7 +13,9 @@ import type { BusinessDomainDoc } from "@/lib/types/business-intake"
 import type { CofounderConversationMongoDoc, PendingActionRecord } from "@/lib/cofounder/types"
 import type { CofounderModelTierDoc } from "@/lib/cofounder/models"
 import type { ProjectChatMongoDoc } from "@/lib/types/collab-chat"
-import type { CreditLedgerEntry, BuildAuthorization, PaymentRecord, SubscriptionRecord } from "@/lib/billing/billing-types"
+import type { CreditLedgerEntry, BuildAuthorization, PaymentRecord, SubscriptionRecord, EntitlementVersionRecord, PlanCatalogVersionRecord } from "@/lib/billing/billing-types"
+import type { CommercialProductDoc, CommercialProductVersionDoc, DodoProductMappingDoc, CommercialCatalogVersionDoc } from "@/lib/billing/catalog/types"
+import { ensureCommercialCatalogIndexes } from "@/lib/billing/catalog/indexes"
 import type { ResourceDoc } from "@/lib/resources/admin-types"
 import type { LessonDoc } from "@/lib/lessons/admin-types"
 import type { GeneratedLessonDoc } from "@/lib/lessons/types"
@@ -158,6 +160,49 @@ export async function paymentRecordsCol() {
 
 export async function subscriptionRecordsCol() {
   return (await getDbCached()).collection<SubscriptionRecord>("subscription_records")
+}
+
+/** Published entitlement catalog versions (Phase A1). Immutable per version. */
+export async function entitlementVersionsCol() {
+  return (await getDbCached()).collection<EntitlementVersionRecord>("entitlement_versions")
+}
+
+/** Published price book versions (Phase A1). Immutable per version. */
+export async function planCatalogVersionsCol() {
+  return (await getDbCached()).collection<PlanCatalogVersionRecord>("plan_catalog_versions")
+}
+
+/** A7.0 commercial catalog: stable product identities. */
+export async function commercialProductsCol() {
+  return (await getDbCached()).collection<CommercialProductDoc>("commercial_products")
+}
+
+/** A7.0 commercial catalog: immutable product versions. */
+export async function commercialProductVersionsCol() {
+  return (await getDbCached()).collection<CommercialProductVersionDoc>("commercial_product_versions")
+}
+
+/** A7.0 commercial catalog: ATAI version ↔ Dodo product mappings. */
+export async function dodoProductMappingsCol() {
+  return (await getDbCached()).collection<DodoProductMappingDoc>("dodo_product_mappings")
+}
+
+/** A7.0 commercial catalog: immutable publication snapshots. */
+export async function commercialCatalogVersionsCol() {
+  return (await getDbCached()).collection<CommercialCatalogVersionDoc>("commercial_catalog_versions")
+}
+
+/**
+ * Short-lived locks and holds for entitlement capacity. Locks serialize a
+ * check-and-reserve section; holds are the durable capacity claim that bridges
+ * authorization, provider work and the final project/asset write.
+ */
+export async function billingResourceLocksCol() {
+  return (await getDbCached()).collection<BillingResourceLockDoc>("billing_resource_locks")
+}
+
+export async function billingResourceHoldsCol() {
+  return (await getDbCached()).collection<BillingResourceHoldDoc>("billing_resource_holds")
 }
 
 export async function planningRunsCol() {
@@ -500,6 +545,10 @@ async function runEnsureIndexes(): Promise<void> {
     projects.createIndex({ id: 1 }, { unique: true, sparse: true, name: "projects_id_unique" }),
     projects.createIndex({ requestedProjectId: 1 }, { unique: true, sparse: true, name: "projects_requested_project_id_unique" }),
     projects.createIndex({ userId: 1, updatedAt: -1 }),
+    projects.createIndex(
+      { "infrastructure.status": 1, "infrastructure.expiresAt": 1 },
+      { name: "projects_infrastructure_lifecycle" },
+    ),
     buildRuns.createIndex({ id: 1 }, { unique: true, sparse: true, name: "build_runs_id_unique" }),
     buildRuns.createIndex({ mirrorProjectId: 1, startedAt: -1 }),
     assets.createIndex({ id: 1 }, { unique: true, sparse: true, name: "project_assets_id_unique" }),
@@ -719,6 +768,58 @@ async function runEnsureIndexes(): Promise<void> {
     subRecords.createIndex({ dodoSubscriptionId: 1 }, { unique: true, name: "subscription_records_dodo_id_unique" }),
     subRecords.createIndex({ userId: 1, createdAt: -1 }),
     subRecords.createIndex({ status: 1, createdAt: -1 }),
+    // Migration/reconciliation: find records still needing pinned terms.
+    subRecords.createIndex({ termsStatus: 1, updatedAt: -1 }, { name: "subscription_records_terms_status" }),
+    subRecords.createIndex({ "purchasedTerms.pricingVersion": 1 }, { name: "subscription_records_pricing_version" }),
+  ])
+
+  // Published catalog version references (Phase A1) — one immutable doc per
+  // version. The unique index makes the idempotent seed a no-op on re-run.
+  const entitlementVersions = await entitlementVersionsCol()
+  await batchedIndexCreation([
+    entitlementVersions.createIndex({ version: 1 }, { unique: true, name: "entitlement_versions_version_unique" }),
+  ])
+
+  const planCatalogVersions = await planCatalogVersionsCol()
+  await batchedIndexCreation([
+    planCatalogVersions.createIndex({ version: 1 }, { unique: true, name: "plan_catalog_versions_version_unique" }),
+  ])
+
+  // A7.0 commercial catalog. Product identity is stable; versions are
+  // immutable; Dodo mappings are unique per environment and cycle.
+  const commercialProducts = await commercialProductsCol()
+  const commercialProductVersions = await commercialProductVersionsCol()
+  const dodoProductMappings = await dodoProductMappingsCol()
+  const commercialCatalogVersions = await commercialCatalogVersionsCol()
+  await ensureCommercialCatalogIndexes({
+    products: commercialProducts,
+    versions: commercialProductVersions,
+    mappings: dodoProductMappings,
+    catalogVersions: commercialCatalogVersions,
+  })
+
+  // Entitlement capacity locks/holds. Locks are deleted on release or by the
+  // next contender once expired; holds are queried by scope+kind (slots) or
+  // project (storage) and are never trusted after `expiresAt`.
+  const resourceLocks = await billingResourceLocksCol()
+  const resourceHolds = await billingResourceHoldsCol()
+  await batchedIndexCreation([
+    resourceLocks.createIndex(
+      { expiresAt: 1 },
+      { name: "billing_resource_locks_expiry_ttl", expireAfterSeconds: 0 },
+    ),
+    resourceHolds.createIndex(
+      { scopeKey: 1, kind: 1, expiresAt: 1 },
+      { name: "billing_resource_holds_scope_kind" },
+    ),
+    resourceHolds.createIndex(
+      { resourceId: 1, kind: 1, expiresAt: 1 },
+      { name: "billing_resource_holds_resource_kind" },
+    ),
+    resourceHolds.createIndex(
+      { expiresAt: 1 },
+      { name: "billing_resource_holds_expiry_ttl", expireAfterSeconds: 0 },
+    ),
   ])
 
   // Planning run indexes
