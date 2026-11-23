@@ -87,14 +87,20 @@ export function resolveCommercialProduct(
  * name (the legacy set owns "Atai — Starter"), and it makes a price change
  * create a new product instead of silently reusing a stale-priced one.
  */
-export function commercialProductName(plan: CommercialPlan, cycle: "monthly" | "annual"): string {
+export function commercialProductName(
+  plan: Pick<SubscriptionPlan, "name" | "priceUSD" | "annualPriceUSD">,
+  cycle: "monthly" | "annual",
+): string {
   const price = cycle === "annual" ? plan.annualPriceUSD ?? plan.priceUSD : plan.priceUSD
   return cycle === "annual"
     ? `Atai — ${plan.name} — $${price}/yr`
     : `Atai — ${plan.name} — $${price}/mo`
 }
 
-export function commercialProductDescription(plan: CommercialPlan, cycle: "monthly" | "annual"): string {
+export function commercialProductDescription(
+  plan: Pick<SubscriptionPlan, "name" | "mirrorCredits">,
+  cycle: "monthly" | "annual",
+): string {
   const credits = plan.mirrorCredits.toLocaleString()
   return cycle === "annual"
     ? `${credits} Atai Credits per month, billed yearly. ${plan.name} plan.`

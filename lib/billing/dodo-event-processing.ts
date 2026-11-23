@@ -12,7 +12,9 @@ import { LEGACY_SUBSCRIPTION_PLANS } from "@/lib/billing/config"
 import { resolveCommercialProduct } from "@/lib/billing/entitlements/commercial-plans"
 import { addMonths } from "@/lib/billing/entitlements/annual-scheduler"
 import { activatePaidSubscription } from "@/lib/billing/activate-subscription"
+import { resolveRuntimeCatalogProduct } from "@/lib/billing/catalog/runtime"
 import {
+  buildCatalogPurchasedTerms,
   buildCommercialPurchasedTerms,
   buildLegacyPurchasedTerms,
   buildPurchasedTermsFromRecord,
@@ -419,13 +421,28 @@ async function handleSubscriptionRenewed(data: Record<string, unknown> | undefin
   // Priority: the subscription's pinned terms, then its own stored legacy
   // allocation, then the resolved purchased product (only when no record
   // exists). Metadata `credits` is deliberately not a source of truth.
-  const commercialMatch = resolveCommercialProduct(productId)
   const metadataPlanId = typeof metadata?.planId === "string" ? metadata.planId : undefined
+  const runtimeProduct = await resolveRuntimeCatalogProduct({
+    dodoProductId: productId,
+    planId: metadataPlanId,
+    billingCycle: metadata?.billingCycle === "annual" ? "annual" : "monthly",
+  })
+  const commercialMatch = resolveCommercialProduct(productId)
   const legacyProduct = LEGACY_SUBSCRIPTION_PLANS.find((p) => p.dodoProductId && p.dodoProductId === productId)
   const legacyPlan = metadataPlanId
     ? LEGACY_SUBSCRIPTION_PLANS.find((p) => p.id === metadataPlanId)
     : undefined
-  const catalogAllocation = commercialMatch
+  const catalogAllocation =
+    runtimeProduct && runtimeProduct.productType === "subscription"
+      ? {
+          planId: runtimeProduct.planId,
+          planName: runtimeProduct.planName,
+          commercialPlanId: runtimeProduct.commercialPlanId,
+          billingCycle: runtimeProduct.billingCycle === "annual" ? ("annual" as const) : ("monthly" as const),
+          monthlyCredits: runtimeProduct.monthlyCredits,
+          dodoProductId: productId,
+        }
+      : commercialMatch
     ? {
         planId: commercialMatch.plan.id,
         planName: commercialMatch.plan.name,
@@ -637,9 +654,21 @@ async function handleSubscriptionPlanChanged(data: Record<string, unknown> | und
   if (!data) return
   const subscriptionId = data.subscription_id as string
   const productId = data.product_id as string
+  const runtimeProduct = await resolveRuntimeCatalogProduct({ dodoProductId: productId })
   const commercial = resolveCommercialProduct(productId)
   const legacyPlan = LEGACY_SUBSCRIPTION_PLANS.find((p) => p.dodoProductId === productId)
-  const newPlan = commercial?.plan ?? legacyPlan
+  const dbPlan =
+    runtimeProduct && runtimeProduct.productType === "subscription" ? runtimeProduct : undefined
+  const newPlan = dbPlan
+    ? {
+        id: dbPlan.planId,
+        name: dbPlan.planName,
+        mirrorCredits: dbPlan.monthlyCredits,
+        priceUSD: dbPlan.priceMinor / 100,
+        annualPriceUSD: null,
+        commercialPlanId: dbPlan.commercialPlanId,
+      }
+    : (commercial?.plan ?? legacyPlan)
   if (!newPlan) return
 
   // A plan change is a deliberate new purchase: re-pin the terms from the
@@ -653,11 +682,18 @@ async function handleSubscriptionPlanChanged(data: Record<string, unknown> | und
   // re-pin from a catalog that may have changed since. Only a genuinely
   // different plan (or interval) is an authoritative commercial change.
   const pinned = subscription.purchasedTerms
-  const billingInterval = commercial?.billingCycle ?? "monthly"
-  const samePlan = commercial
-    ? pinned?.commercialPlanId === commercial.plan.commercialPlanId &&
-      pinned?.billingInterval === commercial.billingCycle
-    : pinned?.planId === legacyPlan?.id
+  const billingInterval = dbPlan
+    ? dbPlan.billingCycle === "annual"
+      ? "annual"
+      : "monthly"
+    : (commercial?.billingCycle ?? "monthly")
+  const samePlan = dbPlan
+    ? pinned?.commercialPlanId === dbPlan.commercialPlanId &&
+      pinned?.billingInterval === billingInterval
+    : commercial
+      ? pinned?.commercialPlanId === commercial.plan.commercialPlanId &&
+        pinned?.billingInterval === commercial.billingCycle
+      : pinned?.planId === legacyPlan?.id
   if (samePlan) {
     logger.info("webhook.dodo", "Subscription plan unchanged; keeping pinned terms", {
       subscriptionId,
@@ -667,25 +703,16 @@ async function handleSubscriptionPlanChanged(data: Record<string, unknown> | und
   }
 
   const now = Date.now()
-  const priceUSD =
-    commercial?.billingCycle === "annual" ? (commercial.plan.annualPriceUSD ?? newPlan.priceUSD) : newPlan.priceUSD
+  const priceUSD = dbPlan
+    ? dbPlan.priceMinor / 100
+    : commercial?.billingCycle === "annual"
+      ? (commercial.plan.annualPriceUSD ?? newPlan.priceUSD)
+      : newPlan.priceUSD
   const terms =
     subscription &&
-    (commercial
-      ? buildCommercialPurchasedTerms(
-          {
-            subscriptionRecordId: subscription.id,
-            dodoSubscriptionId: subscriptionId,
-            dodoProductId: productId,
-            activatedAt: now,
-            periodStart: subscription.currentPeriodStart || now,
-            periodEnd: subscription.currentPeriodEnd || now,
-          },
-          commercial.plan,
-          commercial.billingCycle,
-        )
-      : legacyPlan
-        ? buildLegacyPurchasedTerms(
+    (dbPlan
+      ? dbPlan.entitlementSnapshot
+        ? buildCatalogPurchasedTerms(
             {
               subscriptionRecordId: subscription.id,
               dodoSubscriptionId: subscriptionId,
@@ -694,10 +721,59 @@ async function handleSubscriptionPlanChanged(data: Record<string, unknown> | und
               periodStart: subscription.currentPeriodStart || now,
               periodEnd: subscription.currentPeriodEnd || now,
             },
-            legacyPlan,
-            billingInterval,
+            {
+              planId: dbPlan.planId,
+              planName: dbPlan.planName,
+              commercialPlanId: dbPlan.commercialPlanId,
+              billingInterval,
+              priceMinor: dbPlan.priceMinor,
+              monthlyCredits: dbPlan.monthlyCredits,
+              entitlementSnapshot: dbPlan.entitlementSnapshot,
+              entitlementVersion: dbPlan.entitlementVersion,
+              pricingVersion: dbPlan.pricingVersion,
+            },
           )
-        : undefined)
+        : commercial
+          ? buildCommercialPurchasedTerms(
+              {
+                subscriptionRecordId: subscription.id,
+                dodoSubscriptionId: subscriptionId,
+                dodoProductId: productId,
+                activatedAt: now,
+                periodStart: subscription.currentPeriodStart || now,
+                periodEnd: subscription.currentPeriodEnd || now,
+              },
+              commercial.plan,
+              commercial.billingCycle,
+            )
+          : undefined
+      : commercial
+        ? buildCommercialPurchasedTerms(
+            {
+              subscriptionRecordId: subscription.id,
+              dodoSubscriptionId: subscriptionId,
+              dodoProductId: productId,
+              activatedAt: now,
+              periodStart: subscription.currentPeriodStart || now,
+              periodEnd: subscription.currentPeriodEnd || now,
+            },
+            commercial.plan,
+            commercial.billingCycle,
+          )
+        : legacyPlan
+          ? buildLegacyPurchasedTerms(
+              {
+                subscriptionRecordId: subscription.id,
+                dodoSubscriptionId: subscriptionId,
+                dodoProductId: productId,
+                activatedAt: now,
+                periodStart: subscription.currentPeriodStart || now,
+                periodEnd: subscription.currentPeriodEnd || now,
+              },
+              legacyPlan,
+              billingInterval,
+            )
+          : undefined)
 
   await subCol.updateOne(
     { dodoSubscriptionId: subscriptionId },
@@ -708,7 +784,11 @@ async function handleSubscriptionPlanChanged(data: Record<string, unknown> | und
         priceUSD,
         mirrorCredits: newPlan.mirrorCredits,
         billingCycle: billingInterval,
-        ...(commercial ? { commercialPlanId: commercial.plan.commercialPlanId } : {}),
+        ...(dbPlan?.commercialPlanId
+          ? { commercialPlanId: dbPlan.commercialPlanId }
+          : commercial
+            ? { commercialPlanId: commercial.plan.commercialPlanId }
+            : {}),
         ...(terms
           ? {
               purchasedTerms: terms,

@@ -6,7 +6,9 @@ import { getDodoClient } from "@/lib/billing/dodo-service"
 import { resolveCommercialProduct, getCommercialPlanById } from "@/lib/billing/entitlements/commercial-plans"
 import { addMonths } from "@/lib/billing/entitlements/annual-scheduler"
 import { ensureCatalogVersionRecordsSafe } from "@/lib/billing/entitlements/versions"
+import { resolveRuntimeCatalogProduct } from "@/lib/billing/catalog/runtime"
 import {
+  buildCatalogPurchasedTerms,
   buildCommercialPurchasedTerms,
   buildLegacyPurchasedTerms,
   buildPurchasedTermsFromRecord,
@@ -66,6 +68,17 @@ export async function activatePaidSubscription(input: ActivateInput): Promise<Ac
   const col = await subscriptionRecordsCol()
   const existing = await col.findOne({ dodoSubscriptionId: subscriptionId })
 
+  const catalogProduct = await resolveRuntimeCatalogProduct({
+    dodoProductId: input.productId,
+    planId: stringMeta(input.metadata, "planId"),
+    billingCycle:
+      stringMeta(input.metadata, "billingCycle") === "annual"
+        ? "annual"
+        : stringMeta(input.metadata, "billingCycle") === "monthly"
+          ? "monthly"
+          : undefined,
+  })
+
   // ── Commercial-first attribution ──────────────────────────────────────────
   // A Dodo product id that matches a commercial product (monthly or annual) is
   // the decisive signal: it can never be a legacy purchase. Resolving legacy
@@ -120,6 +133,45 @@ export async function activatePaidSubscription(input: ActivateInput): Promise<Ac
     commercialPlanId = pinned.commercialPlanId
     grantPeriodEnd = grantWindowEnd(now, billingCycle, input.nextBillingDate)
     buildTerms = () => pinned
+  } else if (catalogProduct && catalogProduct.productType === "subscription") {
+    if (catalogProduct.billingCycle === "one_time" || !catalogProduct.monthlyCredits) {
+      return { ok: false, reason: "missing_plan" }
+    }
+    billingCycle = catalogProduct.billingCycle
+    grantAmount = catalogProduct.monthlyCredits
+    mirrorCreditsForRecord = catalogProduct.monthlyCredits
+    recordPlanId = catalogProduct.planId
+    recordPlanName = catalogProduct.planName
+    recordPriceUSD = catalogProduct.priceMinor / 100
+    commercialPlanId = catalogProduct.commercialPlanId
+    grantPeriodEnd = grantWindowEnd(now, billingCycle, input.nextBillingDate)
+    const catalogSnapshot = catalogProduct.entitlementSnapshot
+    const codePlan = getCommercialPlanById(catalogProduct.planId)
+    if (!catalogSnapshot && !codePlan) return { ok: false, reason: "missing_plan" }
+    buildTerms = (recordId) => {
+      const ctx = {
+        subscriptionRecordId: recordId,
+        dodoSubscriptionId: subscriptionId,
+        dodoProductId: input.productId,
+        activatedAt: now,
+        periodStart: now,
+        periodEnd: input.nextBillingDate ? new Date(input.nextBillingDate).getTime() : grantPeriodEnd,
+      }
+      if (catalogSnapshot) {
+        return buildCatalogPurchasedTerms(ctx, {
+          planId: catalogProduct.planId,
+          planName: catalogProduct.planName,
+          commercialPlanId: catalogProduct.commercialPlanId,
+          billingInterval: billingCycle,
+          priceMinor: catalogProduct.priceMinor,
+          monthlyCredits: catalogProduct.monthlyCredits,
+          entitlementSnapshot: catalogSnapshot,
+          entitlementVersion: catalogProduct.entitlementVersion,
+          pricingVersion: catalogProduct.pricingVersion,
+        })
+      }
+      return buildCommercialPurchasedTerms(ctx, codePlan as CommercialPlan, billingCycle)
+    }
   } else if (commercialMatch) {
     const cPlan = commercialMatch.plan
     billingCycle = commercialMatch.billingCycle

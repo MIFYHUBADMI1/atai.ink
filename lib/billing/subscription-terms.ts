@@ -146,6 +146,38 @@ export function buildCommercialPurchasedTerms(
   })
 }
 
+export interface CatalogTermsInput {
+  planId: string
+  planName: string
+  commercialPlanId?: CommercialPlanId
+  billingInterval: BillingInterval
+  priceMinor: number
+  monthlyCredits: number
+  entitlementSnapshot: EntitlementSet
+  entitlementVersion: string
+  pricingVersion: string
+}
+
+/** Terms for a purchase resolved from an active database catalog version. */
+export function buildCatalogPurchasedTerms(
+  ctx: TermsContext,
+  input: CatalogTermsInput,
+): PurchasedTerms {
+  return assembleTerms(ctx, {
+    planId: input.planId,
+    commercialPlanId: input.commercialPlanId,
+    planName: input.planName,
+    billingInterval: input.billingInterval,
+    priceMinor: input.priceMinor,
+    monthlyCredits: input.monthlyCredits,
+    entitlementSnapshot: input.entitlementSnapshot,
+    entitlementEvidence: "purchase",
+    entitlementVersion: input.entitlementVersion,
+    pricingVersion: input.pricingVersion,
+    source: "activation",
+  })
+}
+
 /** Terms for a purchase from the legacy catalog (pre-existing Dodo products). */
 export function buildLegacyPurchasedTerms(
   ctx: TermsContext,

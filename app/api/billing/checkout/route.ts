@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/auth/session"
 import { getDodoConfig } from "@/lib/env"
-import { PERMANENT_CREDIT_PACKS } from "@/lib/billing/config"
 import {
-  getCommercialPlanById,
   commercialProductName,
   commercialProductDescription,
 } from "@/lib/billing/entitlements/commercial-plans"
+import {
+  PublishedCatalogError,
+  resolvePublicCommercialCatalog,
+} from "@/lib/billing/catalog/published-resolver"
 import { logger } from "@/lib/logging/logger"
 import {
   getOrCreateSubscriptionProduct,
@@ -79,6 +81,8 @@ export async function POST(req: Request) {
       )
     }
 
+    const catalog = await resolvePublicCommercialCatalog()
+
     const { apiKey, environment } = getDodoConfig()
 
     // Detect the user's country and resolve the preferred billing currency.
@@ -121,7 +125,7 @@ export async function POST(req: Request) {
         // legacy plan ids are not purchasable any more — existing
         // subscriptions keep renewing on their original Dodo product, but no
         // new checkout may be created against a legacy plan or price.
-        const plan = getCommercialPlanById(body.productId)
+        const plan = catalog.plans.find((candidate) => candidate.id === body.productId)
         if (!plan) {
           return NextResponse.json(
             { ok: false, error: { code: "PLAN_UNAVAILABLE", message: "That plan is no longer available. Choose Explorer, Starter, Growth or Scale." } },
@@ -200,7 +204,7 @@ export async function POST(req: Request) {
       }
 
       if (body.type === "permanent") {
-        const pack = PERMANENT_CREDIT_PACKS.find((p) => p.id === body.productId)
+        const pack = catalog.packs.find((p) => p.id === body.productId)
         if (!pack) {
           return NextResponse.json(
             { ok: false, error: { code: "INVALID_REQUEST", message: "Unknown credit pack ID" } },
@@ -215,6 +219,7 @@ export async function POST(req: Request) {
           `${pack.credits.toLocaleString()} permanent Atai Credits. Never expire.`,
           pack.priceUSD,
           pack.credits,
+          pack.dodoProductId,
         )
 
         logger.info("checkout", "Creating permanent credit checkout session", {
@@ -251,6 +256,15 @@ export async function POST(req: Request) {
       releaseSessionLock?.()
     }
   } catch (error) {
+    if (error instanceof PublishedCatalogError) {
+      logger.error("checkout", "Catalog unavailable for checkout", {
+        reason: error.reason,
+      })
+      return NextResponse.json(
+        { ok: false, error: { code: "CATALOG_UNAVAILABLE", message: error.message } },
+        { status: 503 },
+      )
+    }
     const message = error instanceof Error ? error.message : String(error)
     const isConfig = message.includes("not configured") || message.includes("PAYMENT_UNAVAILABLE")
     logger.error("checkout", "Failed to create checkout session", {
