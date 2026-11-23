@@ -8,6 +8,7 @@ import { AuthProvider } from "@/components/auth/auth-provider"
 import { CreditGateProvider } from "@/components/billing/credit-gate-provider"
 import { TourRoot } from "@/components/tour/tour-root"
 import { Toaster } from "@/components/ui/sonner"
+import { ReferralWelcomeToast } from "@/components/referral/referral-welcome-toast"
 import { SITE_URL } from "@/lib/env"
 import "./globals.css"
 
@@ -212,6 +213,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               {children}
               <TourRoot />
               <AtaiFeedbackLauncher />
+              <ReferralWelcomeToast />
               <Toaster />
             </CreditGateProvider>
           </AuthProvider>

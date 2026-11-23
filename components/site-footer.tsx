@@ -25,6 +25,7 @@ const FOOTER_COLS = [
       { href: "/#manage", label: "Run your business" },
       { href: "/#grow", label: "Reach customers" },
       { href: "/pricing", label: "Pricing" },
+      { href: "/referral-program", label: "Referral program" },
       { href: "/explore", label: "Explore businesses" },
     ],
   },
@@ -66,6 +67,9 @@ export function SiteFooter({ activePage, links, wrapperClassName }: SiteFooterPr
             <span className="font-mono text-xs">© 2026 Atai — Advanced Technologies and AI Enterprises.</span>
           </div>
           <div className="flex flex-wrap gap-x-5 gap-y-2">
+            <Link href="/referral-program" className={activePage === "referral-program" ? "text-foreground" : "hover:text-foreground"}>
+              Referral program
+            </Link>
             {links.map(({ href, label }) => (
               <Link
                 key={href}

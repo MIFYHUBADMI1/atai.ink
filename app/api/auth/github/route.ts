@@ -6,6 +6,7 @@ import { handleRouteError } from "@/lib/api/respond"
 
 const STATE_COOKIE   = "Atai_github_oauth_state"
 const REFERRAL_COOKIE = "Atai_referral"
+const REFERRAL_CODE_RE = /^ATAI-[A-Z0-9](?:[A-Z0-9-]{1,28}[A-Z0-9])$/
 
 export async function GET(req: Request) {
   try {
@@ -24,9 +25,9 @@ export async function GET(req: Request) {
     jar.set(STATE_COOKIE, stateVal, {
       httpOnly: true, sameSite: "lax", secure: true, path: "/", maxAge: 600,
     })
-    if (refCode) {
+    if (refCode && REFERRAL_CODE_RE.test(refCode) && !jar.get(REFERRAL_COOKIE)?.value) {
       jar.set(REFERRAL_COOKIE, refCode, {
-        httpOnly: true, sameSite: "lax", secure: true, path: "/", maxAge: 600,
+        httpOnly: true, sameSite: "lax", secure: true, path: "/", maxAge: 60 * 60 * 24 * 30,
       })
     }
 

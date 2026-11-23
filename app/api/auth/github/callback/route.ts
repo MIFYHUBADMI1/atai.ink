@@ -14,6 +14,15 @@ import { captureReferral } from "@/lib/referrals/referrals"
 const STATE_COOKIE    = "Atai_github_oauth_state"
 const REFERRAL_COOKIE = "Atai_referral"
 
+/** Tell the destination page that a referral bonus landed, so it can confirm
+ * the bonus to the person who just joined. */
+function withReferralWelcome(path: string, bonus: number): string {
+  if (bonus <= 0) return path
+  const [base, hash] = path.split("#")
+  const separator = base.includes("?") ? "&" : "?"
+  return `${base}${separator}welcome=referral&bonus=${bonus}${hash ? `#${hash}` : ""}`
+}
+
 export async function GET(req: Request) {
   const appUrl = getAppUrl()
   let stage = "start"
@@ -84,17 +93,23 @@ export async function GET(req: Request) {
       return NextResponse.redirect(`${appUrl}/login?error=account_${reason}`)
     }
 
+    let referralBonus = 0
     if (isNewUser) {
       const refCode = jar.get(REFERRAL_COOKIE)?.value
       if (refCode) {
-        await captureReferral(user.id, refCode).catch((e) => {
+        const captured = await captureReferral(user.id, refCode).catch((e) => {
           logger.error("api.auth.github.callback", "referral capture failed", { error: (e as Error).message })
+          return null
         })
+        referralBonus = captured?.signupBonus ?? 0
       }
       jar.delete(REFERRAL_COOKIE)
     }
 
-    const safePath = next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard"
+    const safePath = withReferralWelcome(
+      next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard",
+      referralBonus,
+    )
 
     // Session cap: confirm via emailed code before evicting old sessions.
     // Without SMTP (local dev) we fall through to normal session creation.

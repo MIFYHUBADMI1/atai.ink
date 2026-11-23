@@ -8,8 +8,8 @@
  */
 
 import { describe, expect, it, beforeAll } from "vitest"
-import { NextRequest, NextResponse } from "next/server"
-import { proxy, config, PUBLIC_API_PREFIXES } from "./proxy"
+import { NextRequest } from "next/server"
+import { proxy, config, PUBLIC_API_PREFIXES, referralCodeFrom } from "./proxy"
 
 // The portal host is read lazily per proxy() call — set it for the dev-host
 // tests (vitest runs with NODE_ENV=test, where no default host applies).
@@ -136,6 +136,40 @@ describe("proxy — intentionally-anonymous public surfaces", () => {
   it("keeps /api/health/planning session-gated at the edge (operator diagnostics)", () => {
     const result = proxy(runtimeRequest("/api/health/planning"))
     expect(result.status).toBe(401)
+  })
+})
+
+describe("proxy — referral attribution survives the signup journey", () => {
+  // sessionStorage is scoped to the page and can be lost across the OAuth
+  // redirect. The edge cookie is what keeps a Google or GitHub signup
+  // attributed to the referrer.
+  it("stores a valid ?ref= code in an httpOnly cookie on a page request", () => {
+    const result = proxy(new NextRequest(new URL("https://atai.ink/register?ref=atai-ada")))
+    expect(result.cookies.get("Atai_referral")?.value).toBe("ATAI-ADA")
+  })
+
+  it("stores the code on API requests too, so an early OAuth start still sees it", () => {
+    const result = proxy(new NextRequest(new URL("https://atai.ink/api/auth/google?ref=atai-ada")))
+    expect(result.cookies.get("Atai_referral")?.value).toBe("ATAI-ADA")
+  })
+
+  it("does not overwrite an existing code (first touch wins)", () => {
+    const req = new NextRequest(new URL("https://atai.ink/register?ref=atai-second"))
+    req.cookies.set("Atai_referral", "ATAI-FIRST")
+    const result = proxy(req)
+    // No Set-Cookie means the request's existing value survives untouched.
+    expect(result.cookies.get("Atai_referral")).toBeUndefined()
+    expect(req.cookies.get("Atai_referral")?.value).toBe("ATAI-FIRST")
+  })
+
+  it("ignores an absent or malformed ref", () => {
+    expect(proxy(new NextRequest(new URL("https://atai.ink/register"))).cookies.get("Atai_referral")).toBeUndefined()
+    expect(proxy(new NextRequest(new URL("https://atai.ink/register?ref=%3Cscript%3E"))).cookies.get("Atai_referral")).toBeUndefined()
+    expect(referralCodeFrom(new NextRequest(new URL("https://atai.ink/?ref=")))).toBeNull()
+  })
+
+  it("normalizes case and whitespace", () => {
+    expect(referralCodeFrom(new NextRequest(new URL("https://atai.ink/?ref=%20atai-ada%20")))).toBe("ATAI-ADA")
   })
 })
 

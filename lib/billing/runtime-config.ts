@@ -144,6 +144,8 @@ export const DEFAULT_INFRASTRUCTURE_PRICES: InfrastructurePrices = {
 const RewardsSchema = z.object({
   /** One-time welcome bonus granted on email verification. */
   welcomeBonus: z.number().int().min(0).max(1_000_000),
+  /** Extra credits granted to the referred user when they join through a referral link. */
+  referralSignupBonus: z.number().int().min(0).max(1_000_000),
   /** Credits granted to a referrer when a referred user verifies their email. */
   referralVerificationReward: z.number().int().min(0).max(1_000_000),
   /** Credits granted to a referrer when a referred user hits the usage milestone. */
@@ -155,6 +157,7 @@ export type Rewards = z.infer<typeof RewardsSchema>
 
 export const DEFAULT_REWARDS: Rewards = {
   welcomeBonus: 500,
+  referralSignupBonus: 500,
   referralVerificationReward: 500,
   referralMilestoneReward: 1_500,
   referralMilestoneThreshold: 75_000,

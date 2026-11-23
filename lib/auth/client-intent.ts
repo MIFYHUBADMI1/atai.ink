@@ -180,15 +180,22 @@ export async function resendSessionVerificationCode(verificationId: string, emai
   )
 }
 
+export interface RegisterResult {
+  referralCaptured?: boolean
+  referralBonus?: number
+  referrerName?: string
+}
+
 export async function registerWithPassword(payload: {
   name: string
   email: string
   password: string
   ref?: string
-}) {
-  await postJson("/api/auth/register", payload)
+}): Promise<RegisterResult> {
+  const result = await postJson<RegisterResult>("/api/auth/register", payload)
   clearReferralCode()
   await refreshSessionAfterAuth()
+  return result
 }
 
 export async function requestPasswordReset(email: string) {

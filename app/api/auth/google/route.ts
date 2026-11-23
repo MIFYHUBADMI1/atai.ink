@@ -5,6 +5,7 @@ import { buildGoogleAuthUrl } from "@/lib/auth/google"
 import { handleRouteError } from "@/lib/api/respond"
 
 const REFERRAL_COOKIE = "Atai_referral"
+const REFERRAL_CODE_RE = /^ATAI-[A-Z0-9](?:[A-Z0-9-]{1,28}[A-Z0-9])$/
 
 const STATE_COOKIE = "Atai_oauth_state"
 
@@ -34,13 +35,13 @@ export async function GET(req: Request) {
       path: "/",
       maxAge: 60 * 10,
     })
-    if (refCode) {
+    if (refCode && REFERRAL_CODE_RE.test(refCode) && !jar.get(REFERRAL_COOKIE)?.value) {
       jar.set(REFERRAL_COOKIE, refCode, {
         httpOnly: true,
         sameSite: "lax",
         secure: true,
         path: "/",
-        maxAge: 60 * 10,
+        maxAge: 60 * 60 * 24 * 30,
       })
     }
     return NextResponse.redirect(redirectUrl)

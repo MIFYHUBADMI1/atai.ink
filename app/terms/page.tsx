@@ -500,6 +500,7 @@ export default function TermsPage() {
           <Section id="referrals" number="15" icon={Gift} title="Referral Program">
             <p>Atai&apos;s referral program lets you earn credits by bringing other founders onto the platform. Every person you bring along makes the Atai community stronger — and we reward that.</p>
             <ul className="list-disc list-inside space-y-1 ml-4">
+              <li>When someone registers with your referral code, they receive <strong className="text-foreground">500 bonus credits</strong> on top of the standard welcome credits</li>
               <li>When a referred user registers with your referral code and verifies their account, you earn <strong className="text-foreground">500 credits</strong></li>
               <li>When the referred user reaches a qualifying build threshold, you earn an additional <strong className="text-foreground">1,500 credits</strong></li>
               <li>Maximum referral reward per referred user: 2,000 credits</li>

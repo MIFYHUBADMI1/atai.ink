@@ -2,6 +2,7 @@
 
 import { SiteHeader } from "@/components/site-header"
 import { SiteFooter } from "@/components/site-footer"
+import { ReferralProgramSection } from "@/components/referral/referral-program-section"
 import { useSession } from "@/lib/client/api"
 import { LandingHero } from "@/components/landing/hero"
 import {
@@ -40,6 +41,7 @@ export default function LandingPage() {
       <LandingManage />
       <LandingGrow />
       <LandingAudience />
+      <ReferralProgramSection />
       <LandingFinalCta ctaHref={ctaHref} ctaLabel={ctaLabel} />
       <SiteFooter />
     </main>

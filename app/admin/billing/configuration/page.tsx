@@ -35,6 +35,7 @@ interface BillingConfig {
     currency: string
     creditUnit: string
     welcomeBonusCredits: number
+    referralSignupBonus: number
     referralVerificationReward: number
     referralMilestoneReward: number
     referralMilestoneThreshold: number
@@ -814,6 +815,7 @@ function RewardsCard({
 }) {
   const fields = [
     { key: "welcomeBonusCredits", label: "Welcome bonus (on email verification)" },
+    { key: "referralSignupBonus", label: "Referral — bonus for the person who joins" },
     { key: "referralVerificationReward", label: "Referral — verification reward" },
     { key: "referralMilestoneReward", label: "Referral — milestone reward" },
     { key: "referralMilestoneThreshold", label: "Referral — milestone usage threshold" },
@@ -839,6 +841,7 @@ function RewardsCard({
       await patchJson("/api/admin/billing/configuration", {
         rewards: {
           welcomeBonus: nums.welcomeBonusCredits,
+          referralSignupBonus: nums.referralSignupBonus,
           referralVerificationReward: nums.referralVerificationReward,
           referralMilestoneReward: nums.referralMilestoneReward,
           referralMilestoneThreshold: nums.referralMilestoneThreshold,
@@ -1032,6 +1035,10 @@ export default function AdminConfigurationPage() {
                   <p className="font-medium">Referral Rewards</p>
                 </div>
                 <div className="space-y-3 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Signup Bonus (referred user)</span>
+                    <span className="font-mono text-green-500">+{config?.systemConfig.referralSignupBonus.toLocaleString()}</span>
+                  </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Verification Reward</span>
                     <span className="font-mono text-green-500">+{config?.systemConfig.referralVerificationReward.toLocaleString()}</span>

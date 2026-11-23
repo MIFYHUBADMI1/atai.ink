@@ -316,7 +316,7 @@ export default function RefundPolicyPage() {
               <ul className="list-disc list-inside space-y-1 ml-4">
                 <li>Credits consumed through platform actions (website analysis, plan generation, application generation, deployment)</li>
                 <li>Promotional credits (including welcome bonus credits)</li>
-                <li>Referral program credits (verification rewards and milestone rewards)</li>
+                <li>Referral program credits (signup bonus for the person who joins, verification rewards, and milestone rewards)</li>
                 <li>Credits consumed during beta or experimental feature usage</li>
                 <li>Infrastructure plan payments that have been activated and used</li>
                 <li>Credits consumed due to user error in configuration or input</li>
@@ -332,7 +332,7 @@ export default function RefundPolicyPage() {
             </h2>
             <div className="space-y-4 text-base leading-7 text-muted-foreground">
               <p>
-                Promotional credits — including the 500 free welcome credits, referral verification rewards (500 credits), and referral milestone rewards (1,500 credits) — are not eligible for refund, cash exchange, or transfer.
+                Promotional credits — including the 500 free welcome credits, the 500 referral signup bonus for the person who joins, referral verification rewards (500 credits), and referral milestone rewards (1,500 credits) — are not eligible for refund, cash exchange, or transfer.
               </p>
               <p>
                 Promotional credits have no cash value and cannot be redeemed for money except where required by applicable law.
