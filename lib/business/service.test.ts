@@ -191,3 +191,35 @@ describe("listing", () => {
     })
   })
 })
+
+describe("migration stamping", () => {
+  it("leaves the stamp absent when a founder creates the business", async () => {
+    const business = await createBusiness({ actor: userActor("u1"), name: "Acme", now: 100 })
+    expect(business.migration).toBeUndefined()
+  })
+
+  it("records the stamp on the business and its owner", async () => {
+    const stamp = { id: "mig_1", runId: "run-1", createdAt: 100 }
+    const business = await createBusiness({
+      actor: userActor("u1"),
+      name: "Acme",
+      migration: stamp,
+      now: 100,
+    })
+
+    expect(business.migration?.runId).toBe("run-1")
+    expect(fakes.members.docs).toHaveLength(1)
+    expect(fakes.members.docs[0].migration?.runId).toBe("run-1")
+  })
+
+  it("still seats exactly one owner when a migration creates the business", async () => {
+    const business = await createBusiness({
+      actor: userActor("u1"),
+      name: "Acme",
+      migration: { id: "mig_1", runId: "run-1", createdAt: 100 },
+      now: 100,
+    })
+    expect(fakes.businesses.docs).toHaveLength(1)
+    expect(fakes.members.docs.filter((member) => member.businessId === business.id)).toHaveLength(1)
+  })
+})

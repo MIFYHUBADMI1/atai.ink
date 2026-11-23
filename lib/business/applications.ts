@@ -2,7 +2,7 @@ import "server-only"
 
 import { AppError } from "@/lib/errors"
 import { connectedApplicationsCol } from "@/lib/db/collections"
-import { normalizeHostname } from "@/lib/domain/host"
+import { DomainInputError, normalizeHostname } from "@/lib/domain/host"
 import { cryptoId } from "@/lib/store/id"
 import {
   APPLICATION_KINDS,
@@ -40,17 +40,25 @@ export interface CreateApplicationInput {
   url: string
   /** Explicit path prefix. When omitted, the URL's own path is used. */
   basePath?: string
-  hostVerified?: boolean
   migration?: MigrationStamp
   now?: number
 }
 
 export async function createApplication(input: CreateApplicationInput): Promise<ConnectedApplicationDoc> {
-  await requireBusinessAccess({
+  const access = await requireBusinessAccess({
     businessId: input.businessId,
     actor: input.actor,
     permission: "apps.manage",
   })
+
+  // A new application belongs to nobody's scope yet, so a scoped member cannot
+  // be allowed to add one: that would quietly extend their own reach.
+  if (access.member?.scope.kind === "applications") {
+    throw new AppError(
+      "BUSINESS_FORBIDDEN",
+      "Creating an application requires access to the whole business.",
+    )
+  }
 
   if (!isApplicationKind(input.kind)) {
     throw new AppError("VALIDATION", "That application type isn't recognised.")
@@ -79,7 +87,8 @@ export async function createApplication(input: CreateApplicationInput): Promise<
     hostname,
     basePath,
     trustDomain: hostname,
-    hostVerified: input.hostVerified === true,
+    // Set only by the verification workflow, never by caller input.
+    hostVerified: false,
     connection: {},
     createdAt: now,
     updatedAt: now,
@@ -202,8 +211,11 @@ function splitAddress(
   let hostname: string
   try {
     hostname = normalizeHostname(parsed.hostname)
-  } catch {
-    throw new AppError("VALIDATION", "That doesn't look like a website address.")
+  } catch (error) {
+    throw new AppError(
+      "VALIDATION",
+      error instanceof DomainInputError ? error.message : "That doesn't look like a website address.",
+    )
   }
 
   let basePath: string

@@ -92,7 +92,7 @@ export async function addMember(input: {
   migration?: MigrationStamp
   session?: ClientSession
 }): Promise<BusinessMemberDoc> {
-  await requireBusinessAccess({
+  const access = await requireBusinessAccess({
     businessId: input.businessId,
     actor: input.actor,
     permission: "members.manage",
@@ -103,6 +103,7 @@ export async function addMember(input: {
     throw new AppError("VALIDATION", "Ownership is not granted by adding a member.")
   }
   const scope = await validateScope(input.businessId, input.scope ?? { kind: "all" })
+  assertScopeWithin(access.member?.scope, scope)
   return createMember({ ...input, scope })
 }
 
@@ -118,7 +119,7 @@ export async function reactivateMember(input: {
   scope: MemberScope
   now?: number
 }): Promise<BusinessMemberDoc> {
-  await requireBusinessAccess({
+  const access = await requireBusinessAccess({
     businessId: input.businessId,
     actor: input.actor,
     permission: "members.manage",
@@ -129,6 +130,7 @@ export async function reactivateMember(input: {
     throw new AppError("VALIDATION", "Ownership is not granted by reactivation.")
   }
   const scope = await validateScope(input.businessId, input.scope)
+  assertScopeWithin(access.member?.scope, scope)
 
   const col = await businessMembersCol()
   const member = await col.findOne({ businessId: input.businessId, userId: input.userId })
@@ -217,6 +219,21 @@ export async function resolveMember(input: {
     userId: input.userId,
     status: "active",
   })
+}
+
+/**
+ * A member may only hand out what they already hold. Without this, an admin
+ * scoped to one application could grant another member the rest of the business.
+ */
+function assertScopeWithin(granted: MemberScope | undefined, requested: MemberScope): void {
+  if (!granted || granted.kind === "all") return
+  if (requested.kind === "all") {
+    throw new AppError("BUSINESS_FORBIDDEN", "You can only grant applications you have access to.")
+  }
+  const allowed = new Set(granted.applicationIds)
+  if (requested.applicationIds.some((id) => !allowed.has(id))) {
+    throw new AppError("BUSINESS_FORBIDDEN", "You can only grant applications you have access to.")
+  }
 }
 
 /**

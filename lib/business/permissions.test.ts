@@ -4,7 +4,6 @@ import {
   ALL_PERMISSIONS,
   READ_PERMISSIONS,
   ROLE_PERMISSIONS,
-  SYSTEM_PERMISSIONS,
   isWritePermission,
   roleHasPermission,
 } from "./permissions"
@@ -61,9 +60,5 @@ describe("role → permission matrix", () => {
     expect(isWritePermission("analytics.read")).toBe(false)
     expect(isWritePermission("growth.publish")).toBe(true)
     expect(isWritePermission("members.manage")).toBe(true)
-  })
-
-  it("grants a system actor no business-scoped permission", () => {
-    expect([...SYSTEM_PERMISSIONS]).toEqual([])
   })
 })

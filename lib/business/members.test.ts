@@ -401,3 +401,131 @@ describe("reading membership", () => {
     expect(await resolveMember({ businessId: "biz_2", userId: "u_owner", actor: userActor("u9") })).toBeNull()
   })
 })
+
+describe("granting application scope", () => {
+  function seedScopedAdmin(applicationIds: string[]) {
+    seedMember({
+      userId: "u_admin",
+      role: "admin",
+      scope: { kind: "applications", applicationIds },
+    })
+  }
+
+  beforeEach(() => {
+    fakes.applications.docs.push(
+      makeApplication({ id: "app_shop", basePath: "/shop" }),
+      makeApplication({ id: "app_dash", basePath: "/dashboard" }),
+    )
+  })
+
+  it("lets a scoped admin grant an application they hold", async () => {
+    seedScopedAdmin(["app_shop"])
+    const member = await addMember({
+      businessId: "biz_1",
+      userId: "u2",
+      actor: userActor("u_admin"),
+      role: "marketer",
+      scope: { kind: "applications", applicationIds: ["app_shop"] },
+      now: NOW,
+    })
+    expect(member.scope).toEqual({ kind: "applications", applicationIds: ["app_shop"] })
+  })
+
+  it("refuses an application the actor does not hold", async () => {
+    seedScopedAdmin(["app_shop"])
+    await expect(
+      addMember({
+        businessId: "biz_1",
+        userId: "u2",
+        actor: userActor("u_admin"),
+        role: "marketer",
+        scope: { kind: "applications", applicationIds: ["app_dash"] },
+        now: NOW,
+      }),
+    ).rejects.toMatchObject({ code: "BUSINESS_FORBIDDEN" })
+    expect(fakes.members.docs.some((member) => member.userId === "u2")).toBe(false)
+  })
+
+  it("refuses to grant the whole business from a scoped membership", async () => {
+    seedScopedAdmin(["app_shop"])
+    await expect(
+      addMember({
+        businessId: "biz_1",
+        userId: "u2",
+        actor: userActor("u_admin"),
+        role: "marketer",
+        scope: { kind: "all" },
+        now: NOW,
+      }),
+    ).rejects.toMatchObject({ code: "BUSINESS_FORBIDDEN" })
+  })
+
+  it("refuses the implicit whole-business default from a scoped membership", async () => {
+    seedScopedAdmin(["app_shop"])
+    await expect(
+      addMember({ businessId: "biz_1", userId: "u2", actor: userActor("u_admin"), role: "marketer", now: NOW }),
+    ).rejects.toMatchObject({ code: "BUSINESS_FORBIDDEN" })
+  })
+
+  it("lets an unscoped admin grant any valid scope", async () => {
+    seedMember({ userId: "u_admin_all", role: "admin", scope: { kind: "all" } })
+    const member = await addMember({
+      businessId: "biz_1",
+      userId: "u2",
+      actor: userActor("u_admin_all"),
+      role: "marketer",
+      scope: { kind: "applications", applicationIds: ["app_dash"] },
+      now: NOW,
+    })
+    expect(member.scope).toEqual({ kind: "applications", applicationIds: ["app_dash"] })
+  })
+
+  it("still refuses a foreign application before the scope check", async () => {
+    seedScopedAdmin(["app_shop"])
+    fakes.applications.docs.push(makeApplication({ id: "app_other", businessId: "biz_2" }))
+    await expect(
+      addMember({
+        businessId: "biz_1",
+        userId: "u2",
+        actor: userActor("u_admin"),
+        role: "marketer",
+        scope: { kind: "applications", applicationIds: ["app_other"] },
+        now: NOW,
+      }),
+    ).rejects.toMatchObject({ code: "VALIDATION" })
+  })
+
+  it("applies the same rule when reactivating", async () => {
+    seedScopedAdmin(["app_shop"])
+    await addMember({
+      businessId: "biz_1",
+      userId: "u2",
+      actor: userActor("u_admin"),
+      role: "marketer",
+      scope: { kind: "applications", applicationIds: ["app_shop"] },
+      now: NOW,
+    })
+    await removeMember({ businessId: "biz_1", userId: "u2", actor: userActor("u_admin"), now: NOW })
+
+    await expect(
+      reactivateMember({
+        businessId: "biz_1",
+        userId: "u2",
+        actor: userActor("u_admin"),
+        role: "marketer",
+        scope: { kind: "applications", applicationIds: ["app_dash"] },
+        now: NOW,
+      }),
+    ).rejects.toMatchObject({ code: "BUSINESS_FORBIDDEN" })
+
+    const restored = await reactivateMember({
+      businessId: "biz_1",
+      userId: "u2",
+      actor: userActor("u_admin"),
+      role: "marketer",
+      scope: { kind: "applications", applicationIds: ["app_shop"] },
+      now: NOW,
+    })
+    expect(restored.status).toBe("active")
+  })
+})

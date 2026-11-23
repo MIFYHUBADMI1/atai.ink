@@ -324,3 +324,52 @@ describe("application authorisation", () => {
     ).rejects.toMatchObject({ code: "BUSINESS_FORBIDDEN" })
   })
 })
+
+describe("application creation and scope", () => {
+  it("refuses creation by a member scoped to particular applications", async () => {
+    const shop = await createApplication({
+      businessId: "biz_1",
+      actor: OWNER,
+      name: "Shop",
+      kind: "storefront",
+      url: "example.com/shop",
+      now: NOW,
+    })
+    seedMember({
+      userId: "u_scoped",
+      role: "developer",
+      scope: { kind: "applications", applicationIds: [shop.id] },
+    })
+
+    await expect(
+      createApplication({
+        businessId: "biz_1",
+        actor: userActor("u_scoped"),
+        name: "New",
+        kind: "other",
+        url: "example.com/new",
+        now: NOW,
+      }),
+    ).rejects.toMatchObject({ code: "BUSINESS_FORBIDDEN" })
+    expect(fakes.applications.docs).toHaveLength(1)
+  })
+
+  it("lets an unscoped developer create an application", async () => {
+    seedMember({ userId: "u_dev", role: "developer", scope: { kind: "all" } })
+    const created = await createApplication({
+      businessId: "biz_1",
+      actor: userActor("u_dev"),
+      name: "New",
+      kind: "other",
+      url: "example.com/new",
+      now: NOW,
+    })
+    expect(created.businessId).toBe("biz_1")
+  })
+
+  it("explains why a single-label host is rejected", async () => {
+    await expect(
+      createApplication({ businessId: "biz_1", actor: OWNER, name: "Local", kind: "other", url: "localhost", now: NOW }),
+    ).rejects.toThrow(/full website address/)
+  })
+})

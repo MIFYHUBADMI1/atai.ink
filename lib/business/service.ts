@@ -4,7 +4,12 @@ import { AppError } from "@/lib/errors"
 import { businessMembersCol, businessesCol } from "@/lib/db/collections"
 import { getMongoClient } from "@/lib/db/mongodb"
 import { cryptoId } from "@/lib/store/id"
-import { BUSINESS_SCHEMA_VERSION, type BusinessDoc, type SuggestedNameSource } from "@/lib/types/business"
+import {
+  BUSINESS_SCHEMA_VERSION,
+  type BusinessDoc,
+  type MigrationStamp,
+  type SuggestedNameSource,
+} from "@/lib/types/business"
 import { requireBusinessAccess } from "./access"
 import { addOwner } from "./members"
 import { type Actor, systemActor } from "./permissions"
@@ -31,6 +36,8 @@ export interface CreateBusinessInput {
   name?: string
   suggestedName?: string
   suggestedNameSource?: SuggestedNameSource
+  /** Present only when a migration creates the business; absent for founders. */
+  migration?: MigrationStamp
   now?: number
 }
 
@@ -59,6 +66,7 @@ export async function createBusiness(input: CreateBusinessInput): Promise<Busine
   } else if (input.suggestedNameSource) {
     business.suggestedNameSource = input.suggestedNameSource
   }
+  if (input.migration) business.migration = input.migration
 
   const client = await getMongoClient()
   const session = client.startSession()
@@ -69,6 +77,7 @@ export async function createBusiness(input: CreateBusinessInput): Promise<Busine
         businessId: business.id,
         userId: input.actor.id,
         actor: systemActor("business-creation"),
+        migration: input.migration,
         now,
         session,
       })
