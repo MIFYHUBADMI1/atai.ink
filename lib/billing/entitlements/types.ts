@@ -51,6 +51,14 @@ export interface EntitlementSet {
   preserveLegacyBehavior: boolean
   /** True only for genuine planning-only (new Explorer) accounts. */
   planningOnly: boolean
+  /**
+   * Where this resolved set came from. Informational only — never used for an
+   * authorization decision. `pinned` means a frozen purchase snapshot;
+   * `review_provisional` means a provisional snapshot frozen pending review;
+   * `needs_review` means no snapshot exists yet and legacy compatibility is
+   * being preserved until the migration pins the record.
+   */
+  entitlementSource?: "pinned" | "legacy" | "free" | "review_provisional" | "needs_review"
 
   businesses: { max: number | "unlimited"; current: number }
   productionApps: { max: number | "unlimited"; current: number }
@@ -107,4 +115,22 @@ export interface EntitlementCheck {
   allowed: boolean
   code?: string
   reason?: string
+}
+
+/** Presentation-safe entitlement decision for one operation. */
+export type OperationAccess = EntitlementCheck
+
+/**
+ * Server-computed access view for one project. The frontend may use it to
+ * disable actions and explain limits, but the same checks are enforced again
+ * on the mutating request — this object is never an authorization token.
+ */
+export interface ProjectAccessView {
+  customDomain: OperationAccess & { limit: number; consumed: number }
+  subdomain: OperationAccess & { limit: number; current: number }
+  storage: OperationAccess & { limitBytes: number | null; usedBytes: number }
+  database: OperationAccess
+  specialistTeam: OperationAccess
+  competition: OperationAccess
+  agent: OperationAccess
 }

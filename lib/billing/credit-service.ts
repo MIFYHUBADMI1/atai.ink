@@ -21,6 +21,7 @@
 import "server-only"
 import { ObjectId, type ClientSession } from "mongodb"
 import { usersCol, creditLedgerCol } from "@/lib/db/collections"
+import { getMongoClient } from "@/lib/db/mongodb"
 import { cryptoId } from "@/lib/store/id"
 import { logger } from "@/lib/logging/logger"
 import { planCreditConsumption } from "@/lib/billing/consume-plan"
@@ -140,7 +141,7 @@ function normalizeProjectId(projectId?: string | null): string | undefined {
   return trimmed.slice(0, 128)
 }
 
-async function recordLedgerEntry(params: {
+export async function recordLedgerEntry(params: {
   userId: string
   creditType: CreditType
   amount: number
@@ -148,6 +149,8 @@ async function recordLedgerEntry(params: {
   transactionType: LedgerTransactionType
   referenceType?: string
   referenceId?: string
+  /** Original payment that funded this entry, when known (Phase A2). */
+  paymentId?: string
   balanceBefore: number
   balanceAfter: number
   idempotencyKey: string
@@ -170,6 +173,7 @@ async function recordLedgerEntry(params: {
     transactionType: params.transactionType,
     referenceType: params.referenceType,
     referenceId: params.referenceId,
+    ...(params.paymentId ? { paymentId: params.paymentId } : {}),
     balanceBefore: params.balanceBefore,
     balanceAfter: params.balanceAfter,
     idempotencyKey: params.idempotencyKey,
@@ -275,7 +279,7 @@ export async function grantCredits(params: {
   const users = await usersCol()
   const field = params.creditType === "subscription" ? "subscriptionCredits" : "permanentCredits"
 
-  const client = (await import("@/lib/db/mongodb")).getMongoClient
+  const client = getMongoClient
   const session = params.session ?? (await client()).startSession()
 
   try {
@@ -429,7 +433,7 @@ export async function consumeCredits(params: {
   permanentConsumed: number
 }> {
   const users = await usersCol()
-  const client = (await import("@/lib/db/mongodb")).getMongoClient
+  const client = getMongoClient
   const mongoClient = await client()
   const session = mongoClient.startSession()
 
@@ -772,8 +776,6 @@ export async function grantSubscriptionCredits(params: {
   }
 
   const users = await usersCol()
-  const balance = await getBalance(params.userId)
-  const newBalance = balance.total + params.amount
   const now = Date.now()
   const newBucket: import("@/lib/types/db").CreditBucket = {
     bucketId: `bucket_${cryptoId()}`,
@@ -785,12 +787,14 @@ export async function grantSubscriptionCredits(params: {
     createdAt: now,
   }
 
-  const client = (await import("@/lib/db/mongodb")).getMongoClient
+  const client = getMongoClient
   const mongoClient = await client()
   const session = mongoClient.startSession()
 
   try {
     let success = false
+    let applied = false
+    let grantedBalanceAfter = 0
 
     await session.withTransaction(async () => {
       // Re-check idempotency inside the transaction to prevent races
@@ -803,6 +807,18 @@ export async function grantSubscriptionCredits(params: {
         success = true
         return
       }
+
+      // Read the balance inside the transaction. The grant's ledger entry must
+      // describe the state it actually applied to; a pre-transaction read can
+      // be stale when a renewal, consumption or reversal commits first.
+      const freshUser = await users.findOne({ id: params.userId }, { session })
+      if (!freshUser) {
+        throw new Error(`Cannot grant subscription credits: user ${params.userId} does not exist`)
+      }
+      const balanceBefore = freshUser.subscriptionCredits ?? 0
+      const totalBefore = freshUser.credits ?? 0
+      const balanceAfter = balanceBefore + params.amount
+      const totalAfter = totalBefore + params.amount
 
       // Grant the credits (increment flat fields). Without this matchedCount
       // guard, a grant for a deleted/never-registered user id would still
@@ -841,28 +857,33 @@ export async function grantSubscriptionCredits(params: {
         transactionType: "subscription_grant",
         referenceType: "subscription",
         referenceId: params.subscriptionId,
-        balanceBefore: balance.subscription,
-        balanceAfter: balance.subscription + params.amount,
+        balanceBefore,
+        balanceAfter,
         idempotencyKey,
         metadata: {
           ...params.metadata,
           planId: params.planId,
           periodStart: params.periodStart,
           periodEnd: params.periodEnd,
+          bucketId: newBucket.bucketId,
+          totalBalanceBefore: totalBefore,
+          totalBalanceAfter: totalAfter,
         },
         session,
       })
 
+      grantedBalanceAfter = balanceAfter
+      applied = true
       success = true
     })
 
-    if (success) {
+    if (success && applied) {
       logger.info("credit.grant", "Subscription credits granted (with bucket)", {
         userId: params.userId,
         amount: params.amount,
         subscriptionId: params.subscriptionId,
         planId: params.planId,
-        newBalance,
+        newBalance: grantedBalanceAfter,
       })
     }
 
@@ -890,42 +911,18 @@ export async function expireSubscriptionCredits(params: {
   userId: string
   subscriptionId: string
   periodStart?: number
+  /**
+   * Only remove buckets that have reached this timestamp. A renewal passes
+   * the renewal time so a month granted concurrently by the annual sweep is
+   * not pulled out from under its own ledger entry. Omit to expire the whole
+   * subscription (subscription.expired).
+   */
+  expiresAtOrBefore?: number
   metadata?: Record<string, unknown>
 }): Promise<boolean> {
   const users = await usersCol()
-  const user = await users.findOne({ id: params.userId })
-  if (!user) return false
-
-  const balance = await getBalance(params.userId)
-  if (balance.subscription <= 0) return true
-
-  const buckets: import("@/lib/types/db").CreditBucket[] = user.creditBuckets ?? []
-  const legacyFlatAccount = buckets.length === 0
-  const ownBuckets = buckets.filter((b) => b.subscriptionId === params.subscriptionId)
-
-  // Amount to expire: every own bucket's remaining amount (or the full flat
-  // balance for a legacy bucket-less account), capped at the actual
-  // subscription balance to prevent over-expiration if the flat field is out
-  // of sync.
-  let amount = legacyFlatAccount
-    ? balance.subscription
-    : ownBuckets.reduce((sum, b) => sum + b.amount, 0)
-  amount = Math.min(amount, balance.subscription)
-
-  if (amount <= 0) return true
-
-  // Stable idempotency key — include periodStart when available so renewals
-  // for different periods produce different keys
-  const idempotencyKey = params.periodStart
-    ? `sub_expire_${params.subscriptionId}_${Math.floor(params.periodStart / 86400000)}`
-    : legacyFlatAccount
-      ? `sub_expire_${params.subscriptionId}`
-      : `sub_expire_bucket_${ownBuckets
-          .map((b) => b.bucketId ?? `${b.subscriptionId}_${Math.floor(b.expiresAt / 86400000)}`)
-          .sort()
-          .join(",")}`
-
-  const client = (await import("@/lib/db/mongodb")).getMongoClient
+  const expiryCutoff = params.expiresAtOrBefore
+  const client = getMongoClient
   const mongoClient = await client()
   const session = mongoClient.startSession()
 
@@ -933,7 +930,44 @@ export async function expireSubscriptionCredits(params: {
     let success = false
 
     await session.withTransaction(async () => {
-      // Idempotency check
+      // Read everything this expiry depends on inside the transaction. A
+      // pre-transaction read could describe a bucket that a concurrent grant,
+      // consumption or reversal has already changed.
+      const freshUser = await users.findOne({ id: params.userId }, { session })
+      if (!freshUser) {
+        success = false
+        return
+      }
+
+      const freshBuckets: import("@/lib/types/db").CreditBucket[] = freshUser.creditBuckets ?? []
+      const freshLegacyFlat = freshBuckets.length === 0
+      const freshOwnBuckets = freshBuckets.filter(
+        (b) =>
+          b.subscriptionId === params.subscriptionId &&
+          (expiryCutoff === undefined || b.expiresAt <= expiryCutoff),
+      )
+      const freshBalance = await getBalance(params.userId, session)
+      if (freshBalance.subscription <= 0) {
+        success = true
+        return
+      }
+
+      const freshAmount = Math.min(
+        freshLegacyFlat ? freshBalance.subscription : freshOwnBuckets.reduce((sum, b) => sum + b.amount, 0),
+        freshBalance.subscription,
+      )
+
+      // Stable idempotency key — include periodStart when available so renewals
+      // for different periods produce different keys.
+      const idempotencyKey = params.periodStart
+        ? `sub_expire_${params.subscriptionId}_${Math.floor(params.periodStart / 86400000)}`
+        : freshLegacyFlat
+          ? `sub_expire_${params.subscriptionId}`
+          : `sub_expire_bucket_${freshOwnBuckets
+              .map((b) => b.bucketId ?? `${b.subscriptionId}_${Math.floor(b.expiresAt / 86400000)}`)
+              .sort()
+              .join(",")}`
+
       const existingLedger = await (await creditLedgerCol()).findOne({ idempotencyKey }, { session })
       if (existingLedger) {
         logger.info("credit.expire", "Expiration already recorded (idempotent)", { idempotencyKey })
@@ -941,28 +975,14 @@ export async function expireSubscriptionCredits(params: {
         return
       }
 
-      // Re-read the user inside the transaction to get the latest bucket state
-      const freshUser = await users.findOne({ id: params.userId }, { session })
-      if (!freshUser) {
-        success = false
-        return
-      }
-
-      // Recalculate amount based on fresh data — buckets may have been
-      // consumed or swept since the pre-transaction read. getBalance MUST run
-      // on the same session: a session-less call would open a parallel
-      // transaction that writes this same document and deadlocks.
-      const freshBuckets: import("@/lib/types/db").CreditBucket[] = freshUser.creditBuckets ?? []
-      const freshLegacyFlat = freshBuckets.length === 0
-      const freshOwnBuckets = freshBuckets.filter((b) => b.subscriptionId === params.subscriptionId)
-      const freshBalance = await getBalance(params.userId, session)
-
-      const freshAmount = Math.min(
-        freshLegacyFlat ? freshBalance.subscription : freshOwnBuckets.reduce((sum, b) => sum + b.amount, 0),
-        freshBalance.subscription,
-      )
-
       if (freshAmount <= 0) {
+        // No bucket of this subscription remains. Do not write a no-op ledger
+        // for accounts that never had one; a raced-away bucket still marks the
+        // key so a webhook retry does not loop.
+        if (freshOwnBuckets.length === 0 && !freshLegacyFlat) {
+          success = true
+          return
+        }
         // Nothing to expire (buckets already consumed/swept or balance is 0)
         // Record a no-op ledger entry to mark the idempotency key as used
         await recordLedgerEntry({
@@ -994,7 +1014,10 @@ export async function expireSubscriptionCredits(params: {
       // Remove every bucket of THIS subscription (annual: up to 12)
       if (freshOwnBuckets.length > 0) {
         ;(updateOps as Record<string, unknown>).$pull = {
-          creditBuckets: { subscriptionId: params.subscriptionId },
+          creditBuckets:
+            expiryCutoff === undefined
+              ? { subscriptionId: params.subscriptionId }
+              : { subscriptionId: params.subscriptionId, expiresAt: { $lte: expiryCutoff } },
         }
       }
 
@@ -1109,7 +1132,7 @@ export async function expireOverdueBuckets(params: {
     if (!probe) return { expiredCredits: 0, expiredBuckets: 0 }
   }
 
-  const client = (await import("@/lib/db/mongodb")).getMongoClient
+  const client = getMongoClient
   const session = params.session ?? (await client()).startSession()
 
   try {
@@ -1250,6 +1273,78 @@ export async function grantWelcomeBonus(userId: string): Promise<boolean> {
  * Reverse credits (for refunds). Properly debits from the specified credit type.
  * Unlike grantCredits with negative amounts, this correctly handles direction.
  */
+export interface CreditReversalBucketDeduction {
+  bucketId?: string
+  subscriptionId?: string
+  amount: number
+}
+
+export interface CreditReversalResult {
+  success: boolean
+  actualReversed: number
+  requestedAmount: number
+  availableAmount: number
+  expiredAmount: number
+  consumedAmount: number
+  previouslyReversedAmount: number
+  shortfall: number
+  shortfallReason?:
+    | "consumed"
+    | "expired"
+    | "already_reversed"
+    | "missing_bucket"
+    | "insufficient_balance"
+  missingBucketIds: string[]
+  previouslyReversedBucketIds: string[]
+  scope: "grant" | "subscription" | "account"
+  ledgerEntryId?: string
+  reason?: string
+  bucketDeductions: CreditReversalBucketDeduction[]
+}
+
+function reversalShortfallReason(input: {
+  requestedAmount: number
+  actualReversed: number
+  availableAmount: number
+  expiredAmount: number
+  consumedAmount: number
+  previouslyReversedAmount: number
+  missingBucketIds: string[]
+  previouslyReversedBucketIds: string[]
+}): CreditReversalResult["shortfallReason"] {
+  if (input.actualReversed >= input.requestedAmount) return undefined
+  if (
+    input.previouslyReversedAmount > 0 &&
+    input.consumedAmount === 0 &&
+    input.expiredAmount === 0
+  ) {
+    return "already_reversed"
+  }
+  if (
+    input.previouslyReversedBucketIds.length > 0 &&
+    input.availableAmount === 0 &&
+    input.expiredAmount === 0
+  ) {
+    return "already_reversed"
+  }
+  if (input.expiredAmount > 0 && input.availableAmount === 0) return "expired"
+  if (input.consumedAmount > 0) return "consumed"
+  if (input.expiredAmount > 0) return "expired"
+  if (input.missingBucketIds.length > 0) return "missing_bucket"
+  return "insufficient_balance"
+}
+
+/**
+ * The single authoritative credit reversal operation.
+ *
+ * Debits the exact grant buckets (for subscription credits), the flat
+ * aggregate fields, and the ledger in one transaction. It never falls back to
+ * the user's total balance when a grant-scoped reversal is requested, and it
+ * never touches permanent or unrelated subscription credits.
+ *
+ * Idempotent per `idempotencyKey`; safe to call inside an existing transaction
+ * by passing `session`.
+ */
 export async function reverseCredits(params: {
   userId: string
   creditType: CreditType
@@ -1261,92 +1356,412 @@ export async function reverseCredits(params: {
   metadata?: Record<string, unknown>
   /** Trusted server-derived project context, persisted on the ledger entry. */
   projectId?: string
-}): Promise<{ success: boolean }> {
+  /** Exact grant buckets to debit. Omit only for account-level reversals. */
+  bucketIds?: string[]
+  /** Limit a subscription reversal to one subscription's buckets. */
+  subscriptionId?: string
+  /** Original payment that funded the reversed grant, when known. */
+  paymentId?: string
+  /** Join an existing transaction instead of opening one. */
+  session?: ClientSession
+  now?: number
+}): Promise<CreditReversalResult> {
+  if (params.session && !params.session.inTransaction()) {
+    throw new Error("Credit reversals require an active transaction")
+  }
+
   const users = await usersCol()
   const field = params.creditType === "subscription" ? "subscriptionCredits" : "permanentCredits"
+  const now = params.now ?? Date.now()
+  const session = params.session ?? (await getMongoClient()).startSession()
+  const wanted = params.bucketIds?.filter(Boolean) ?? []
+  const scope: CreditReversalResult["scope"] =
+    wanted.length > 0 ? "grant" : params.subscriptionId ? "subscription" : "account"
+  const requestedAmount = Number.isFinite(params.amount)
+    ? Math.max(0, Math.floor(params.amount))
+    : 0
 
-  const client = (await import("@/lib/db/mongodb")).getMongoClient
-  const mongoClient = await client()
-  const session = mongoClient.startSession()
+  let result: CreditReversalResult = {
+    success: false,
+    actualReversed: 0,
+    requestedAmount,
+    availableAmount: 0,
+    expiredAmount: 0,
+    consumedAmount: 0,
+    previouslyReversedAmount: 0,
+    shortfall: requestedAmount,
+    missingBucketIds: [],
+    previouslyReversedBucketIds: [],
+    scope,
+    reason: "not_started",
+    bucketDeductions: [],
+  }
 
-  try {
-    let success = false
-    let reversedAmount = 0
+  const resultFromLedger = (entry: {
+    id: string
+    amount: number
+    metadata?: Record<string, unknown>
+  }): CreditReversalResult => {
+    const md = entry.metadata ?? {}
+    const numberOr = (value: unknown, fallback: number) =>
+      typeof value === "number" && Number.isFinite(value) ? value : fallback
+    return {
+      success: true,
+      actualReversed: entry.amount,
+      requestedAmount: numberOr(md.requestedAmount, entry.amount),
+      availableAmount: numberOr(md.availableAmount, entry.amount),
+      expiredAmount: numberOr(md.expiredAmount, 0),
+      consumedAmount: numberOr(md.consumedAmount, 0),
+      previouslyReversedAmount: numberOr(md.previouslyReversedAmount, 0),
+      shortfall: numberOr(md.shortfall, 0),
+      shortfallReason: md.shortfallReason as CreditReversalResult["shortfallReason"],
+      missingBucketIds: Array.isArray(md.missingBucketIds)
+        ? (md.missingBucketIds as string[])
+        : [],
+      previouslyReversedBucketIds: Array.isArray(md.previouslyReversedBucketIds)
+        ? (md.previouslyReversedBucketIds as string[])
+        : [],
+      scope: (md.scope as CreditReversalResult["scope"]) ?? scope,
+      ledgerEntryId: entry.id,
+      bucketDeductions: Array.isArray(md.bucketDeductions)
+        ? (md.bucketDeductions as CreditReversalBucketDeduction[])
+        : [],
+    }
+  }
 
-    await session.withTransaction(async () => {
-      // Idempotency check
-      const existingLedger = await (await creditLedgerCol()).findOne(
-        { idempotencyKey: params.idempotencyKey },
-        { session },
-      )
-      if (existingLedger) {
-        success = true
-        return
-      }
-
-      // Read the bucket balance INSIDE the transaction and clamp per retry:
-      // a pre-transaction read could be stale after a transient txn retry and
-      // let a concurrent consume drive this bucket negative.
-      const balance = await getBalance(params.userId, session)
-      const available = params.creditType === "subscription" ? balance.subscription : balance.permanent
-      const actualReversal = Math.min(params.amount, available)
-      // Can't reverse more than available in this bucket
-      if (actualReversal <= 0) {
-        success = false
-        return
-      }
-
-      // Atomic debit with $gte checks on both the flat and the bucket field
-      const filter: Record<string, unknown> = {
-        id: params.userId,
-        credits: { $gte: actualReversal },
-        [field]: { $gte: actualReversal },
-      }
-      const updateOps: Record<string, unknown> = {
-        $inc: { credits: -actualReversal, [field]: -actualReversal },
-        $set: { updatedAt: Date.now() },
-      }
-
-      const result = await users.updateOne(filter, updateOps, { session })
-      if (result.modifiedCount === 0) {
-        success = false
-        return
-      }
-
-      // Record ledger entry
-      await recordLedgerEntry({
-        userId: params.userId,
-        creditType: params.creditType,
-        amount: actualReversal,
-        direction: "debit",
-        transactionType: params.transactionType,
-        referenceType: params.referenceType,
-        referenceId: params.referenceId,
-        balanceBefore: available,
-        balanceAfter: available - actualReversal,
-        idempotencyKey: params.idempotencyKey,
-        metadata: { ...params.metadata, originalAmount: params.amount, actualReversed: actualReversal },
-        session,
-        projectId: params.projectId,
-      })
-
-      reversedAmount = actualReversal
-      success = true
-    })
-
-    if (success) {
-      logger.info("credit.reverse", "Credits reversed", {
-        userId: params.userId,
-        creditType: params.creditType,
-        amount: reversedAmount,
-        transactionType: params.transactionType,
-      })
+  const run = async () => {
+    const ledger = await creditLedgerCol()
+    const existingLedger = await ledger.findOne({ idempotencyKey: params.idempotencyKey }, { session })
+    if (existingLedger) {
+      result = resultFromLedger(existingLedger)
+      return
     }
 
-    return { success }
-  } finally {
-    await session.endSession()
+    const user = await users.findOne({ id: params.userId }, { session })
+    if (!user) {
+      result = { ...result, success: false, actualReversed: 0, reason: "user_not_found" }
+      return
+    }
+
+    const buckets: import("@/lib/types/db").CreditBucket[] = user.creditBuckets ?? []
+    const scopedToGrant = wanted.length > 0 || Boolean(params.subscriptionId)
+
+    let available = 0
+    let expiredAmount = 0
+    let consumedAmount = 0
+    let previouslyReversedAmount = 0
+    let missingBucketIds: string[] = []
+    let previouslyReversedBucketIds: string[] = []
+    let targets: import("@/lib/types/db").CreditBucket[] = []
+    if (params.creditType === "subscription") {
+      const scopedBuckets = buckets.filter(
+        (bucket) =>
+          (!params.subscriptionId || bucket.subscriptionId === params.subscriptionId) &&
+          (wanted.length === 0 || (bucket.bucketId !== undefined && wanted.includes(bucket.bucketId))),
+      )
+      const expiredBuckets = scopedBuckets.filter((bucket) => bucket.expiresAt <= now)
+      targets = scopedBuckets
+        .filter((bucket) => bucket.expiresAt > now)
+        .sort((a, b) => (b.createdAt ?? b.expiresAt) - (a.createdAt ?? a.expiresAt))
+
+      expiredAmount = expiredBuckets.reduce((sum, bucket) => sum + Math.max(0, bucket.amount), 0)
+      missingBucketIds = wanted.filter(
+        (bucketId) => !buckets.some((bucket) => bucket.bucketId === bucketId),
+      )
+
+      const lookupIds = [
+        ...new Set([
+          ...wanted,
+          ...scopedBuckets
+            .map((bucket) => bucket.bucketId)
+            .filter((bucketId): bucketId is string => typeof bucketId === "string"),
+        ]),
+      ]
+      const previouslyReversedByBucket = new Map<string, number>()
+      if (lookupIds.length > 0 && typeof ledger.find === "function") {
+        const prior = await ledger
+          .find(
+            {
+              userId: params.userId,
+              direction: "debit",
+              "metadata.bucketDeductions.bucketId": { $in: lookupIds },
+            },
+            { session },
+          )
+          .limit(50)
+          .toArray()
+        for (const row of prior) {
+          const deductions = row.metadata?.bucketDeductions
+          if (!Array.isArray(deductions)) continue
+          for (const deduction of deductions) {
+            if (!deduction || typeof deduction.bucketId !== "string") continue
+            previouslyReversedByBucket.set(
+              deduction.bucketId,
+              (previouslyReversedByBucket.get(deduction.bucketId) ?? 0) +
+                (typeof deduction.amount === "number" ? deduction.amount : 0),
+            )
+          }
+        }
+      }
+      previouslyReversedBucketIds = [...previouslyReversedByBucket.keys()]
+      previouslyReversedAmount = scopedBuckets.reduce(
+        (sum, bucket) =>
+          sum + (bucket.bucketId ? previouslyReversedByBucket.get(bucket.bucketId) ?? 0 : 0),
+        0,
+      )
+      consumedAmount = scopedBuckets.reduce((sum, bucket) => {
+        const prior = bucket.bucketId ? previouslyReversedByBucket.get(bucket.bucketId) ?? 0 : 0
+        return (
+          sum +
+          Math.max(
+            0,
+            (bucket.originalAmount ?? bucket.amount) - Math.max(0, bucket.amount) - prior,
+          )
+        )
+      }, 0)
+
+      if (targets.length === 0 && buckets.length === 0 && !scopedToGrant) {
+        // Legacy bucket-less account: the flat field is the only record.
+        available = Math.max(0, user.subscriptionCredits ?? 0)
+      } else {
+        available = targets.reduce((sum, bucket) => sum + Math.max(0, bucket.amount), 0)
+      }
+    } else {
+      available = Math.max(0, user.permanentCredits ?? 0)
+    }
+
+    const actualReversed = Math.min(
+      requestedAmount,
+      available,
+      Math.max(0, (user[field] as number | undefined) ?? 0),
+      Math.max(0, user.credits ?? 0),
+    )
+    if (actualReversed <= 0) {
+      result = {
+        ...result,
+        success: false,
+        actualReversed: 0,
+        availableAmount: available,
+        expiredAmount,
+        consumedAmount,
+        previouslyReversedAmount,
+        shortfall: requestedAmount,
+        shortfallReason: reversalShortfallReason({
+          requestedAmount,
+          actualReversed: 0,
+          availableAmount: available,
+          expiredAmount,
+          consumedAmount,
+          previouslyReversedAmount,
+          missingBucketIds,
+          previouslyReversedBucketIds,
+        }),
+        missingBucketIds,
+        previouslyReversedBucketIds,
+        reason: "nothing_available",
+      }
+      return
+    }
+
+    const deductions: CreditReversalBucketDeduction[] = []
+    if (params.creditType === "subscription" && targets.length > 0) {
+      let remaining = actualReversed
+      for (const bucket of targets) {
+        if (remaining <= 0) break
+        const take = Math.min(remaining, Math.max(0, bucket.amount))
+        if (take <= 0) continue
+        deductions.push({
+          bucketId: bucket.bucketId,
+          subscriptionId: bucket.subscriptionId,
+          amount: take,
+        })
+        remaining -= take
+      }
+      if (deductions.reduce((sum, deduction) => sum + deduction.amount, 0) !== actualReversed) {
+        throw new Error(
+          `Credit reversal: bucket deductions do not cover the reversal for ${params.idempotencyKey}`,
+        )
+      }
+    }
+
+    const balanceBefore = Math.max(0, (user[field] as number | undefined) ?? 0)
+    const flat = await users.updateOne(
+      {
+        id: params.userId,
+        creditReversalKeys: { $ne: params.idempotencyKey },
+        credits: { $gte: actualReversed },
+        [field]: { $gte: actualReversed },
+      },
+      {
+        $inc: { credits: -actualReversed, [field]: -actualReversed },
+        $addToSet: { creditReversalKeys: params.idempotencyKey },
+        $set: { updatedAt: now },
+      },
+      { session },
+    )
+    if (flat.modifiedCount === 0) {
+      const replay = await ledger.findOne({ idempotencyKey: params.idempotencyKey }, { session })
+      if (replay) {
+        result = resultFromLedger(replay)
+        return
+      }
+      result = {
+        ...result,
+        success: false,
+        actualReversed: 0,
+        availableAmount: available,
+        expiredAmount,
+        consumedAmount,
+        previouslyReversedAmount,
+        shortfall: requestedAmount,
+        shortfallReason: reversalShortfallReason({
+          requestedAmount,
+          actualReversed: 0,
+          availableAmount: available,
+          expiredAmount,
+          consumedAmount,
+          previouslyReversedAmount,
+          missingBucketIds,
+          previouslyReversedBucketIds,
+        }),
+        missingBucketIds,
+        previouslyReversedBucketIds,
+        reason: "insufficient_balance",
+      }
+      return
+    }
+
+    for (const deduction of deductions) {
+      const bucket = targets.find((item) =>
+        deduction.bucketId ? item.bucketId === deduction.bucketId : item.subscriptionId === deduction.subscriptionId,
+      )
+      if (!bucket) {
+        throw new Error(
+          `Credit reversal: bucket ${deduction.bucketId ?? deduction.subscriptionId} disappeared during reversal`,
+        )
+      }
+      const bucketFilter = bucket.bucketId
+        ? { bucketId: bucket.bucketId }
+        : { subscriptionId: bucket.subscriptionId, expiresAt: bucket.expiresAt }
+      const nextAmount = bucket.amount - deduction.amount
+      if (nextAmount <= 0) {
+        const pulled = await users.updateOne(
+          { id: params.userId, creditBuckets: { $elemMatch: bucketFilter } },
+          {
+            $pull: {
+              creditBuckets: bucketFilter,
+            } as Record<string, unknown>,
+          },
+          { session },
+        )
+        if (pulled.modifiedCount === 0) {
+          throw new Error(
+            `Credit reversal: bucket ${deduction.bucketId ?? deduction.subscriptionId} could not be removed`,
+          )
+        }
+      } else {
+        const updated = await users.updateOne(
+          {
+            id: params.userId,
+            creditBuckets: {
+              $elemMatch: { ...bucketFilter, amount: { $gte: deduction.amount } },
+            },
+          },
+          { $inc: { "creditBuckets.$.amount": -deduction.amount } },
+          { session },
+        )
+        if (updated.modifiedCount === 0) {
+          throw new Error(
+            `Credit reversal: bucket ${deduction.bucketId ?? deduction.subscriptionId} changed during reversal`,
+          )
+        }
+      }
+    }
+
+    const shortfall = Math.max(0, requestedAmount - actualReversed)
+    const shortfallReason =
+      shortfall > 0
+        ? reversalShortfallReason({
+            requestedAmount,
+            actualReversed,
+            availableAmount: available,
+            expiredAmount,
+            consumedAmount,
+            previouslyReversedAmount,
+            missingBucketIds,
+            previouslyReversedBucketIds,
+          })
+        : undefined
+
+    const entry = await recordLedgerEntry({
+      userId: params.userId,
+      creditType: params.creditType,
+      amount: actualReversed,
+      direction: "debit",
+      transactionType: params.transactionType,
+      referenceType: params.referenceType,
+      referenceId: params.referenceId,
+      paymentId: params.paymentId,
+      balanceBefore,
+      balanceAfter: balanceBefore - actualReversed,
+      idempotencyKey: params.idempotencyKey,
+      metadata: {
+        ...params.metadata,
+        bucketDeductions: deductions,
+        requestedAmount,
+        availableAmount: available,
+        expiredAmount,
+        consumedAmount,
+        previouslyReversedAmount,
+        actualReversed,
+        shortfall,
+        shortfallReason,
+        missingBucketIds,
+        previouslyReversedBucketIds,
+        scope,
+        ...(params.creditType === "subscription" && targets.length === 0 ? { legacyFlat: true } : {}),
+      },
+      session,
+      projectId: params.projectId,
+    })
+
+    result = {
+      success: true,
+      actualReversed,
+      requestedAmount,
+      availableAmount: available,
+      expiredAmount,
+      consumedAmount,
+      previouslyReversedAmount,
+      shortfall,
+      shortfallReason,
+      missingBucketIds,
+      previouslyReversedBucketIds,
+      scope,
+      ledgerEntryId: entry.id,
+      reason: shortfall > 0 ? "partially_consumed" : undefined,
+      bucketDeductions: deductions,
+    }
   }
+
+  try {
+    if (params.session) await run()
+    else await session.withTransaction(run)
+  } finally {
+    if (!params.session) await session.endSession()
+  }
+
+  if (result.success) {
+    logger.info("credit.reverse", "Credits reversed", {
+      userId: params.userId,
+      creditType: params.creditType,
+      amount: result.actualReversed,
+      transactionType: params.transactionType,
+      bucketsUsed: result.bucketDeductions.length,
+    })
+  }
+
+  return result
 }
 
 // ─── Admin Operations ────────────────────────────────────────────────────────
@@ -1509,6 +1924,8 @@ function formatTransactionReason(type: LedgerTransactionType, metadata?: Record<
       return "Promotional campaign refund"
     case "subscription_expiration":
       return "Subscription credits expired"
+    case "credit_reconciliation":
+      return "Credit balance reconciliation"
     default:
       return type.replace(/_/g, " ")
   }

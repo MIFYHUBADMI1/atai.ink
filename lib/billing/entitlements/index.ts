@@ -15,16 +15,25 @@ export {
   invalidateEntitlements,
   invalidateForUser,
   getBusinessCount,
+  getUsageCounts,
   scopeKey,
   ENTITLEMENT_VERSION,
 } from "./service"
 export type { EntitlementScope, AuthorizeOpts } from "./service"
+export { buildProjectAccessView } from "./presentation"
 
 export {
   authorizeProjectCreation,
   authorizeProjectFork,
   authorizeProductionBuild,
   authorizeAgent,
+  authorizeCustomDomain,
+  authorizeSubdomain,
+  authorizeProvisionDatabase,
+  authorizeStorage,
+  authorizeSpecialistTeam,
+  authorizeCompetitionIntel,
+  entitlementDenial,
   EntitlementError,
   ENTITLEMENT_ENFORCEMENT_ENABLED,
 } from "./require"
@@ -32,9 +41,26 @@ export {
 // Gate 4 — legacy → commercial migration
 export {
   computeMigrationForRecord,
+  computePinnedTermsForRecord,
   migrateSubscriptionEntitlements,
 } from "./migrate"
-export type { MigrationPayload, MigrationReport, MigrateOpts, ComputeOpts } from "./migrate"
+export type {
+  MigrationPayload,
+  TermsMigrationPayload,
+  MigrationReport,
+  MigrateOpts,
+  ComputeOpts,
+} from "./migrate"
+
+// Phase A1 — published catalog version records
+export { ensureCatalogVersionRecords, ensureCatalogVersionRecordsSafe } from "./versions"
+export {
+  PRICE_BOOK_VERSION,
+  PRICE_BOOK_PRE_VERSIONING,
+  PRICE_BOOK_CURRENCY,
+  commercialPriceMinor,
+  legacyPriceMinor,
+} from "./price-book"
 
 // Gate 5 — annual monthly-issuance scheduler
 export {

@@ -111,6 +111,8 @@ export interface UserDoc {
    * equals subscriptionCredits (kept in sync atomically).
    */
   creditBuckets?: CreditBucket[]
+  /** Idempotency keys of credit reversals already applied to this balance. */
+  creditReversalKeys?: string[]
   isAdmin?: boolean
   onboarding?: UserOnboarding
   /** Founder-owned feature switches — see FeaturePreferences. */

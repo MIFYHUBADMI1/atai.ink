@@ -1,5 +1,6 @@
-import { ObjectId } from "mongodb"
+import { ObjectId, type ClientSession } from "mongodb"
 import { paymentRecordsCol, subscriptionRecordsCol, creditLedgerCol } from "@/lib/db/collections"
+import { getMongoClient } from "@/lib/db/mongodb"
 import { buildUpdate } from "@/lib/db/update"
 import {
   grantCredits,
@@ -8,9 +9,22 @@ import {
   reverseCredits,
 } from "@/lib/billing/credit-service"
 import { LEGACY_SUBSCRIPTION_PLANS } from "@/lib/billing/config"
-import { getCommercialPlanById, resolveCommercialProduct } from "@/lib/billing/entitlements/commercial-plans"
+import { resolveCommercialProduct } from "@/lib/billing/entitlements/commercial-plans"
 import { addMonths } from "@/lib/billing/entitlements/annual-scheduler"
 import { activatePaidSubscription } from "@/lib/billing/activate-subscription"
+import {
+  buildCommercialPurchasedTerms,
+  buildLegacyPurchasedTerms,
+  buildPurchasedTermsFromRecord,
+  resolveRenewalAllocation,
+} from "@/lib/billing/subscription-terms"
+import {
+  findSubscriptionGrantEntry,
+  linkPaymentToExistingGrants,
+  linkSubscriptionGrantToPayment,
+  reverseSubscriptionCredits,
+} from "@/lib/billing/subscription-payment-grants"
+import { planSubscriptionRefund } from "@/lib/billing/subscription-refunds"
 import { logger } from "@/lib/logging/logger"
 import { cryptoId } from "@/lib/store/id"
 import type { PaymentRecord, SubscriptionRecord } from "@/lib/billing/billing-types"
@@ -32,8 +46,11 @@ import type { SubscriptionStatus, PaymentStatus } from "@/lib/billing/config"
  *                                 status "succeeded". Unattributable (no
  *                                 trusted userId / no positive integer
  *                                 credits) → "unresolved": NO grant, NO guess.
- * payment.succeeded (sub)      → payment record only; credits belong to the
- *                                 subscription events (period-keyed grant).
+ * payment.succeeded (sub)      → payment record linked to the exact period
+ *                                 grant(s) it funded (`creditsGranted`,
+ *                                 `grantLedgerEntryIds`, `grantBucketIds`).
+ *                                 A grant that arrives first is linked when
+ *                                 the payment lands, and vice versa.
  * payment.failed / cancelled   → payment record with provider status; never
  *                                 treated as revenue or a purchase; renewal
  *                                 failure flips the subscription to past_due
@@ -46,11 +63,18 @@ import type { SubscriptionStatus, PaymentStatus } from "@/lib/billing/config"
  * subscription.cancelled/…     → status transitions only (no credit change;
  *                                 credits remain until natural expiry).
  * refund.succeeded             → refund row is a SEPARATE payment_records row
- *                                 (never overwrites the original payment);
- *                                 credit reversal keyed `refund_${refundId}`;
- *                                 original payment's refundedAmountMinor/status
- *                                 advanced; unassociable or currency-mismatched
- *                                 refunds go "unresolved" for reconciliation.
+ *                                 (never overwrites the original payment).
+ *                                 Subscription refunds reverse the credits
+ *                                 the ORIGINAL PAYMENT actually granted, from
+ *                                 that grant's own buckets — never the current
+ *                                 catalog or permanent credits. Missing grant
+ *                                 history is marked "unresolved" for review.
+ *                                 Permanent packs keep the flat-balance
+ *                                 proportional reversal. Credit reversal is
+ *                                 keyed `refund_${refundId}`; the original
+ *                                 payment's refundedAmountMinor/status advance;
+ *                                 unassociable or currency-mismatched refunds
+ *                                 go "unresolved" for reconciliation.
  * refund.failed / disputes / credit.* → logged; no financial effect (Dodo-side
  *                                 accounting objects, not Atai balances).
  *
@@ -189,6 +213,13 @@ function positiveIntegerCredits(raw: unknown): number | undefined {
   return n
 }
 
+/** Parse a provider ISO timestamp into epoch ms; unknown stays undefined. */
+function parseProviderDate(raw: unknown): number | undefined {
+  if (typeof raw !== "string" || !raw.trim()) return undefined
+  const parsed = Date.parse(raw)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
 /**
  * Returns a safe unresolved-reason string when the verified event could not
  * be attributed to a user/payment (credits are NOT granted, nothing is
@@ -212,9 +243,15 @@ async function handlePaymentSucceeded(
   const currency = data.currency as string | undefined
 
   if (subscriptionId) {
-    logger.info("webhook.dodo", "Subscription payment — credits handled by subscription events", { paymentId, subscriptionId })
-    await recordPayment({
-      userId: metadata?.userId as string,
+    logger.info("webhook.dodo", "Subscription payment — linking to the period grant", { paymentId, subscriptionId })
+    const subCol = await subscriptionRecordsCol()
+    const sub = await subCol.findOne({ dodoSubscriptionId: subscriptionId })
+    const userId = (metadata?.userId as string | undefined) ?? sub?.userId
+    const creditsAllocated =
+      sub?.purchasedTerms?.annual?.totalCredits ?? sub?.purchasedTerms?.monthlyCredits
+    const providerCreatedAt = parseProviderDate(data.created_at)
+    const payment = await recordPayment({
+      userId,
       dodoPaymentId: paymentId,
       dodoCustomerId: customerId,
       amount: totalAmount,
@@ -223,8 +260,24 @@ async function handlePaymentSucceeded(
       paymentType: "subscription",
       subscriptionId,
       productId: data.product_id as string,
+      creditType: "subscription",
+      creditsAllocated,
+      providerCreatedAt,
+      grantStatus: "pending",
       createdAt: Date.now(),
     })
+    // The subscription event may already have granted the period. Link it now;
+    // otherwise the grant handler links this payment when it arrives.
+    if (payment) {
+      const link = await linkPaymentToExistingGrants(payment)
+      if (!link.linked) {
+        logger.info("webhook.dodo", "Subscription payment awaiting its period grant", {
+          paymentId,
+          subscriptionId,
+          reason: link.reason,
+        })
+      }
+    }
     return undefined
   }
 
@@ -270,6 +323,8 @@ async function handlePaymentSucceeded(
     creditsGranted: credits,
     creditType: "permanent",
     packageId,
+    grantStatus: "granted",
+    grantedAt: Date.now(),
     createdAt: Date.now(),
   })
   logger.info("webhook.dodo", "Permanent credits granted", { paymentId, userId, credits })
@@ -340,6 +395,8 @@ async function handleSubscriptionActive(data: Record<string, unknown> | undefine
     status: data.status as string | undefined,
     metadata: data.metadata as Record<string, unknown> | undefined,
     nextBillingDate: data.next_billing_date as string | undefined,
+    previousBillingDate: data.previous_billing_date as string | undefined,
+    paymentId: (data.payment_id ?? data.latest_payment_id) as string | undefined,
   })
   if (!result.ok) {
     logger.warn("webhook.dodo", "subscription.active: could not record", { subscriptionId, reason: result.reason })
@@ -354,72 +411,168 @@ async function handleSubscriptionRenewed(data: Record<string, unknown> | undefin
   const subscriptionId = data.subscription_id as string
   const metadata = data.metadata as Record<string, unknown> | undefined
   const nextBillingDate = data.next_billing_date as string
+  const productId = data.product_id as string | undefined
+  const subCol = await subscriptionRecordsCol()
+  const subscription = await subCol.findOne({ dodoSubscriptionId: subscriptionId })
 
-  const userId = metadata?.userId as string | undefined
-  const planId = metadata?.planId as string | undefined
-  // Commercial-first: a product id that matches a commercial product (monthly
-  // or annual) is decisive. Legacy planId lookup would mis-attribute commercial
-  // Starter to the legacy $79 starter (same id) and miss Growth/Scale entirely.
-  const commercialMatch = resolveCommercialProduct(data.product_id as string | undefined)
-  const plan =
-    commercialMatch?.plan ??
-    (planId ? LEGACY_SUBSCRIPTION_PLANS.find((p) => p.id === planId) : undefined) ??
-    (planId ? getCommercialPlanById(planId) : undefined)
-  const billingCycle =
-    commercialMatch?.billingCycle ?? (metadata?.billingCycle === "annual" ? "annual" : "monthly")
-  const credits = plan?.mirrorCredits ?? positiveIntegerCredits(metadata?.credits) ?? 0
+  // ── Resolve the PURCHASED allocation, never today's hardcoded constants ──
+  // Priority: the subscription's pinned terms, then its own stored legacy
+  // allocation, then the resolved purchased product (only when no record
+  // exists). Metadata `credits` is deliberately not a source of truth.
+  const commercialMatch = resolveCommercialProduct(productId)
+  const metadataPlanId = typeof metadata?.planId === "string" ? metadata.planId : undefined
+  const legacyProduct = LEGACY_SUBSCRIPTION_PLANS.find((p) => p.dodoProductId && p.dodoProductId === productId)
+  const legacyPlan = metadataPlanId
+    ? LEGACY_SUBSCRIPTION_PLANS.find((p) => p.id === metadataPlanId)
+    : undefined
+  const catalogAllocation = commercialMatch
+    ? {
+        planId: commercialMatch.plan.id,
+        planName: commercialMatch.plan.name,
+        commercialPlanId: commercialMatch.plan.commercialPlanId,
+        billingCycle: commercialMatch.billingCycle,
+        monthlyCredits: commercialMatch.plan.mirrorCredits,
+        dodoProductId: productId,
+      }
+    : legacyProduct || legacyPlan
+      ? {
+          planId: (legacyProduct ?? legacyPlan)!.id,
+          planName: (legacyProduct ?? legacyPlan)!.name,
+          billingCycle: metadata?.billingCycle === "annual" ? ("annual" as const) : ("monthly" as const),
+          monthlyCredits: (legacyProduct ?? legacyPlan)!.mirrorCredits,
+          dodoProductId: productId,
+        }
+      : undefined
 
-  if (!userId || !credits) {
-    logger.warn("webhook.dodo", "subscription.renewed: missing userId or credits", { subscriptionId })
-    return "subscription.renewed could not be attributed (no trusted userId/credits); preserved for reconciliation, no credits granted"
+  const resolution = resolveRenewalAllocation({ subscription, catalogAllocation })
+  if (!resolution.ok) {
+    logger.warn("webhook.dodo", "subscription.renewed: purchased terms unresolved", {
+      subscriptionId,
+      reason: resolution.reason,
+    })
+    return `subscription.renewed could not resolve the purchased commercial terms (${resolution.reason}); preserved for reconciliation, no credits granted`
+  }
+
+  const allocation = resolution.allocation
+  const userId = allocation.userId || (metadata?.userId as string | undefined)
+  if (!userId) {
+    logger.warn("webhook.dodo", "subscription.renewed: no attributable user", { subscriptionId })
+    return "subscription.renewed could not be attributed to a user; preserved for reconciliation, no credits granted"
   }
 
   const now = Date.now()
+  const periodStart = parseProviderDate(data.previous_billing_date) ?? now
   const fullPeriodEnd = nextBillingDate ? new Date(nextBillingDate).getTime() : now + 30 * 24 * 60 * 60 * 1000
   // Annual renewals collect a full year upfront: grant month 0 of the new year
   // now; the annual sweep issues months 1–11, deduplicated by the grant window.
-  const periodEnd = billingCycle === "annual" ? addMonths(now, 1) : fullPeriodEnd
+  const periodEnd = allocation.billingInterval === "annual" ? addMonths(now, 1) : fullPeriodEnd
 
   // ── Idempotency: skip if this subscription+period already granted ──
   const grantKey = `sub_grant_${subscriptionId}_period_${Math.floor(periodEnd / 86400000)}`
   const ledger = await creditLedgerCol()
   const alreadyGranted = await ledger.findOne({ idempotencyKey: grantKey })
   if (alreadyGranted) {
-    logger.info("webhook.dodo", "subscription.renewed: duplicate — grant already exists, skipping", { subscriptionId, grantKey })
-    return undefined
+    logger.info("webhook.dodo", "subscription.renewed: duplicate — grant already exists, skipping grant", { subscriptionId, grantKey })
+  } else {
+    logger.info("webhook.dodo", "subscription.renewed: processing genuine renewal", {
+      subscriptionId,
+      userId,
+      planId: allocation.planId,
+      credits: allocation.monthlyCredits,
+      termsSource: allocation.source,
+    })
+
+    // ── Expire only THIS subscription's bucket (not credits from other plans) ──
+    await expireSubscriptionCredits({
+      userId,
+      subscriptionId,
+      periodStart: now,
+      expiresAtOrBefore: now,
+      metadata: { event: "renewal", planId: allocation.planId },
+    })
+
+    // ── Grant fresh credits for the new period ──
+    const granted = await grantSubscriptionCredits({
+      userId, amount: allocation.monthlyCredits, subscriptionId,
+      planId: allocation.planId, periodStart, periodEnd,
+      metadata: { event: "renewal", dodoCustomerId: metadata?.customerId as string },
+    })
+
+    if (!granted) {
+      logger.warn("webhook.dodo", "subscription.renewed: credit grant failed", { subscriptionId })
+      return "subscription.renewed credit grant failed; preserved for recovery, no payment linked"
+    }
   }
 
-  logger.info("webhook.dodo", "subscription.renewed: processing genuine renewal", { subscriptionId, userId, planId, credits })
+  {
+    // Lazily pin a legacy record's own stored allocation so the NEXT renewal
+    // does not depend on the record's mutable top-level fields either.
+    const lazyTerms =
+      subscription && !subscription.purchasedTerms
+        ? buildPurchasedTermsFromRecord(subscription, { now })
+        : undefined
+    // Reliable price/credits without a historical snapshot are provisional and
+    // must stay in review, exactly like the migration's decision.
+    const lazyStatus = lazyTerms?.terms
+      ? lazyTerms.terms.entitlementEvidence === "legacy_mapping_provisional"
+        ? ("needs_review" as const)
+        : ("pinned" as const)
+      : undefined
 
-  // ── Expire only THIS subscription's bucket (not credits from other plans) ──
-  await expireSubscriptionCredits({
-    userId,
-    subscriptionId,
-    periodStart: now,
-    metadata: { event: "renewal", planId },
-  })
-
-  // ── Grant fresh credits for the new period ──
-  const granted = await grantSubscriptionCredits({
-    userId, amount: credits, subscriptionId,
-    planId: planId ?? "unknown", periodStart: now, periodEnd,
-    metadata: { event: "renewal", dodoCustomerId: metadata?.customerId as string },
-  })
-
-  if (granted) {
-    const subCol = await subscriptionRecordsCol()
     await subCol.updateOne(
       { dodoSubscriptionId: subscriptionId },
       buildUpdate({
         status: "active",
         currentPeriodStart: now,
         currentPeriodEnd: fullPeriodEnd,
-        ...(commercialMatch ? { commercialPlanId: commercialMatch.plan.commercialPlanId, billingCycle } : {}),
+        billingCycle: allocation.billingInterval,
+        ...(allocation.commercialPlanId ? { commercialPlanId: allocation.commercialPlanId } : {}),
+        ...(lazyTerms?.terms && lazyStatus
+          ? {
+              purchasedTerms: lazyTerms.terms,
+              termsStatus: lazyStatus,
+              ...(lazyTerms.reviewReason ? { termsReviewReason: lazyTerms.reviewReason } : {}),
+              entitlementVersion: lazyTerms.terms.entitlementVersion,
+              pricingVersion: lazyTerms.terms.pricingVersion,
+              entitlementSnapshot: lazyTerms.terms.entitlementSnapshot as unknown as Record<string, unknown>,
+            }
+          : {}),
         nextBillingDate: nextBillingDate ? new Date(nextBillingDate).getTime() : undefined,
         updatedAt: now,
       }),
     )
-    logger.info("webhook.dodo", "subscription.renewed: renewal credits granted", { subscriptionId, userId, credits, planId })
+    const grantEntry = await findSubscriptionGrantEntry(subscriptionId, periodEnd)
+    if (grantEntry) {
+      await linkSubscriptionGrantToPayment({
+        userId,
+        subscriptionId,
+        planId: allocation.planId,
+        periodStart,
+        periodEnd,
+        amount: allocation.monthlyCredits,
+        creditsAllocated:
+          subscription?.purchasedTerms?.annual?.totalCredits ??
+          (allocation.billingInterval === "annual"
+            ? allocation.monthlyCredits * 12
+            : allocation.monthlyCredits),
+        paidPeriodStart: periodStart,
+        paidPeriodEnd: fullPeriodEnd,
+        ledgerEntryId: grantEntry.id,
+        ledgerIdempotencyKey: grantEntry.idempotencyKey,
+        bucketId:
+          typeof grantEntry.metadata?.bucketId === "string" ? grantEntry.metadata.bucketId : undefined,
+        paymentId: (data.payment_id ?? data.latest_payment_id) as string | undefined,
+        now,
+      })
+    }
+
+    logger.info("webhook.dodo", "subscription.renewed: renewal credits granted", {
+      subscriptionId,
+      userId,
+      credits: allocation.monthlyCredits,
+      planId: allocation.planId,
+      termsSource: allocation.source,
+    })
   }
   return undefined
 }
@@ -485,21 +638,90 @@ async function handleSubscriptionPlanChanged(data: Record<string, unknown> | und
   const subscriptionId = data.subscription_id as string
   const productId = data.product_id as string
   const commercial = resolveCommercialProduct(productId)
-  const newPlan = commercial?.plan ?? LEGACY_SUBSCRIPTION_PLANS.find((p) => p.dodoProductId === productId)
-  if (newPlan) {
-    const subCol = await subscriptionRecordsCol()
-    await subCol.updateOne(
-      { dodoSubscriptionId: subscriptionId },
-      { $set: {
+  const legacyPlan = LEGACY_SUBSCRIPTION_PLANS.find((p) => p.dodoProductId === productId)
+  const newPlan = commercial?.plan ?? legacyPlan
+  if (!newPlan) return
+
+  // A plan change is a deliberate new purchase: re-pin the terms from the
+  // resolved product. It is the only event allowed to change a subscriber's
+  // commercial terms after activation.
+  const subCol = await subscriptionRecordsCol()
+  const subscription = await subCol.findOne({ dodoSubscriptionId: subscriptionId })
+  if (!subscription) return
+
+  // A duplicate or stale plan_changed for the plan already purchased must not
+  // re-pin from a catalog that may have changed since. Only a genuinely
+  // different plan (or interval) is an authoritative commercial change.
+  const pinned = subscription.purchasedTerms
+  const billingInterval = commercial?.billingCycle ?? "monthly"
+  const samePlan = commercial
+    ? pinned?.commercialPlanId === commercial.plan.commercialPlanId &&
+      pinned?.billingInterval === commercial.billingCycle
+    : pinned?.planId === legacyPlan?.id
+  if (samePlan) {
+    logger.info("webhook.dodo", "Subscription plan unchanged; keeping pinned terms", {
+      subscriptionId,
+      productId,
+    })
+    return
+  }
+
+  const now = Date.now()
+  const priceUSD =
+    commercial?.billingCycle === "annual" ? (commercial.plan.annualPriceUSD ?? newPlan.priceUSD) : newPlan.priceUSD
+  const terms =
+    subscription &&
+    (commercial
+      ? buildCommercialPurchasedTerms(
+          {
+            subscriptionRecordId: subscription.id,
+            dodoSubscriptionId: subscriptionId,
+            dodoProductId: productId,
+            activatedAt: now,
+            periodStart: subscription.currentPeriodStart || now,
+            periodEnd: subscription.currentPeriodEnd || now,
+          },
+          commercial.plan,
+          commercial.billingCycle,
+        )
+      : legacyPlan
+        ? buildLegacyPurchasedTerms(
+            {
+              subscriptionRecordId: subscription.id,
+              dodoSubscriptionId: subscriptionId,
+              dodoProductId: productId,
+              activatedAt: now,
+              periodStart: subscription.currentPeriodStart || now,
+              periodEnd: subscription.currentPeriodEnd || now,
+            },
+            legacyPlan,
+            billingInterval,
+          )
+        : undefined)
+
+  await subCol.updateOne(
+    { dodoSubscriptionId: subscriptionId },
+    {
+      $set: {
         planId: newPlan.id,
         planName: newPlan.name,
-        priceUSD: commercial?.billingCycle === "annual" ? (commercial.plan.annualPriceUSD ?? newPlan.priceUSD) : newPlan.priceUSD,
+        priceUSD,
         mirrorCredits: newPlan.mirrorCredits,
-        ...(commercial ? { commercialPlanId: commercial.plan.commercialPlanId, billingCycle: commercial.billingCycle } : {}),
-        updatedAt: Date.now(),
-      } },
-    )
-  }
+        billingCycle: billingInterval,
+        ...(commercial ? { commercialPlanId: commercial.plan.commercialPlanId } : {}),
+        ...(terms
+          ? {
+              purchasedTerms: terms,
+              termsStatus: "pinned" as const,
+              entitlementVersion: terms.entitlementVersion,
+              pricingVersion: terms.pricingVersion,
+              entitlementSnapshot: terms.entitlementSnapshot as unknown as Record<string, unknown>,
+            }
+          : {}),
+        updatedAt: now,
+      },
+    },
+  )
   logger.info("webhook.dodo", "Subscription plan changed", { subscriptionId, productId })
 }
 
@@ -528,8 +750,28 @@ async function handleSubscriptionPlanChanged(data: Record<string, unknown> | und
  *    FAILURE (e.g. clawback hit an empty balance) THROWS → status failed →
  *    recoverable discrepancy, never a silently "processed" refund.
  */
+class RefundRejected extends Error {
+  constructor(
+    readonly reason: "already_applied" | "exceeds",
+    message: string,
+  ) {
+    super(message)
+    this.name = "RefundRejected"
+  }
+}
+
+function refundReplayMessage(refund: PaymentRecord): string | undefined {
+  if (refund.reversalStatus === "unresolved") {
+    return `refund.succeeded already recorded but its credit reversal is unresolved (${refund.refundReviewReason ?? "unknown"}); requires review`
+  }
+  return undefined
+}
+
 async function handleRefundSucceeded(data: Record<string, unknown> | undefined): Promise<string | undefined> {
-  if (!data) { logger.warn("webhook.dodo", "refund.succeeded: missing data"); return "refund.succeeded payload contained no data object; nothing to attribute" }
+  if (!data) {
+    logger.warn("webhook.dodo", "refund.succeeded: missing data")
+    return "refund.succeeded payload contained no data object; nothing to attribute"
+  }
 
   const refundId = data.refund_id as string
   const paymentId = data.payment_id as string
@@ -541,112 +783,366 @@ async function handleRefundSucceeded(data: Record<string, unknown> | undefined):
   }
 
   const payCol = await paymentRecordsCol()
-  const originalPayment = await payCol.findOne({ dodoPaymentId: paymentId })
-  if (!originalPayment?.userId) {
-    // Includes the refund-before-payment ordering case: recovery re-runs this
-    // event once the payment row exists (the reversal key makes that replay
-    // idempotent).
-    logger.warn("webhook.dodo", "Refund: no matching payment found", { refundId, paymentId })
-    return `refund.succeeded has no matching original payment record (${paymentId}); preserved for recovery — reversal skipped, nothing fabricated`
-  }
+  const mongoClient = await getMongoClient()
+  const session = mongoClient.startSession()
 
-  if (refundCurrency && originalPayment.currency && refundCurrency !== originalPayment.currency.toUpperCase()) {
-    logger.warn("webhook.dodo", "Refund: currency mismatch", { refundId, refundCurrency, paymentCurrency: originalPayment.currency })
-    return `refund.succeeded currency (${refundCurrency}) does not match the original payment (${originalPayment.currency}); no FX source exists, preserved for manual reconciliation`
-  }
+  let message: string | undefined
+  let logInfo:
+    | { userId: string; creditsReversed: number; reversalStatus: PaymentRecord["reversalStatus"] }
+    | undefined
 
-  // Stable per-refund dedupe (unique dodoPaymentId index namespace shared by
-  // payments and refunds — Dodo ids do not collide across object types).
-  // Everything below runs ONLY when the refund row does not exist yet, so a
-  // recovery replay after a mid-flow crash can never double-increment the
-  // original payment's refunded progress or double-reverse credits (the
-  // ledger key guards the reversal itself; the refund row guards this block).
-  const existingRefund = await payCol.findOne({ dodoPaymentId: refundId })
+  try {
+    await session.withTransaction(async () => {
+      message = undefined
 
-  const creditsGranted = originalPayment.creditsGranted ?? 0
+      const originalPayment = await payCol.findOne({ dodoPaymentId: paymentId }, { session })
+      if (!originalPayment?.userId) {
+        // Includes the refund-before-payment ordering case: recovery re-runs
+        // this event once the payment row exists (the reversal key makes that
+        // replay idempotent).
+        logger.warn("webhook.dodo", "Refund: no matching payment found", { refundId, paymentId })
+        message = `refund.succeeded has no matching original payment record (${paymentId}); preserved for recovery — reversal skipped, nothing fabricated`
+        return
+      }
 
-  if (existingRefund) {
-    logger.info("webhook.dodo", "Refund already processed", { refundId })
-    return undefined
-  }
+      if (
+        refundCurrency &&
+        originalPayment.currency &&
+        refundCurrency !== originalPayment.currency.toUpperCase()
+      ) {
+        logger.warn("webhook.dodo", "Refund: currency mismatch", {
+          refundId,
+          refundCurrency,
+          paymentCurrency: originalPayment.currency,
+        })
+        message = `refund.succeeded currency (${refundCurrency}) does not match the original payment (${originalPayment.currency}); no FX source exists, preserved for manual reconciliation`
+        return
+      }
 
-  if (creditsGranted > 0) {
-    // Proportional reversal only when both amounts are authoritative and
-    // in the same currency; otherwise reverse the full grant (the refund
-    // event is Dodo's own confirmation; a partial refund WITHOUT a known
-    // original amount must not guess a ratio — the full reversal is the
-    // previously agreed policy and is labeled in the ledger metadata).
-    const originalAmount = originalPayment.amount
-    const isPartial =
-      typeof originalAmount === "number" && originalAmount > 0 &&
-      typeof refundAmount === "number" && refundAmount > 0 &&
-      refundAmount < originalAmount
-    const creditsToReverse = isPartial
-      ? Math.max(1, Math.floor((creditsGranted * refundAmount) / originalAmount))
-      : creditsGranted
+      const existingRefund = await payCol.findOne({ dodoPaymentId: refundId }, { session })
+      if (existingRefund) {
+        message = refundReplayMessage(existingRefund)
+        return
+      }
 
-    const result = await reverseCredits({
-      userId: originalPayment.userId,
-      creditType: originalPayment.creditType ?? "permanent",
-      amount: creditsToReverse,
-      transactionType: "refund_reversal",
-      idempotencyKey: `refund_${refundId}`,
-      referenceType: "refund",
-      referenceId: refundId,
-      metadata: {
+      const originalAmount = originalPayment.amount
+      const alreadyRefundedAmount = originalPayment.refundedAmountMinor ?? 0
+      if (
+        typeof refundAmount === "number" &&
+        refundAmount > 0 &&
+        typeof originalAmount === "number" &&
+        alreadyRefundedAmount + refundAmount > originalAmount
+      ) {
+        logger.warn("webhook.dodo", "Refund exceeds the original payment", {
+          refundId,
+          paymentId,
+          refundAmount,
+          alreadyRefundedAmount,
+          originalAmount,
+        })
+        message = `refund.succeeded exceeds the original payment's remaining refundable amount (already ${alreadyRefundedAmount}, new ${refundAmount}, original ${originalAmount}); preserved for reconciliation, nothing recorded`
+        return
+      }
+
+      const isSubscription =
+        originalPayment.paymentType === "subscription" ||
+        originalPayment.creditType === "subscription"
+      const alreadyReversed = originalPayment.creditsReversed ?? 0
+
+      let creditsReversed = 0
+      let creditsReversalShortfall = 0
+      let reversalStatus: PaymentRecord["reversalStatus"] = "nothing_to_reverse"
+      let reviewReason: string | undefined
+      const reversalLedgerEntryIds: string[] = []
+
+      if (isSubscription) {
+        const plan = planSubscriptionRefund({
+          creditsGranted: originalPayment.creditsGranted ?? 0,
+          creditsReversed: alreadyReversed,
+          originalAmount,
+          refundAmount,
+          grantStatus: originalPayment.grantStatus,
+        })
+
+        if (!plan.ok) {
+          if (plan.reason === "already_reversed") {
+            reversalStatus = "nothing_to_reverse"
+          } else {
+            reversalStatus = "unresolved"
+            reviewReason = plan.reviewReason ?? plan.reason
+            logger.warn("webhook.dodo", "Refund: subscription grant history unresolved", {
+              refundId,
+              paymentId,
+              reason: reviewReason,
+            })
+          }
+        } else if (plan.creditsToReverse > 0) {
+          const hasBucketRefs = (originalPayment.grantBucketIds?.length ?? 0) > 0
+          if (!hasBucketRefs) {
+            reversalStatus = "unresolved"
+            reviewReason = "grant_bucket_unresolved"
+            logger.warn("webhook.dodo", "Refund: subscription grant has no bucket reference", {
+              refundId,
+              paymentId,
+            })
+          } else {
+            const reversal = await reverseSubscriptionCredits({
+              userId: originalPayment.userId,
+              subscriptionId: originalPayment.subscriptionId ?? "",
+              amount: plan.creditsToReverse,
+              bucketIds: originalPayment.grantBucketIds,
+              idempotencyKey: `refund_${refundId}`,
+              referenceType: "refund",
+              referenceId: refundId,
+              metadata: {
+                originalPaymentId: paymentId,
+                refundAmount: refundAmount ?? null,
+                currency: refundCurrency ?? originalPayment.currency ?? null,
+                creditsRequested: plan.creditsToReverse,
+                partialRefund: plan.partialRefund,
+                grantLedgerEntryIds: originalPayment.grantLedgerEntryIds ?? [],
+              },
+              session,
+            })
+
+            if (!reversal.success) {
+              if (reversal.reason === "nothing_available" || reversal.reason === "insufficient_balance") {
+                creditsReversed = 0
+                creditsReversalShortfall =
+                  reversal.shortfall > 0 ? reversal.shortfall : plan.creditsToReverse
+                reversalStatus = "nothing_to_reverse"
+                reviewReason = "grant_already_consumed_or_expired"
+              } else {
+                throw new Error(
+                  `refund.succeeded: subscription credit reversal failed for refund ${refundId} (${reversal.reason})`,
+                )
+              }
+            } else {
+              creditsReversed = reversal.actualReversed
+              if (reversal.ledgerEntryId) reversalLedgerEntryIds.push(reversal.ledgerEntryId)
+              const remainingGrant = Math.max(
+                0,
+                (originalPayment.creditsGranted ?? 0) - alreadyReversed,
+              )
+              reversalStatus = creditsReversed >= remainingGrant ? "reversed" : "partially_reversed"
+              if (reversal.shortfall > 0 || creditsReversed < plan.creditsToReverse) {
+                creditsReversalShortfall =
+                  reversal.shortfall > 0
+                    ? reversal.shortfall
+                    : plan.creditsToReverse - creditsReversed
+                reversalStatus = "partially_reversed"
+                reviewReason =
+                  reversal.shortfallReason === "expired"
+                    ? "grant_partially_expired"
+                    : reversal.shortfallReason === "already_reversed"
+                      ? "grant_already_reversed"
+                      : "grant_partially_consumed"
+              }
+            }
+          }
+        }
+      } else {
+        const creditsGranted = originalPayment.creditsGranted ?? 0
+        if (creditsGranted > 0) {
+          const isPartial =
+            typeof originalAmount === "number" &&
+            originalAmount > 0 &&
+            typeof refundAmount === "number" &&
+            refundAmount > 0 &&
+            refundAmount < originalAmount
+          const creditsToReverse = isPartial
+            ? Math.max(1, Math.floor((creditsGranted * refundAmount) / originalAmount))
+            : creditsGranted
+
+          const result = await reverseCredits({
+            userId: originalPayment.userId,
+            creditType: originalPayment.creditType ?? "permanent",
+            amount: creditsToReverse,
+            transactionType: "refund_reversal",
+            idempotencyKey: `refund_${refundId}`,
+            referenceType: "refund",
+            referenceId: refundId,
+            paymentId,
+            metadata: {
+              originalPaymentId: paymentId,
+              refundAmount: refundAmount ?? null,
+              currency: refundCurrency ?? originalPayment.currency ?? null,
+              creditsReversed: creditsToReverse,
+              partialRefund: isPartial,
+            },
+            session,
+          })
+
+          if (!result.success) {
+            if (result.reason === "nothing_available" || result.reason === "insufficient_balance") {
+              creditsReversed = 0
+              creditsReversalShortfall =
+                result.shortfall > 0 ? result.shortfall : creditsToReverse
+              reversalStatus = "nothing_to_reverse"
+              reviewReason = "grant_already_consumed_or_expired"
+            } else {
+              throw new Error(`refund.succeeded: credit reversal failed for refund ${refundId}`)
+            }
+          } else {
+            creditsReversed = result.actualReversed
+            if (result.ledgerEntryId) reversalLedgerEntryIds.push(result.ledgerEntryId)
+            if (result.actualReversed < creditsToReverse) {
+              creditsReversalShortfall =
+                result.shortfall > 0
+                  ? result.shortfall
+                  : creditsToReverse - result.actualReversed
+              reversalStatus = "partially_reversed"
+              reviewReason =
+                result.shortfallReason === "expired"
+                  ? "grant_partially_expired"
+                  : result.shortfallReason === "already_reversed"
+                    ? "grant_already_reversed"
+                    : "grant_partially_consumed"
+            } else {
+              reversalStatus = "reversed"
+            }
+          }
+        }
+      }
+
+      const status: PaymentStatus =
+        typeof refundAmount === "number" && refundAmount > 0
+          ? (() => {
+              const total = typeof originalAmount === "number" ? originalAmount : undefined
+              const next = (originalPayment.refundedAmountMinor ?? 0) + refundAmount
+              return total !== undefined && next >= total ? "refunded" : "partially_refunded"
+            })()
+          : "refunded"
+
+      const update: Record<string, unknown> = {
+        $set: {
+          status,
+          reversalStatus,
+          ...(reviewReason ? { refundReviewReason: reviewReason } : {}),
+          ...(reversalLedgerEntryIds.length > 0
+            ? {
+                reversalLedgerEntryIds: [
+                  ...(originalPayment.reversalLedgerEntryIds ?? []),
+                  ...reversalLedgerEntryIds,
+                ],
+              }
+            : {}),
+          updatedAt: Date.now(),
+        },
+      }
+      if (typeof refundAmount === "number" && refundAmount > 0) {
+        update.$inc = { refundedAmountMinor: refundAmount }
+      }
+      if (creditsReversed > 0) {
+        update.$inc = { ...(update.$inc as Record<string, number>), creditsReversed }
+      }
+      if (creditsReversalShortfall > 0) {
+        update.$inc = {
+          ...(update.$inc as Record<string, number>),
+          creditsReversalShortfall,
+        }
+      }
+      update.$addToSet = { refundIds: refundId }
+
+      // The refund id dedupe and the cumulative monetary cap are enforced in
+      // the SAME atomic update as the $inc. Different concurrent refund ids
+      // therefore cannot both push refundedAmountMinor past the charge.
+      const filter: Record<string, unknown> = {
+        dodoPaymentId: paymentId,
+        refundIds: { $ne: refundId },
+      }
+      if (
+        typeof refundAmount === "number" &&
+        refundAmount > 0 &&
+        typeof originalAmount === "number" &&
+        originalAmount > 0
+      ) {
+        // Cumulative cap without $expr: a missing field is the first refund;
+        // otherwise the stored total must still leave room for this one.
+        filter.$or = [
+          { refundedAmountMinor: { $exists: false } },
+          { refundedAmountMinor: { $lte: originalAmount - refundAmount } },
+        ]
+      }
+
+      const applied = await payCol.updateOne(filter, update, { session })
+      if (applied.matchedCount === 0) {
+        const current = await payCol.findOne({ dodoPaymentId: paymentId }, { session })
+        if (current?.refundIds?.includes(refundId)) {
+          throw new RefundRejected("already_applied", "refund already applied")
+        }
+        throw new RefundRejected(
+          "exceeds",
+          `refund.succeeded exceeds the original payment's remaining refundable amount; preserved for reconciliation, nothing recorded`,
+        )
+      }
+
+      await recordPayment({
+        userId: originalPayment.userId,
+        dodoPaymentId: refundId,
+        amount: typeof refundAmount === "number" ? -refundAmount : undefined,
+        currency: refundCurrency ?? originalPayment.currency,
+        status: "refunded",
+        paymentType: "refund",
+        creditsGranted: creditsReversed > 0 ? -creditsReversed : undefined,
+        creditsReversed: creditsReversed > 0 ? creditsReversed : undefined,
+        creditsReversalShortfall:
+          creditsReversalShortfall > 0 ? creditsReversalShortfall : undefined,
+        reversalStatus,
+        refundReviewReason: reviewReason,
+        reversalLedgerEntryIds,
         originalPaymentId: paymentId,
-        refundAmount: refundAmount ?? null,
-        currency: refundCurrency ?? originalPayment.currency ?? null,
-        creditsReversed: creditsToReverse,
-        partialRefund: isPartial,
-      },
+        refundId,
+        createdAt: Date.now(),
+        session,
+      })
+
+      if (typeof originalAmount === "number" && originalAmount > 0) {
+        await payCol.updateOne(
+          { dodoPaymentId: paymentId, refundedAmountMinor: { $gte: originalAmount } },
+          { $set: { status: "refunded", updatedAt: Date.now() } },
+          { session },
+        )
+      }
+
+      logInfo = {
+        userId: originalPayment.userId,
+        creditsReversed,
+        reversalStatus,
+      }
+
+      if (reversalStatus === "unresolved") {
+        message = `refund.succeeded recorded, but the original payment's credit grant history is unresolved (${reviewReason}); credit reversal requires review`
+      }
     })
-
-    if (!result.success) {
-      throw new Error(`refund.succeeded: credit reversal failed for refund ${refundId}`)
+  } catch (err) {
+    if (err instanceof RefundRejected) {
+      if (err.reason === "already_applied") {
+        const existing = await payCol.findOne({ dodoPaymentId: refundId })
+        return existing ? refundReplayMessage(existing) : undefined
+      }
+      return err.message
     }
-  } else {
-    logger.warn("webhook.dodo", "Refund: original payment granted no credits — nothing to reverse", { refundId, paymentId })
+    if (err instanceof Error && /E11000|duplicate key/i.test(err.message)) {
+      const existing = await payCol.findOne({ dodoPaymentId: refundId })
+      if (existing) return refundReplayMessage(existing)
+    }
+    throw err
+  } finally {
+    await session.endSession()
   }
 
-  await recordPayment({
-    userId: originalPayment.userId,
-    dodoPaymentId: refundId,
-    amount: typeof refundAmount === "number" ? -refundAmount : undefined,
-    currency: refundCurrency ?? originalPayment.currency,
-    status: "refunded",
-    paymentType: "refund",
-    creditsGranted: creditsGranted > 0 ? -creditsGranted : undefined,
-    originalPaymentId: paymentId,
-    refundId,
-    createdAt: Date.now(),
-  })
-
-  // Advance the ORIGINAL payment row: cumulative refunded amount (only when
-  // authoritative) + lifecycle status. This is a state transition on the
-  // payment's own record — the original amount and credit history
-  // (createdAt, creditsGranted, succeeded→refunded trail) is preserved.
-  if (typeof refundAmount === "number" && refundAmount > 0) {
-    const total = typeof originalPayment.amount === "number" ? originalPayment.amount : undefined
-    const already = originalPayment.refundedAmountMinor ?? 0
-    const next = already + refundAmount
-    const status: PaymentStatus = total !== undefined && next >= total ? "refunded" : "partially_refunded"
-    await payCol.updateOne(
-      { dodoPaymentId: paymentId },
-      { $inc: { refundedAmountMinor: refundAmount }, $set: { status, updatedAt: Date.now() } },
-    )
-  } else {
-    // Amount not authoritative on this event: the refund row exists and is
-    // traceable, but we do NOT invent a monetary progress figure — only the
-    // lifecycle status moves.
-    await payCol.updateOne(
-      { dodoPaymentId: paymentId },
-      { $set: { status: "refunded", updatedAt: Date.now() } },
-    )
+  if (logInfo) {
+    logger.info("webhook.dodo", "Refund accounted", {
+      refundId,
+      paymentId,
+      userId: logInfo.userId,
+      creditsReversed: logInfo.creditsReversed,
+      reversalStatus: logInfo.reversalStatus,
+    })
   }
 
-  logger.info("webhook.dodo", "Refund accounted", { refundId, paymentId, userId: originalPayment.userId })
-  return undefined
+  return message
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -668,18 +1164,34 @@ export async function recordPayment(params: {
   status: PaymentStatus
   paymentType: string
   creditsGranted?: number
+  creditsAllocated?: number
   creditType?: string
   subscriptionId?: string
   packageId?: string
   productId?: string
   originalPaymentId?: string
   refundId?: string
+  providerCreatedAt?: number
+  grantStatus?: PaymentRecord["grantStatus"]
+  grantedAt?: number
+  paidPeriodStart?: number
+  paidPeriodEnd?: number
+  grantLinkMethod?: PaymentRecord["grantLinkMethod"]
+  creditsReversed?: number
+  reversalStatus?: PaymentRecord["reversalStatus"]
+  refundReviewReason?: string
+  reversalLedgerEntryIds?: string[]
+  creditsReversalShortfall?: number
   createdAt: number
-}): Promise<void> {
+  session?: ClientSession
+}): Promise<PaymentRecord | undefined> {
   try {
     const col = await paymentRecordsCol()
-    const existing = await col.findOne({ dodoPaymentId: params.dodoPaymentId })
-    if (existing) return
+    const existing = await col.findOne(
+      { dodoPaymentId: params.dodoPaymentId },
+      params.session ? { session: params.session } : {},
+    )
+    if (existing) return existing
 
     const record: PaymentRecord = {
       _id: new ObjectId(),
@@ -692,16 +1204,33 @@ export async function recordPayment(params: {
       status: params.status,
       paymentType: params.paymentType,
       creditsGranted: params.creditsGranted,
+      creditsAllocated: params.creditsAllocated,
       creditType: params.creditType as "subscription" | "permanent" | undefined,
       subscriptionId: params.subscriptionId,
       packageId: params.packageId,
       productId: params.productId,
       originalPaymentId: params.originalPaymentId,
       refundId: params.refundId,
+      providerCreatedAt: params.providerCreatedAt,
+      grantStatus: params.grantStatus,
+      grantedAt: params.grantedAt,
+      paidPeriodStart: params.paidPeriodStart,
+      paidPeriodEnd: params.paidPeriodEnd,
+      grantLinkMethod: params.grantLinkMethod,
+      creditsReversed: params.creditsReversed,
+      creditsReversalShortfall: params.creditsReversalShortfall,
+      reversalStatus: params.reversalStatus,
+      refundReviewReason: params.refundReviewReason,
+      reversalLedgerEntryIds: params.reversalLedgerEntryIds,
       createdAt: params.createdAt,
       updatedAt: Date.now(),
     }
-    await col.insertOne(record)
+    if (params.session) {
+      await col.insertOne(record, { session: params.session })
+    } else {
+      await col.insertOne(record)
+    }
+    return record
   } catch (err) {
     logger.error("webhook.dodo", "Failed to record payment", { dodoPaymentId: params.dodoPaymentId, error: err instanceof Error ? err.message : String(err) })
     throw err

@@ -9,6 +9,7 @@ import { TotalumError } from "@/lib/integrations/totalum/errors"
 import { validateProjectId } from "@/lib/projects/project-id"
 import { initializeProjectInfrastructure } from "@/lib/infrastructure/service"
 import { getInfrastructurePlan } from "@/lib/infrastructure/plans"
+import { infrastructureDenial } from "@/lib/infrastructure/access"
 import { buildFollowupAgentPrompt, buildInitialBuildPrompt } from "@/lib/analysis/prompt-builder"
 import { getBuildCost } from "@/lib/billing/build-auth"
 import { getDeploymentCosts } from "@/lib/billing/runtime-config"
@@ -109,6 +110,10 @@ export async function startProjectBuild(userId: string, projectId: string): Prom
   const project = await store.getProject(projectId)
   if (!project || project.userId !== userId) {
     return { ok: false, status: 404, code: "UNAUTHORIZED_PROJECT_ACCESS", message: "We couldn't find this project." }
+  }
+  const infrastructureBlocked = infrastructureDenial(project.infrastructure)
+  if (infrastructureBlocked) {
+    return { ok: false, status: 402, code: infrastructureBlocked.code, message: infrastructureBlocked.message }
   }
   if (isConnectedBusiness(project)) {
     return { ok: false, status: 409, code: "NOT_A_BUILD_PROJECT", message: CONNECTED_BUSINESS_BUILD_BLOCKED }
@@ -243,11 +248,26 @@ export async function sendProjectFollowup(userId: string, projectId: string, pro
   if (!project || project.userId !== userId) {
     return { ok: false, status: 404, code: "UNAUTHORIZED_PROJECT_ACCESS", message: "We couldn't find this project." }
   }
+  const infrastructureBlocked = infrastructureDenial(project.infrastructure)
+  if (infrastructureBlocked) {
+    return { ok: false, status: 402, code: infrastructureBlocked.code, message: infrastructureBlocked.message }
+  }
   if (!project.totalumProjectId) {
     return { ok: false, status: 409, code: "VALIDATION", message: "This project hasn't been built yet." }
   }
   if (project.state === "building" || project.state === "deploying") {
     return { ok: false, status: 409, code: "AGENT_RUNNING", message: "Please wait for the current change to finish." }
+  }
+  // Follow-up edits are production work: the builder, its database changes and
+  // the specialist team are the same paid capability as an initial build.
+  const planDenied = await authorizeProductionWork(userId, "buildProduction")
+  if (planDenied) {
+    return {
+      ok: false,
+      status: 402,
+      code: planDenied.code ?? "PLAN_LIMIT",
+      message: planDenied.reason ?? "Your plan does not include production changes.",
+    }
   }
 
   const trimmed = prompt.trim()
@@ -343,6 +363,10 @@ export async function startProjectDeploy(userId: string, projectId: string): Pro
   if (!project || project.userId !== userId) {
     return { ok: false, status: 404, code: "UNAUTHORIZED_PROJECT_ACCESS", message: "We couldn't find this project." }
   }
+  const infrastructureBlocked = infrastructureDenial(project.infrastructure)
+  if (infrastructureBlocked) {
+    return { ok: false, status: 402, code: infrastructureBlocked.code, message: infrastructureBlocked.message }
+  }
   if (isConnectedBusiness(project)) {
     return { ok: false, status: 409, code: "NOT_A_BUILD_PROJECT", message: CONNECTED_BUSINESS_BUILD_BLOCKED }
   }
@@ -352,7 +376,11 @@ export async function startProjectDeploy(userId: string, projectId: string): Pro
   if (project.state === "building" || project.state === "deploying") {
     return { ok: false, status: 409, code: "BUSY", message: "Please wait for the current operation to finish." }
   }
-  const deployDenied = await authorizeProductionWork(userId, "deploy")
+  const hasExistingSubdomain =
+    project.deployment?.status === "success" ||
+    Boolean(project.deployment?.productionUrl) ||
+    project.state === "deployed"
+  const deployDenied = await authorizeProductionWork(userId, "deploy", { hasExistingSubdomain })
   if (deployDenied) {
     return {
       ok: false,

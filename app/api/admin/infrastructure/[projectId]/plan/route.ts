@@ -2,7 +2,7 @@ import { ok, fail, handleRouteError } from "@/lib/api/respond"
 import { requireAdmin } from "@/lib/auth/session"
 import { store } from "@/lib/store/store"
 import { applyTotalumCap } from "@/lib/infrastructure/service"
-import { getInfrastructurePlan, type InfrastructurePlanId } from "@/lib/infrastructure/plans"
+import { getInfrastructurePlanWithRuntimePrice, type InfrastructurePlanId } from "@/lib/infrastructure/plans"
 import { logAuditAction } from "@/lib/infrastructure/audit"
 
 const MONTH_MS = 30 * 24 * 60 * 60 * 1000
@@ -21,7 +21,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ project
     const planId = body.planId?.trim().toLowerCase() as InfrastructurePlanId | undefined
     if (!planId) return fail("VALIDATION", "Plan ID is required.", 422)
 
-    const newPlan = getInfrastructurePlan(planId)
+    const newPlan = await getInfrastructurePlanWithRuntimePrice(planId)
     if (!newPlan) return fail("VALIDATION", "Invalid plan.", 422)
     if (planId === "enterprise") return fail("VALIDATION", "Enterprise plans require manual configuration.", 400)
 
@@ -47,6 +47,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ project
             startedAt: now,
             expiresAt: now + MONTH_MS,
             autoRenew: false,
+            purchasedTerms: {
+              planId: newPlan.id,
+              planName: newPlan.name,
+              storageLimitBytes: newPlan.storageBytes,
+              totalumInfrastructureCreditLimit: newPlan.totalumInfrastructureCredits,
+              priceCredits: newPlan.AtaiPrice,
+              purchasedAt: now,
+              durationMs: MONTH_MS,
+            },
+            renewedAt: undefined,
+            renewalCount: 0,
+            expiredAt: undefined,
+            cancelledAt: undefined,
+            needsReview: false,
+            reviewReason: undefined,
+            lastPurchaseKey: project.infrastructure?.lastPurchaseKey,
+            appliedPurchaseKeys: project.infrastructure?.appliedPurchaseKeys,
             totalumCreditsUsed: project.infrastructure?.totalumCreditsUsed ?? 0,
             storageUsedBytes: project.infrastructure?.storageUsedBytes ?? 0,
             overQuota: (project.infrastructure?.storageUsedBytes ?? 0) > newPlan.storageBytes,

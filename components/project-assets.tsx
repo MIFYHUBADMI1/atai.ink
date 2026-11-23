@@ -2,6 +2,7 @@
 
 import useSWR from "swr"
 import { useState, useEffect } from "react"
+import { useProject } from "@/lib/client/api"
 
 async function fetcher(url: string) {
   const response = await fetch(url)
@@ -13,6 +14,8 @@ async function fetcher(url: string) {
 export function ProjectAssets({ projectId }: { projectId: string }) {
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const { access } = useProject(projectId)
+  const storageDenied = access?.storage.allowed === false ? access.storage.reason ?? "Your plan does not include project storage." : null
   const { data, error, mutate } = useSWR(`/api/projects/${projectId}/assets`, fetcher, { keepPreviousData: true })
 
   // Keep stable data to prevent flickering
@@ -53,9 +56,10 @@ export function ProjectAssets({ projectId }: { projectId: string }) {
     <div className="flex flex-col gap-3">
       <p className="text-sm text-muted-foreground">No screenshots or asset references were captured for this project.</p>
       <label className="w-fit cursor-pointer border border-border px-3 py-2 text-xs">
-        <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="sr-only" disabled={uploading} onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file) }} />
+        <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="sr-only" disabled={uploading || Boolean(storageDenied)} onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file) }} />
         {uploading ? "Uploading…" : "Upload image"}
       </label>
+      {storageDenied ? <p className="text-sm text-muted-foreground">{storageDenied}</p> : null}
       {uploadError ? <p className="text-sm text-destructive">{uploadError}</p> : null}
     </div>
   )
@@ -66,9 +70,10 @@ export function ProjectAssets({ projectId }: { projectId: string }) {
   return (
     <div className="flex flex-col gap-3">
       <label className="w-fit cursor-pointer border border-border px-3 py-2 text-xs">
-        <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="sr-only" disabled={uploading} onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file) }} />
+        <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="sr-only" disabled={uploading || Boolean(storageDenied)} onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file) }} />
         {uploading ? "Uploading…" : "Upload image"}
       </label>
+      {storageDenied ? <p className="text-sm text-muted-foreground">{storageDenied}</p> : null}
       {uploadError ? <p className="text-sm text-destructive">{uploadError}</p> : null}
       {screenshots.length > 0 ? (
         <div className="flex flex-col gap-2">

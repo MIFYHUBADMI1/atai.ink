@@ -8,6 +8,9 @@ import { checkRateLimit } from "@/lib/auth/rate-limit"
 import { acquireAiLease } from "@/lib/api/ai-lease"
 import { logger } from "@/lib/logging/logger"
 import { projectAssetsCol, ensureIndexes } from "@/lib/db/collections"
+import { authorizeStorage, entitlementDenial } from "@/lib/billing/entitlements/require"
+import { getProjectStorageUsage, refreshProjectStorageUsage } from "@/lib/infrastructure/service"
+import { infrastructureDenial } from "@/lib/infrastructure/access"
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   let release: (() => Promise<void>) | undefined
@@ -16,13 +19,29 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { id } = await params
     const project = await store.getProject(id)
     if (!project || project.userId !== user.id) return fail("UNAUTHORIZED_PROJECT_ACCESS", "We couldn't find this project.", 404)
+
+    const infrastructureBlocked = infrastructureDenial(project.infrastructure)
+    if (infrastructureBlocked) return fail(infrastructureBlocked.code, infrastructureBlocked.message, 402)
+    const storageDenied = entitlementDenial(await authorizeStorage(user.id))
+    if (storageDenied) return fail(storageDenied.code, storageDenied.message, 402)
+
     await checkRateLimit({ action: "image_upload", identifier: user.id, limit: 20, windowMs: 60_000 })
     const file = await readImageFile(request)
-    release = await acquireAiLease(user.id, "image_upload")
     const buffer = Buffer.from(await file.arrayBuffer())
+    const usage = await getProjectStorageUsage(id)
+    if (usage.limitBytes !== null && usage.usedBytes + buffer.byteLength > usage.limitBytes) {
+      return fail(
+        "STORAGE_LIMIT_REACHED",
+        "This project has reached its infrastructure storage limit. Upgrade the infrastructure plan to add more.",
+        402,
+      )
+    }
+
+    release = await acquireAiLease(user.id, "image_upload")
     const result = await uploadImageToImageKit({ file: buffer, fileName: file.name || "project-asset", mimeType: file.type, folder: `/Atai/projects/${id}` })
     await ensureIndexes()
     await (await projectAssetsCol()).insertOne({ _id: new ObjectId(), id: `asset_${cryptoId()}`, userId: user.id, projectId: id, kind: "upload", fileId: result.fileId, filePath: result.filePath, fileName: file.name || "project-asset", url: result.url, mimeType: file.type, size: buffer.byteLength, width: result.width, height: result.height, createdAt: Date.now() })
+    await refreshProjectStorageUsage(id)
     return ok({ asset: result })
   } catch (error) { return handleRouteError("api.projects.assets.upload", error) }
   finally {

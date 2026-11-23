@@ -11,6 +11,7 @@ import { ensureRuntimeProvisioned, environmentForLifecycle, RuntimeProvisioningE
 import { authorizeProductionWork } from "@/lib/billing/entitlements/require"
 import type { ProjectEvent } from "@/lib/types/project"
 import type { PublishEventDoc } from "@/lib/types/db"
+import { infrastructureDenial } from "@/lib/infrastructure/access"
 
 /**
  * Deploy credit cost — admin-configurable via runtime settings
@@ -46,11 +47,17 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
     const project = await store.getProject(id)
     if (!project || project.userId !== user.id) return fail("UNAUTHORIZED_PROJECT_ACCESS", "We couldn't find this project.", 404)
+    const infrastructureBlocked = infrastructureDenial(project.infrastructure)
+    if (infrastructureBlocked) return fail(infrastructureBlocked.code, infrastructureBlocked.message, 402)
 
     if (!project.totalumProjectId) return fail("NO_TOTALUM_PROJECT", "This project hasn't been built yet.", 400)
     if (project.state === "building" || project.state === "deploying") return fail("BUSY", "Please wait for the current operation to finish.", 409)
 
-    const planDenied = await authorizeProductionWork(user.id, "deploy")
+    const hasExistingSubdomain =
+      project.deployment?.status === "success" ||
+      Boolean(project.deployment?.productionUrl) ||
+      project.state === "deployed"
+    const planDenied = await authorizeProductionWork(user.id, "deploy", { hasExistingSubdomain })
     if (planDenied) {
       return fail(
         planDenied.code ?? "PLAN_LIMIT",
@@ -198,7 +205,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const { id } = await params
     const project = await store.getProject(id)
     if (!project || project.userId !== user.id) return fail("UNAUTHORIZED_PROJECT_ACCESS", "We couldn't find this project.", 404)
-
     if (!project.totalumProjectId) return fail("NO_TOTALUM_PROJECT", "This project hasn't been built yet.", 400)
 
     if (!isTotalumConfigured()) return fail("PROVIDER_NOT_CONFIGURED", "Deployment service is not connected.", 503)

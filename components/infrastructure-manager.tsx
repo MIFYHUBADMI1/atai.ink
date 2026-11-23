@@ -33,10 +33,14 @@ interface Subscription {
   storageUsedBytes?: number
   overQuota?: boolean
   syncStatus?: string
+  needsReview?: boolean
+  renewalCount?: number
+  expiredAt?: number
 }
 
 interface InfrastructureInfo {
   subscription: Subscription | null
+  access?: { allowed: boolean; needsReview: boolean; reason: string }
   plans: PlanInfo[]
   hasTotalumProject: boolean
 }
@@ -48,7 +52,8 @@ function formatBytes(bytes: number): string {
   return `${bytes} B`
 }
 
-function formatDate(ts: number): string {
+function formatDate(ts?: number): string {
+  if (typeof ts !== "number" || !Number.isFinite(ts)) return "Not recorded"
   return new Date(ts).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -84,18 +89,32 @@ export function InfrastructureManager({ projectId }: { projectId: string }) {
   )
   const { refresh: refreshSession } = useSession()
   const [purchasing, setPurchasing] = useState<string | null>(null)
+  const [cancelling, setCancelling] = useState(false)
 
-  async function handleSubscribe(planId: string) {
+  async function handleSubscribe(planId: string, renewal = false) {
     setPurchasing(planId)
     try {
-      await postJson(`/api/projects/${projectId}/infrastructure`, { planId })
-      toast.success("Plan activated successfully! Credits deducted.")
+      await postJson(`/api/projects/${projectId}/infrastructure`, { planId, renewal })
+      toast.success(renewal ? "Plan renewed successfully! Credits deducted." : "Plan activated successfully! Credits deducted.")
       // Force revalidate infrastructure data AND the user session (credit balance)
       await Promise.all([mutate(), refreshSession()])
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to activate plan")
+      toast.error(err instanceof Error ? err.message : renewal ? "Failed to renew plan" : "Failed to activate plan")
     } finally {
       setPurchasing(null)
+    }
+  }
+
+  async function handleCancelRenewal() {
+    setCancelling(true)
+    try {
+      await postJson(`/api/projects/${projectId}/infrastructure/cancel`, {})
+      toast.success("Renewal cancelled. Access remains active through the paid-through date.")
+      await mutate()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to cancel renewal")
+    } finally {
+      setCancelling(false)
     }
   }
 
@@ -136,8 +155,12 @@ export function InfrastructureManager({ projectId }: { projectId: string }) {
                 <p className="text-xs text-muted-foreground uppercase tracking-wide">Current Plan</p>
                 <h2 className="mt-1 text-2xl font-semibold">{subscription.planName}</h2>
               </div>
-              <Badge variant={subscription.status === "active" ? "default" : "outline"}>
-                {subscription.status}
+              <Badge variant={data.access?.allowed === false ? "outline" : subscription.status === "active" ? "default" : "outline"}>
+                {subscription.needsReview
+                  ? "needs review"
+                  : data.access?.allowed === false
+                    ? "expired"
+                    : subscription.status}
               </Badge>
             </div>
 
@@ -160,12 +183,38 @@ export function InfrastructureManager({ projectId }: { projectId: string }) {
 
             <div className="mt-4 flex items-center gap-6 text-sm text-muted-foreground">
               <span>Plan expires: <span className="text-foreground font-medium">{formatDate(subscription.expiresAt)}</span></span>
+              {subscription.needsReview && (
+                <span className="text-amber-600">Historical terms are under review. Access is preserved.</span>
+              )}
               {subscription.overQuota && (
                 <Badge variant="outline" className="text-xs text-amber-500 border-amber-500/30">
                   Over quota
                 </Badge>
               )}
             </div>
+
+            {subscription.planId !== "testing" && !subscription.needsReview && (
+              <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-4">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={purchasing !== null || cancelling}
+                  onClick={() => handleSubscribe(subscription.planId, true)}
+                >
+                  {purchasing === subscription.planId ? <Loader2 className="size-4 animate-spin" /> : "Renew 1 month"}
+                </Button>
+                {subscription.status !== "cancelled" && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={purchasing !== null || cancelling}
+                    onClick={handleCancelRenewal}
+                  >
+                    {cancelling ? <Loader2 className="size-4 animate-spin" /> : "Cancel renewal"}
+                  </Button>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       ) : (

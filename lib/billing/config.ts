@@ -325,6 +325,7 @@ export type LedgerTransactionType =
   | "admin_adjustment"
   | "subscription_expiration"
   | "refund_reversal"
+  | "credit_reconciliation"
   | "other_reversal"
   | "infrastructure_purchase"
   | "fork_purchase"

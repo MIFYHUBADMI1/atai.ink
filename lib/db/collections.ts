@@ -12,7 +12,7 @@ import type { BusinessDomainDoc } from "@/lib/types/business-intake"
 import type { CofounderConversationMongoDoc, PendingActionRecord } from "@/lib/cofounder/types"
 import type { CofounderModelTierDoc } from "@/lib/cofounder/models"
 import type { ProjectChatMongoDoc } from "@/lib/types/collab-chat"
-import type { CreditLedgerEntry, BuildAuthorization, PaymentRecord, SubscriptionRecord } from "@/lib/billing/billing-types"
+import type { CreditLedgerEntry, BuildAuthorization, PaymentRecord, SubscriptionRecord, EntitlementVersionRecord, PlanCatalogVersionRecord } from "@/lib/billing/billing-types"
 import type { ResourceDoc } from "@/lib/resources/admin-types"
 import type { LessonDoc } from "@/lib/lessons/admin-types"
 import type { GeneratedLessonDoc } from "@/lib/lessons/types"
@@ -157,6 +157,16 @@ export async function paymentRecordsCol() {
 
 export async function subscriptionRecordsCol() {
   return (await getDbCached()).collection<SubscriptionRecord>("subscription_records")
+}
+
+/** Published entitlement catalog versions (Phase A1). Immutable per version. */
+export async function entitlementVersionsCol() {
+  return (await getDbCached()).collection<EntitlementVersionRecord>("entitlement_versions")
+}
+
+/** Published price book versions (Phase A1). Immutable per version. */
+export async function planCatalogVersionsCol() {
+  return (await getDbCached()).collection<PlanCatalogVersionRecord>("plan_catalog_versions")
 }
 
 export async function planningRunsCol() {
@@ -489,6 +499,10 @@ async function runEnsureIndexes(): Promise<void> {
     projects.createIndex({ id: 1 }, { unique: true, sparse: true, name: "projects_id_unique" }),
     projects.createIndex({ requestedProjectId: 1 }, { unique: true, sparse: true, name: "projects_requested_project_id_unique" }),
     projects.createIndex({ userId: 1, updatedAt: -1 }),
+    projects.createIndex(
+      { "infrastructure.status": 1, "infrastructure.expiresAt": 1 },
+      { name: "projects_infrastructure_lifecycle" },
+    ),
     buildRuns.createIndex({ id: 1 }, { unique: true, sparse: true, name: "build_runs_id_unique" }),
     buildRuns.createIndex({ mirrorProjectId: 1, startedAt: -1 }),
     assets.createIndex({ id: 1 }, { unique: true, sparse: true, name: "project_assets_id_unique" }),
@@ -708,6 +722,21 @@ async function runEnsureIndexes(): Promise<void> {
     subRecords.createIndex({ dodoSubscriptionId: 1 }, { unique: true, name: "subscription_records_dodo_id_unique" }),
     subRecords.createIndex({ userId: 1, createdAt: -1 }),
     subRecords.createIndex({ status: 1, createdAt: -1 }),
+    // Migration/reconciliation: find records still needing pinned terms.
+    subRecords.createIndex({ termsStatus: 1, updatedAt: -1 }, { name: "subscription_records_terms_status" }),
+    subRecords.createIndex({ "purchasedTerms.pricingVersion": 1 }, { name: "subscription_records_pricing_version" }),
+  ])
+
+  // Published catalog version references (Phase A1) — one immutable doc per
+  // version. The unique index makes the idempotent seed a no-op on re-run.
+  const entitlementVersions = await entitlementVersionsCol()
+  await batchedIndexCreation([
+    entitlementVersions.createIndex({ version: 1 }, { unique: true, name: "entitlement_versions_version_unique" }),
+  ])
+
+  const planCatalogVersions = await planCatalogVersionsCol()
+  await batchedIndexCreation([
+    planCatalogVersions.createIndex({ version: 1 }, { unique: true, name: "plan_catalog_versions_version_unique" }),
   ])
 
   // Planning run indexes

@@ -127,6 +127,29 @@ describe("POST /api/projects/:id/deploy — atomic claim", () => {
     mockAuthorizeProductionWork.mockResolvedValue(null)
   })
 
+  it("refuses expired paid infrastructure before claiming or reserving credits", async () => {
+    mockGetProject.mockResolvedValue({
+      ...project,
+      infrastructure: {
+        planId: "basic",
+        planName: "Basic",
+        storageLimitBytes: 100 * 1024 * 1024,
+        totalumInfrastructureCreditLimit: 10,
+        status: "active",
+        startedAt: Date.now() - 31 * 24 * 60 * 60 * 1000,
+        expiresAt: Date.now() - 1,
+        autoRenew: false,
+      },
+    } as never)
+
+    const res = await post()
+
+    expect(res.status).toBe(402)
+    await expect(res.json()).resolves.toMatchObject({ error: { code: "INFRASTRUCTURE_EXPIRED" } })
+    expect(mockClaimBuildSlot).not.toHaveBeenCalled()
+    expect(mockReserveCredits).not.toHaveBeenCalled()
+  })
+
   it("refuses a deploy the plan does not cover before claiming anything", async () => {
     mockAuthorizeProductionWork.mockResolvedValue({
       allowed: false,
@@ -137,8 +160,21 @@ describe("POST /api/projects/:id/deploy — atomic claim", () => {
     const res = await post()
 
     expect(res.status).toBe(402)
+    expect(mockAuthorizeProductionWork).toHaveBeenCalledWith("u_dep", "deploy", { hasExistingSubdomain: false })
     expect(mockClaimBuildSlot).not.toHaveBeenCalled()
     expect(mockReserveCredits).not.toHaveBeenCalled()
+  })
+
+  it("lets an existing production URL be republished without spending a new subdomain slot", async () => {
+    mockGetProject.mockResolvedValue({
+      ...project,
+      state: "ready",
+      deployment: { id: "d1", status: "success", productionUrl: "shop.totalum-project.com", updatedAt: 1 },
+    } as never)
+    mockClaimBuildSlot.mockResolvedValue({ ...project, state: "deploying" })
+
+    expect((await post()).status).toBe(200)
+    expect(mockAuthorizeProductionWork).toHaveBeenCalledWith("u_dep", "deploy", { hasExistingSubdomain: true })
   })
 
   it("rejects with 409 when the atomic claim loses to a concurrent op, without touching credits", async () => {

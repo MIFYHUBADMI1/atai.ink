@@ -15,6 +15,7 @@ import type {
   PaymentStatus,
   SubscriptionStatus,
 } from "./config"
+import type { CommercialPlanId, EntitlementSet } from "./entitlements/types"
 
 // ─── Credit Ledger Entry ─────────────────────────────────────────────────────
 
@@ -36,6 +37,8 @@ export interface CreditLedgerEntry {
   transactionType: LedgerTransactionType
   referenceType?: string
   referenceId?: string
+  /** Original payment that funded this entry, when known (Phase A2). */
+  paymentId?: string
   balanceBefore: number
   balanceAfter: number
   idempotencyKey: string
@@ -95,12 +98,55 @@ export interface PaymentRecord {
   productName?: string
   /** Atai Credits granted by this payment */
   creditsGranted?: number
+  /**
+   * Total credits this purchase entitles the subscriber to. Monthly: the
+   * monthly allocation. Annual: the full annual allocation. Distinct from
+   * `creditsGranted`, which only counts credits actually issued so far.
+   */
+  creditsAllocated?: number
   /** Credit type granted */
   creditType?: CreditType
   /** Associated subscription ID if subscription payment */
   subscriptionId?: string
   /** Package ID for permanent credit packs */
   packageId?: string
+  /** Provider timestamp for when the payment was created (epoch ms). */
+  providerCreatedAt?: number
+  // ─── Phase A2 subscription grant linkage (additive, non-breaking) ─────────
+  /**
+   * Grant lifecycle for a subscription payment. `pending` means the payment
+   * is recorded but no ledger grant has been linked yet; `needs_review`
+   * means the historical grant cannot be established reliably.
+   */
+  grantStatus?: "pending" | "granted" | "partially_granted" | "failed" | "needs_review"
+  /** When the first grant was linked to this payment. */
+  grantedAt?: number
+  /** Ledger entry ids for every grant issued against this payment. */
+  grantLedgerEntryIds?: string[]
+  /** Grant idempotency keys, mirroring the ledger entries. */
+  grantIdempotencyKeys?: string[]
+  /** Credit bucket ids created by those grants (for safe reversal). */
+  grantBucketIds?: string[]
+  /** Paid period this payment covers (epoch ms). */
+  paidPeriodStart?: number
+  paidPeriodEnd?: number
+  /** How the payment was matched to its grant(s). */
+  grantLinkMethod?: "payment_id" | "subscription_period" | "ledger_reference" | "manual_review"
+  /** Actual credits reversed by refunds against this payment. */
+  creditsReversed?: number
+  /**
+   * Credits a refund asked to reverse but could not, because the original
+   * grant's buckets were already consumed or expired. This is the explicit
+   * shortfall reconciliation looks for; it is never silently treated as
+   * reversed.
+   */
+  creditsReversalShortfall?: number
+  /** Outcome of the credit side of a refund. */
+  reversalStatus?: "reversed" | "partially_reversed" | "nothing_to_reverse" | "unresolved"
+  /** Safe reason the credit reversal needs manual review. */
+  refundReviewReason?: string
+  /** Ledger entry ids for the reversal(s). */
+  reversalLedgerEntryIds?: string[]
   /**
    * Phase 3 refund accounting: the ORIGINAL payment a refund row reverses
    * (set on `paymentType: "refund"` rows written from refund.succeeded).
@@ -116,10 +162,92 @@ export interface PaymentRecord {
    * Absent = no refund recorded against this payment (never a fabricated 0).
    */
   refundedAmountMinor?: number
+  /** Refund ids already applied to this payment (atomic dedupe for `$inc`). */
+  refundIds?: string[]
   metadata?: Record<string, unknown>
   createdAt: number
   updatedAt: number
 }
+
+// ─── Subscription Commercial Terms ───────────────────────────────────────────
+
+export type BillingInterval = "monthly" | "annual"
+
+/**
+ * Annual issuance rules frozen at purchase time. Annual subscribers are
+ * charged once upfront but receive credits monthly; the scheduler reads these
+ * rules from the pinned terms instead of today's catalog constants.
+ */
+export interface AnnualAllocation {
+  /** Number of monthly issuances in the paid annual period. */
+  months: number
+  /** Credits issued per month (integer units). */
+  monthlyCredits: number
+  /** Total credits over the annual period (integer units). */
+  totalCredits: number
+  issuance: "monthly"
+}
+
+/**
+ * The authoritative commercial terms a subscription purchased. Written once at
+ * activation (or pinned by the backward-compatible migration) and never
+ * recomputed from the live catalog. A later catalog/pricing publication must
+ * not change price, credit allocation, or benefits for this subscriber.
+ *
+ * Monetary values are integer minor units (cents) — no floating point.
+ */
+export interface PurchasedTerms {
+  /** Internal Atai subscription record id. */
+  subscriptionId: string
+  /** Dodo subscription id the terms were purchased under. */
+  dodoSubscriptionId: string
+  /** Dodo product id actually purchased, when known. */
+  dodoProductId?: string
+  /** Internal plan id (legacy id is never renamed). */
+  planId: string
+  /** Canonical commercial plan id resolved at purchase time. */
+  commercialPlanId?: CommercialPlanId
+  planName: string
+  billingInterval: BillingInterval
+  /** Purchased price in integer minor units (e.g. cents). */
+  priceMinor: number
+  /** ISO currency of `priceMinor`. */
+  currency: string
+  /** Monthly credit allocation purchased (integer credits). */
+  monthlyCredits: number
+  /** Annual issuance rules, present only for annual subscriptions. */
+  annual?: AnnualAllocation
+  /**
+   * Frozen entitlement snapshot. This embedded copy is authoritative: it is
+   * sufficient to interpret the subscription without any version document.
+   * `entitlementVersion` / `pricingVersion` are audit references only.
+   */
+  entitlementSnapshot: EntitlementSet
+  /**
+   * How the snapshot was established.
+   * - `purchase`: frozen from the catalog at a genuine activation/plan change.
+   * - `legacy_snapshot`: copied from a snapshot the record already carried.
+   * - `legacy_mapping_provisional`: no historical snapshot existed; the
+   *   record's current legacy-compatible resolution was frozen for review.
+   *   The record is marked `needs_review`; this is not historical evidence.
+   */
+  entitlementEvidence: "purchase" | "legacy_snapshot" | "legacy_mapping_provisional"
+  /** Entitlement catalog version the snapshot came from. */
+  entitlementVersion: string
+  /** Price book version the price was taken from. */
+  pricingVersion: string
+  /** When the subscription was activated. */
+  activatedAt: number
+  /** Effective paid period start (epoch ms). */
+  periodStart: number
+  /** Effective paid period end (epoch ms). */
+  periodEnd: number
+  /** How these terms were established. */
+  source: "activation" | "migration"
+}
+
+/** Lifecycle of a subscription's pinned terms. */
+export type SubscriptionTermsStatus = "pinned" | "needs_review" | "unpinned"
 
 // ─── Subscription Record ─────────────────────────────────────────────────────
 
@@ -175,9 +303,61 @@ export interface SubscriptionRecord {
   migratedAt?: number
   /** Batch id of the migration that touched this record (idempotency/reconciliation). */
   migrationBatchId?: string
+  // ─── Phase A1 commercial-terms pinning (additive, non-breaking) ────────────
+  /**
+   * Frozen commercial terms purchased by this subscriber. Authoritative for
+   * renewals, credit grants and entitlement resolution. Absent on records that
+   * predate pinning; the migration fills it or marks `termsStatus`.
+   */
+  purchasedTerms?: PurchasedTerms
+  /** Whether the record's terms are pinned, explicitly under review, or absent. */
+  termsStatus?: SubscriptionTermsStatus
+  /** Safe reason a record requires manual migration review. */
+  termsReviewReason?: string
+  /** When the terms migration touched this record. */
+  termsMigratedAt?: number
+  /** Batch id of the terms migration (idempotency/reconciliation). */
+  termsMigrationBatchId?: string
   metadata?: Record<string, unknown>
   createdAt: number
   updatedAt: number
+}
+
+// ─── Version References (pricing / entitlement catalogs) ─────────────────────
+
+/**
+ * A published entitlement catalog version. Referenced by
+ * `SubscriptionRecord.entitlementVersion` / `PurchasedTerms.entitlementVersion`.
+ * Immutable once written — a new catalog publishes a NEW version document.
+ */
+export interface EntitlementVersionRecord {
+  _id?: ObjectId
+  version: string
+  createdAt: number
+  /** Structural entitlement templates (counts zero) frozen at this version. */
+  plans: Record<string, EntitlementSet>
+  notes?: string
+}
+
+/**
+ * A published price book version. Referenced by
+ * `SubscriptionRecord.pricingVersion` / `PurchasedTerms.pricingVersion`.
+ * Amounts are integer minor units.
+ */
+export interface PlanCatalogVersionRecord {
+  _id?: ObjectId
+  version: string
+  priceBookVersion: string
+  createdAt: number
+  currency: string
+  entries: Array<{
+    planId: string
+    commercialPlanId?: string
+    billingInterval: BillingInterval
+    priceMinor: number
+    monthlyCredits: number | null
+  }>
+  notes?: string
 }
 
 // ─── User Billing Profile (Extended) ─────────────────────────────────────────

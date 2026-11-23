@@ -9,6 +9,7 @@ import { AppError } from "@/lib/errors"
 import { withAiProtection } from "@/lib/api/ai-protection"
 import { readOwnerGoals } from "@/lib/marketing/growth-overview"
 import { generateCompetitionSnapshot } from "@/lib/marketing/competition-snapshot"
+import { authorizeCompetitionIntel, entitlementDenial } from "@/lib/billing/entitlements/require"
 
 /**
  * POST /api/projects/[id]/market/competition-snapshot
@@ -53,6 +54,9 @@ async function post(_req: Request, { params }: { params: Promise<{ id: string }>
     if (!project.specification) {
       return fail("VALIDATION", "The competitor snapshot builds on your plan — this project has no plan yet.", 409)
     }
+
+    const intelDenied = entitlementDenial(await authorizeCompetitionIntel(user.id))
+    if (intelDenied) return fail(intelDenied.code, intelDenied.message, 402)
 
     const item = await generateCompetitionSnapshot({
       userId: user.id,

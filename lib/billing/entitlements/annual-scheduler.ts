@@ -21,8 +21,13 @@
 
 import { subscriptionRecordsCol, paymentRecordsCol } from "@/lib/db/collections"
 import { grantSubscriptionCredits } from "@/lib/billing/credit-service"
-import { PROVISIONAL_MONTHLY_CREDITS, ENTITLEMENT_VERSION } from "./catalog"
+import {
+  findSubscriptionGrantEntry,
+  linkSubscriptionGrantToPayment,
+} from "@/lib/billing/subscription-payment-grants"
+import { ENTITLEMENT_VERSION } from "./catalog"
 import { resolveCommercialPlan } from "./migration-map"
+import { annualMonthlyAllocation } from "@/lib/billing/subscription-terms"
 import type { SubscriptionRecord } from "@/lib/billing/billing-types"
 import type { CommercialPlanId } from "./types"
 
@@ -77,10 +82,12 @@ export function computeDueGrantMonths(
   if (sub.currentPeriodEnd <= now) return []
 
   const due: DueGrantMonth[] = []
-  for (let n = 0; n < 12; n++) {
+  // The purchased annual issuance rules govern how many monthly windows exist.
+  const months = sub.purchasedTerms?.annual?.months ?? 12
+  for (let n = 0; n < months; n++) {
     const monthStart = addMonths(sub.currentPeriodStart, n)
     const monthEnd = addMonths(sub.currentPeriodStart, n + 1)
-    // Earned once the month window begins, and within the paid 12-month window.
+    // Earned once the month window begins, and within the paid annual window.
     if (monthStart <= now && monthStart < sub.currentPeriodEnd) {
       due.push({ monthIndex: n, periodStart: monthStart, periodEnd: monthEnd })
     }
@@ -95,9 +102,13 @@ export async function annualPaymentSucceeded(sub: SubscriptionRecord): Promise<b
     const record = await col.findOne({
       subscriptionId: sub.dodoSubscriptionId,
       paymentType: "subscription",
-      status: "succeeded",
+      status: { $in: ["succeeded", "partially_refunded"] },
     })
     if (!record) return false
+    // A full refund stops future annual allocations. A partial refund keeps
+    // the remaining paid months (the existing commercial rule) — the policy
+    // for partial annual refunds remains a business decision.
+    if (record.status === "refunded") return false
     // Refunded in full (or partially beyond the principal) → stop granting.
     if (record.refundedAmountMinor != null && record.amount != null && record.refundedAmountMinor >= record.amount) {
       return false
@@ -139,13 +150,22 @@ export async function runAnnualGrantSweep(now: number = Date.now()): Promise<Ann
         report.skipped++
         continue
       }
-      const planId = getCommercialPlanId(sub)
-      const monthly = PROVISIONAL_MONTHLY_CREDITS[planId]
-      if (monthly == null) {
-        report.skipped++
+      const planId = sub.purchasedTerms?.planId ?? getCommercialPlanId(sub)
+      // Purchased allocation only: pinned terms first, then the record's own
+      // stored allocation. Never today's provisional catalog constant.
+      const monthly = annualMonthlyAllocation(sub)
+      if (monthly === undefined) {
+        report.errors.push({ id: sub.id, error: "missing_pinned_monthly_allocation" })
         continue
       }
       for (const m of due) {
+        // Re-check the upfront payment before every issuance. A full refund
+        // applied since the sweep started must stop the remaining months,
+        // not just the next sweep run.
+        if (!(await annualPaymentSucceeded(sub))) {
+          report.skipped++
+          break
+        }
         const ok = await grantSubscriptionCredits({
           userId: sub.userId,
           amount: monthly,
@@ -157,10 +177,34 @@ export async function runAnnualGrantSweep(now: number = Date.now()): Promise<Ann
             annualGrant: true,
             monthIndex: m.monthIndex,
             billingCycle: "annual",
-            entitlementVersion: ENTITLEMENT_VERSION,
+            entitlementVersion: sub.purchasedTerms?.entitlementVersion ?? ENTITLEMENT_VERSION,
           },
         })
-        if (ok) report.granted++
+        if (ok) {
+          report.granted++
+          const entry = await findSubscriptionGrantEntry(sub.dodoSubscriptionId, m.periodEnd)
+          if (entry) {
+            await linkSubscriptionGrantToPayment({
+              userId: sub.userId,
+              subscriptionId: sub.dodoSubscriptionId,
+              planId,
+              periodStart: m.periodStart,
+              periodEnd: m.periodEnd,
+              amount: monthly,
+              creditsAllocated:
+                sub.purchasedTerms?.annual?.totalCredits ??
+                monthly * (sub.purchasedTerms?.annual?.months ?? 12),
+              paidPeriodStart: sub.currentPeriodStart,
+              paidPeriodEnd: sub.currentPeriodEnd,
+              ledgerEntryId: entry.id,
+              ledgerIdempotencyKey: entry.idempotencyKey,
+              bucketId:
+                typeof entry.metadata?.bucketId === "string" ? entry.metadata.bucketId : undefined,
+            })
+          }
+        } else {
+          report.errors.push({ id: sub.id, error: `grant_failed_month_${m.monthIndex}` })
+        }
       }
     } catch (err) {
       report.errors.push({ id: sub.id, error: err instanceof Error ? err.message : String(err) })

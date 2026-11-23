@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/auth/session"
 import { store, cryptoId } from "@/lib/store/store"
 import { ok, fail, handleRouteError } from "@/lib/api/respond"
 import { addCustomDomain, removeCustomDomain, isTotalumConfigured, getDeploymentStatus } from "@/lib/integrations/totalum/service"
+import { authorizeCustomDomain, entitlementDenial } from "@/lib/billing/entitlements/require"
 import type { ProjectEvent } from "@/lib/types/project"
 
 function event(stage: string, message: string, level: ProjectEvent["level"] = "info"): ProjectEvent {
@@ -18,6 +19,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const { id } = await params
     const project = await store.getProject(id)
     if (!project || project.userId !== user.id) return fail("UNAUTHORIZED_PROJECT_ACCESS", "We couldn't find this project.", 404)
+
+    const hasExistingDomain =
+      Boolean(project.deployment?.customDomain) ||
+      (project.deploymentHistory ?? []).some((entry) => Boolean(entry.customDomain))
+    const domainDenied = entitlementDenial(await authorizeCustomDomain(user.id, hasExistingDomain))
+    if (domainDenied) return fail(domainDenied.code, domainDenied.message, 402)
 
     if (!project.totalumProjectId) return fail("NO_TOTALUM_PROJECT", "This project hasn't been built yet.", 400)
 
@@ -46,6 +53,14 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     try {
       const result = await addCustomDomain(project.totalumProjectId, { hostname })
 
+      await store.updateProject(id, {
+        deployment: {
+          ...project.deployment,
+          customDomain: result.hostname,
+          customDomainStatus: result.status,
+          updatedAt: Date.now(),
+        },
+      })
       await store.appendEvent(id, event("domain", `Custom domain added: ${hostname}`))
 
       return ok({
@@ -83,6 +98,14 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
 
     const result = await removeCustomDomain(project.totalumProjectId)
 
+    await store.updateProject(id, {
+      deployment: {
+        ...project.deployment,
+        customDomain: undefined,
+        customDomainStatus: undefined,
+        updatedAt: Date.now(),
+      },
+    })
     await store.appendEvent(id, event("domain", "Custom domain removed"))
 
     return ok({ message: result.message })

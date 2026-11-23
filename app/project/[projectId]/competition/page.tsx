@@ -14,6 +14,7 @@ import { requireOwnedProject } from "@/lib/workspace/require-owned-project"
 import { userHasRealBusiness } from "@/lib/dashboard/business-access"
 import { BusinessLockedForProject } from "@/components/workspace/business-locked"
 import { getResourcesCompetitorIntelligence } from "@/lib/resources/competitor-intelligence"
+import { authorizeCompetitionIntel, entitlementDenial } from "@/lib/billing/entitlements/require"
 
 /**
  * Competition route — the Competition Center dashboard.
@@ -54,6 +55,7 @@ export default async function ProjectCompetitionPage({ params }: { params: Promi
     ? spec.targetUsers.filter((u) => typeof u === "string" && u.trim().length > 0)
     : []
 
+  const intelDenied = entitlementDenial(await authorizeCompetitionIntel(user.id))
   const studioEnabled = isMarketStudioEnabled()
   const textReady = studioEnabled && Boolean(capabilityAvailability()["ai.text"]?.configured)
   const researchReady = isFirecrawlConfigured()
@@ -92,6 +94,7 @@ export default async function ProjectCompetitionPage({ params }: { params: Promi
         researchReady={researchReady}
         hasPlan={Boolean(spec)}
         researchEnabled={studioEnabled}
+        entitlementDenied={intelDenied?.message ?? null}
         positioning={positioningPresent ? positioning : ""}
         valueProposition={valuePresent ? valueProposition : ""}
         targetUsers={targetUsers}

@@ -34,6 +34,11 @@ vi.mock("@/lib/billing/credit-service", () => ({
   grantSubscriptionCredits,
 }))
 
+vi.mock("@/lib/billing/subscription-payment-grants", () => ({
+  findSubscriptionGrantEntry: vi.fn(async () => null),
+  linkSubscriptionGrantToPayment: vi.fn(async () => ({ linked: false })),
+}))
+
 vi.mock("@/lib/billing/dodo-service", () => ({
   getDodoClient: vi.fn(),
 }))

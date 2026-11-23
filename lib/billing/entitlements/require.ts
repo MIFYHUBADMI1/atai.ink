@@ -8,7 +8,7 @@
  * @module lib/billing/entitlements/require
  */
 
-import { authorize } from "./service"
+import { authorize, authorizeOperations } from "./service"
 import type { EntitlementCheck } from "./types"
 
 /**
@@ -44,28 +44,103 @@ export async function authorizeProductionDeploy(userId: string): Promise<Entitle
  * Gate a production build or deployment.
  *
  * Returns the denial the caller must turn into a 402, or null when the work is
- * permitted. Fail-open on a resolution error: the resolver already degrades to
- * last-known/planning-only inside its own failure ladder, so an exception here
- * means "we could not decide", and a database blip must not freeze a founder's
- * build.
+ * permitted. A resolution error is a refusal, not a permission: the resolver
+ * already degrades to last-known/planning-only internally, so reaching this
+ * catch means we could not decide and the paid operation must wait.
  */
 export async function authorizeProductionWork(
   userId: string,
   op: "buildProduction" | "deploy",
+  opts: { hasExistingSubdomain?: boolean } = {},
 ): Promise<EntitlementCheck | null> {
   if (!ENTITLEMENT_ENFORCEMENT_ENABLED) return null
   try {
-    const check = op === "deploy"
-      ? await authorizeProductionDeploy(userId)
-      : await authorizeProductionBuild(userId)
-    return check.allowed ? null : check
-  } catch {
+    // A production build also provisions the application database and engages
+    // the specialist team; resolve all three against one fresh snapshot.
+    const requests = op === "deploy"
+      ? [{ op: "deploy" as const }]
+      : [
+          { op: "buildProduction" as const },
+          { op: "provisionDatabase" as const },
+          { op: "useSpecialistTeam" as const },
+        ]
+    const checks = await authorizeOperations(userId, requests, { fresh: true })
+    const denied = checks.find((check) => !check.allowed)
+    if (denied) return denied
+    if (op === "deploy" && !opts.hasExistingSubdomain) {
+      return authorizeSubdomain(userId, false)
+    }
     return null
+  } catch {
+    return {
+      allowed: false,
+      code: "ENTITLEMENT_UNAVAILABLE",
+      reason: "We couldn't confirm your plan just now. Please try again.",
+    }
   }
 }
 
 export async function authorizeAgent(userId: string, agent: "start" | "scout" | "optimize"): Promise<EntitlementCheck> {
+  if (!ENTITLEMENT_ENFORCEMENT_ENABLED) return { allowed: true }
   return authorize(userId, "useAgent", { agent }, { fresh: true })
+}
+
+async function checkOperation(
+  userId: string,
+  op: Parameters<typeof authorize>[1],
+  ctx?: Parameters<typeof authorize>[2],
+): Promise<EntitlementCheck | null> {
+  if (!ENTITLEMENT_ENFORCEMENT_ENABLED) return null
+  const [check] = await authorizeOperations(userId, [{ op, ctx }], { fresh: true })
+  return check.allowed ? null : check
+}
+
+/**
+ * Adding a custom domain is a new restricted resource. Replacing or removing a
+ * domain already attached to the project remains a management action.
+ */
+export async function authorizeCustomDomain(
+  userId: string,
+  hasExistingDomain: boolean,
+): Promise<EntitlementCheck | null> {
+  if (hasExistingDomain) return null
+  return checkOperation(userId, "registerCustomDomain")
+}
+
+/** A project that already owns a production URL may always be republished. */
+export async function authorizeSubdomain(
+  userId: string,
+  hasExistingSubdomain: boolean,
+): Promise<EntitlementCheck | null> {
+  if (hasExistingSubdomain) return null
+  return checkOperation(userId, "connectSubdomain")
+}
+
+export async function authorizeProvisionDatabase(userId: string): Promise<EntitlementCheck | null> {
+  return checkOperation(userId, "provisionDatabase")
+}
+
+export async function authorizeStorage(userId: string): Promise<EntitlementCheck | null> {
+  return checkOperation(userId, "useStorage")
+}
+
+export async function authorizeSpecialistTeam(userId: string): Promise<EntitlementCheck | null> {
+  return checkOperation(userId, "useSpecialistTeam")
+}
+
+export async function authorizeCompetitionIntel(userId: string): Promise<EntitlementCheck | null> {
+  return checkOperation(userId, "useCompetitionIntel")
+}
+
+/** Shared machine-readable refusal shape for every entitlement-gated route. */
+export function entitlementDenial(
+  check: EntitlementCheck | null,
+): { code: string; message: string } | null {
+  if (!check || check.allowed) return null
+  return {
+    code: check.code ?? "ENTITLEMENT_DENIED",
+    message: check.reason ?? "Your plan does not include this operation.",
+  }
 }
 
 /** Thrown when enforcement is ON and the operation is not permitted. */

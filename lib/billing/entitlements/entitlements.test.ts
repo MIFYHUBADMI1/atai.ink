@@ -129,3 +129,79 @@ describe("domain entitlements", () => {
     expect(checkEntitlement(buildEntitlementSet("starter", zero), "registerCustomDomain").allowed).toBe(false)
   })
 })
+
+// ─── M-22: every operation resolves from purchased state ─────────────────────
+
+describe("M-22 operation matrix", () => {
+  it("custom-domain cap uses consumed registrations, not the plan label", () => {
+    const starter = buildEntitlementSet("starter", zero)
+    expect(checkEntitlement(starter, "registerCustomDomain").allowed).toBe(false)
+
+    const growthAtLimit = buildEntitlementSet("growth", { ...zero, customDomainsConsumed: 1 })
+    const blocked = checkEntitlement(growthAtLimit, "registerCustomDomain")
+    expect(blocked.allowed).toBe(false)
+    expect(blocked.code).toBe("CUSTOM_DOMAIN_LIMIT")
+
+    const growthWithRoom = buildEntitlementSet("growth", { ...zero, customDomainsConsumed: 0 })
+    expect(checkEntitlement(growthWithRoom, "registerCustomDomain").allowed).toBe(true)
+  })
+
+  it("subdomain cap uses live deployed projects", () => {
+    const starter = buildEntitlementSet("starter", { ...zero, subdomains: 0 })
+    expect(checkEntitlement(starter, "connectSubdomain").allowed).toBe(true)
+
+    const starterFull = buildEntitlementSet("starter", { ...zero, subdomains: 1 })
+    const blocked = checkEntitlement(starterFull, "connectSubdomain")
+    expect(blocked.allowed).toBe(false)
+    expect(blocked.code).toBe("SUBDOMAIN_LIMIT")
+
+    const scaleFull = buildEntitlementSet("scale", { ...zero, subdomains: 99 })
+    expect(checkEntitlement(scaleFull, "connectSubdomain").allowed).toBe(false)
+  })
+
+  it("storage and database provisioning follow the purchased production capability", () => {
+    const explorer = buildEntitlementSet("explorer", zero)
+    expect(checkEntitlement(explorer, "useStorage").allowed).toBe(false)
+    expect(checkEntitlement(explorer, "provisionDatabase").allowed).toBe(false)
+
+    const starter = buildEntitlementSet("starter", zero)
+    expect(checkEntitlement(starter, "useStorage").allowed).toBe(true)
+    expect(checkEntitlement(starter, "provisionDatabase").allowed).toBe(true)
+  })
+
+  it("competition intelligence requires the purchased business capability", () => {
+    expect(checkEntitlement(buildEntitlementSet("starter", zero), "useCompetitionIntel").allowed).toBe(false)
+    expect(checkEntitlement(buildEntitlementSet("growth", zero), "useCompetitionIntel").allowed).toBe(true)
+    // Explorer's research-only path is explicitly allowed.
+    expect(checkEntitlement(buildEntitlementSet("explorer", zero), "useCompetitionIntel").allowed).toBe(true)
+  })
+
+  it("a review-pending historical record keeps competition and team access", () => {
+    const review = buildEntitlementSet("explorer", zero, {
+      grandfathered: true,
+      preserveLegacyBehavior: true,
+      legacyPlanId: "free",
+    })
+    expect(checkEntitlement(review, "useCompetitionIntel").allowed).toBe(true)
+    expect(checkEntitlement(review, "useSpecialistTeam").allowed).toBe(true)
+  })
+
+  it("specialist teams follow the purchased team tier", () => {
+    expect(checkEntitlement(buildEntitlementSet("explorer", zero), "useSpecialistTeam").allowed).toBe(false)
+    expect(checkEntitlement(buildEntitlementSet("starter", zero), "useSpecialistTeam").allowed).toBe(true)
+    expect(checkEntitlement(buildEntitlementSet("growth", zero), "useSpecialistTeam").allowed).toBe(true)
+  })
+
+  it("Agent access is denied where the plan has no slot and unlaunched where it does", () => {
+    for (const plan of ["explorer", "starter", "growth"] as const) {
+      const check = checkEntitlement(buildEntitlementSet(plan, zero), "useAgent", { agent: "start" })
+      expect(check.allowed).toBe(false)
+      expect(check.code).toBe("AGENT_UNAVAILABLE")
+    }
+    for (const plan of ["scale", "enterprise"] as const) {
+      const check = checkEntitlement(buildEntitlementSet(plan, zero), "useAgent", { agent: "start" })
+      expect(check.allowed).toBe(false)
+      expect(check.code).toBe("AGENT_NOT_LAUNCHED")
+    }
+  })
+})

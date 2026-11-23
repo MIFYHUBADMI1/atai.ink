@@ -23,6 +23,9 @@ import {
   type VisualMockupResponse,
 } from "@/lib/types/visual-mockup"
 import { getPlanSection } from "@/lib/analysis/plan-sections"
+import { authorizeStorage, entitlementDenial } from "@/lib/billing/entitlements/require"
+import { infrastructureDenial } from "@/lib/infrastructure/access"
+import { getProjectStorageUsage } from "@/lib/infrastructure/service"
 
 /** Generous ceiling — flagship image models can take minutes to render. */
 const GENERATION_TIMEOUT_MS = 120_000
@@ -120,6 +123,18 @@ async function post(
     const project = await store.getProject(projectId)
     if (!project || project.userId !== user.id) {
       return fail("UNAUTHORIZED_PROJECT_ACCESS", "We couldn't find this project.", 404)
+    }
+    const infrastructureBlocked = infrastructureDenial(project.infrastructure)
+    if (infrastructureBlocked) return fail(infrastructureBlocked.code, infrastructureBlocked.message, 402)
+    const storageDenied = entitlementDenial(await authorizeStorage(user.id))
+    if (storageDenied) return fail(storageDenied.code, storageDenied.message, 402)
+    const storageUsage = await getProjectStorageUsage(projectId)
+    if (storageUsage.limitBytes !== null && storageUsage.usedBytes >= storageUsage.limitBytes) {
+      return fail(
+        "STORAGE_LIMIT_REACHED",
+        "This project has reached its infrastructure storage limit. Upgrade the infrastructure plan to add more.",
+        402,
+      )
     }
 
     const sectionDef = getPlanSection(sectionId)
