@@ -124,3 +124,20 @@ export interface BusinessMemberDoc {
 }
 
 export const BUSINESS_SCHEMA_VERSION = 1
+
+/**
+ * Admin-controlled rollout for the connected-business workspace.
+ *
+ * One document, id `connected-business`. Its presence means an admin has taken
+ * control; its absence means the deployment's env vars still decide. The
+ * distinction is reported to the admin UI so an operator is never unsure which
+ * switch is actually in effect.
+ */
+export interface BusinessRolloutDoc {
+  id: string
+  mode: "off" | "internal" | "all"
+  /** User ids allowed while mode is `internal`. */
+  cohort: string[]
+  updatedAt: number
+  updatedBy?: string
+}

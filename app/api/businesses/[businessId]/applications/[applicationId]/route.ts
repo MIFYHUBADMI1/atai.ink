@@ -9,7 +9,7 @@ export async function DELETE(
 ) {
   try {
     const user = await requireUser()
-    requireWorkspace(user.id)
+    await requireWorkspace(user.id, "write")
     const { businessId, applicationId } = await params
 
     const application = await archiveApplication({ businessId, applicationId, actor: actorOf(user) })

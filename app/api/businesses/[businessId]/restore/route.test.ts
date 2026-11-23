@@ -9,6 +9,7 @@ const { requireUser, restoreBusiness, isBusinessWorkspaceEnabled } = vi.hoisted(
 vi.mock("@/lib/auth/session", () => ({ requireUser }))
 vi.mock("@/lib/business/service", () => ({ restoreBusiness }))
 vi.mock("@/lib/business/flags", () => ({ isBusinessWorkspaceEnabled }))
+vi.mock("@/lib/auth/rate-limit", () => ({ checkRateLimit: vi.fn(async () => {}) }))
 
 const { POST } = await import("./route")
 

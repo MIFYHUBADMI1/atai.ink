@@ -13,7 +13,7 @@ const RenameSchema = z.object({ name: z.string().trim().min(1).max(120) })
 export async function GET(_request: Request, { params }: { params: Promise<{ businessId: string }> }) {
   try {
     const user = await requireUser()
-    requireWorkspace(user.id)
+    await requireWorkspace(user.id, "read")
     const { businessId } = await params
     const actor = actorOf(user)
 
@@ -31,7 +31,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ bus
 export async function PATCH(request: Request, { params }: { params: Promise<{ businessId: string }> }) {
   try {
     const user = await requireUser()
-    requireWorkspace(user.id)
+    await requireWorkspace(user.id, "write")
     const { businessId } = await params
 
     const parsed = RenameSchema.safeParse(await request.json().catch(() => null))
@@ -47,7 +47,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ bu
 export async function DELETE(_request: Request, { params }: { params: Promise<{ businessId: string }> }) {
   try {
     const user = await requireUser()
-    requireWorkspace(user.id)
+    await requireWorkspace(user.id, "write")
     const { businessId } = await params
 
     const business = await archiveBusiness({ businessId, actor: actorOf(user) })

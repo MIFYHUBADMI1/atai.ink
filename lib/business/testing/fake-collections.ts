@@ -18,10 +18,12 @@
 type Filter = Record<string, unknown>
 interface FakeOptions {
   session?: unknown
+  upsert?: boolean
 }
 
 export interface FakeUpdate {
   $set?: Record<string, unknown>
+  $setOnInsert?: Record<string, unknown>
   $unset?: Record<string, unknown>
 }
 
@@ -39,6 +41,7 @@ export interface FakeCollection<T extends object> {
   ) => Promise<{ matchedCount: number; modifiedCount: number }>
   countDocuments: (filter?: Filter, options?: FakeOptions) => Promise<number>
   updateMany: (filter: Filter, update: FakeUpdate, options?: FakeOptions) => Promise<{ modifiedCount: number }>
+  deleteOne: (filter?: Filter, options?: FakeOptions) => Promise<{ deletedCount: number }>
   deleteMany: (filter?: Filter, options?: FakeOptions) => Promise<{ deletedCount: number }>
 }
 
@@ -118,7 +121,21 @@ export function fakeCollection<T extends object>(
     async updateOne(filter, update, options) {
       assertSession(options, "updateOne")
       const doc = docs.find((candidate) => matches(candidate, filter))
-      if (!doc) return { matchedCount: 0, modifiedCount: 0 }
+      if (!doc) {
+        // MongoDB's upsert inserts the filter's equality fields merged with the
+        // update. Without this the model silently drops writes that production
+        // would persist, which is how a settings document can appear to save
+        // and never exist.
+        if (options?.upsert) {
+          const equality = Object.fromEntries(
+            Object.entries(filter).filter(([, value]) => !(value && typeof value === "object")),
+          )
+          // $setOnInsert applies only to the insert half, which is how a partial
+          // update can seed a field it was not asked to change.
+          docs.push({ ...equality, ...(update.$setOnInsert ?? {}), ...(update.$set ?? {}) } as T)
+        }
+        return { matchedCount: 0, modifiedCount: 0 }
+      }
       if (update.$set) Object.assign(doc, update.$set)
       for (const key of Object.keys(update.$unset ?? {})) {
         delete (doc as Record<string, unknown>)[key]
@@ -139,6 +156,13 @@ export function fakeCollection<T extends object>(
         }
       }
       return { modifiedCount: matched.length }
+    },
+    async deleteOne(filter = {}, options) {
+      assertSession(options, "deleteOne")
+      const index = docs.findIndex((doc) => matches(doc, filter))
+      if (index === -1) return { deletedCount: 0 }
+      docs.splice(index, 1)
+      return { deletedCount: 1 }
     },
     async deleteMany(filter = {}, options) {
       assertSession(options, "deleteMany")

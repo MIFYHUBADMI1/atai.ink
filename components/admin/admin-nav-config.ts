@@ -63,6 +63,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
       { href: "/admin/infrastructure", label: "Infrastructure", icon: Database, description: "Storage, plans, sync, and cost." },
       { href: "/admin/session-policy", label: "Session policy", icon: MonitorSmartphone, description: "Active-session caps for users and admins." },
       { href: "/admin/domains/claims", label: "Business claims", icon: Globe, description: "Who holds each connected business, and the audited support release." },
+      { href: "/admin/connected-business", label: "Business rollout", icon: Users, description: "Who sees the connected-business workspace, and the internal test cohort." },
       { href: "/admin/planning-runs", label: "Planning runs", icon: Workflow, description: "Build-planning pipeline observability." },
       { href: "/admin/ads", label: "Advertising", icon: Megaphone, description: "Promotion requests, quotations, and manual execution." },
     ],

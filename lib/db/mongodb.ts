@@ -101,6 +101,22 @@ export async function getMongoClient(): Promise<MongoClient> {
   }
 }
 
+/**
+ * Closes the shared client. A long-lived server never calls this; a one-shot
+ * script must, or the open sockets keep the event loop alive and the process
+ * prints its report and then hangs forever.
+ */
+export async function closeMongoClient(): Promise<void> {
+  const pending = globalForMongo.__mirrorMongoClientPromise
+  if (!pending) return
+  globalForMongo.__mirrorMongoClientPromise = undefined
+  try {
+    await (await pending).close()
+  } catch {
+    // Already closed, or never connected. Nothing left to release.
+  }
+}
+
 export async function getDb(): Promise<Db> {
   const client = await getMongoClient()
   return client.db()

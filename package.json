@@ -13,7 +13,11 @@
     "cleanup:credit-transactions": "tsx scripts/cleanup-credit-transactions.ts",
     "test": "vitest run",
     "test:integration": "vitest run test/integration",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "migrate:businesses:preflight": "npx --yes tsx --tsconfig tsconfig.scripts.json scripts/preflight-connected-business-migration.ts",
+    "migrate:businesses": "npx --yes tsx --tsconfig tsconfig.scripts.json scripts/migrate-connected-businesses-v1.ts",
+    "migrate:businesses:verify": "npx --yes tsx --tsconfig tsconfig.scripts.json scripts/verify-connected-businesses.ts",
+    "migrate:businesses:rollback": "npx --yes tsx --tsconfig tsconfig.scripts.json scripts/rollback-connected-businesses-v1.ts"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.40",

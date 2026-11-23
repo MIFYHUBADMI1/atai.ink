@@ -21,7 +21,7 @@ const AddMemberSchema = z.object({
 export async function GET(_request: Request, { params }: { params: Promise<{ businessId: string }> }) {
   try {
     const user = await requireUser()
-    requireWorkspace(user.id)
+    await requireWorkspace(user.id, "read")
     const { businessId } = await params
     return ok({ members: await listMembers({ businessId, actor: actorOf(user) }) })
   } catch (error) {
@@ -32,7 +32,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ bus
 export async function POST(request: Request, { params }: { params: Promise<{ businessId: string }> }) {
   try {
     const user = await requireUser()
-    requireWorkspace(user.id)
+    await requireWorkspace(user.id, "write")
     const { businessId } = await params
 
     const parsed = AddMemberSchema.safeParse(await request.json().catch(() => null))

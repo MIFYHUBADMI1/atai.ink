@@ -1,6 +1,6 @@
 import { getDb } from "@/lib/db/mongodb"
 import type { UserDoc, SessionDoc, VerificationTokenDoc, RateLimitDoc, ProjectAssetDoc, ProjectAttachmentDoc, ProviderUsageDoc, TopUpDoc, PublishEventDoc, ReferralDoc, DocFeedbackDoc, WebhookEventDoc, PlanningRunDoc, ProjectLikeDoc, UserFollowDoc, ProjectForkDoc, ProjectGitHubDoc, SeoAuditDoc, ContentItemDoc, BrandProfileDoc, GrowthTaskDoc, GrowthTaskHistoryDoc, CampaignDoc, CampaignHistoryDoc, AnalyticsEventDoc } from "@/lib/types/db"
-import type { BusinessDoc, BusinessMemberDoc, ConnectedApplicationDoc } from "@/lib/types/business"
+import type { BusinessDoc, BusinessMemberDoc, BusinessRolloutDoc, ConnectedApplicationDoc } from "@/lib/types/business"
 import type {
   FeatureRequestDoc,
   FeatureRequestInternalNoteDoc,
@@ -39,6 +39,7 @@ import type {
   FeedbackSettingsDoc,
 } from "@/lib/feedback/types"
 import type { SiteSettingsDoc } from "@/lib/site-settings"
+import { isShutdownError } from "@/lib/server/benign-disconnect"
 
 /** Cache the Db reference across hot reloads so we don't re-resolve per call. */
 const globalForDb = globalThis as unknown as {
@@ -265,6 +266,11 @@ export async function businessMembersCol() {
   return (await getDbCached()).collection<BusinessMemberDoc>("business_members")
 }
 
+/** Admin-controlled rollout switch for the connected-business workspace. */
+export async function businessRolloutCol() {
+  return (await getDbCached()).collection<BusinessRolloutDoc>("business_rollout")
+}
+
 export async function featureRequestsCol() {
   return (await getDbCached()).collection<FeatureRequestDoc & { _id?: unknown }>("feature_requests")
 }
@@ -439,8 +445,9 @@ export async function ensureIndexes(): Promise<void> {
       globalForDb.__mirrorIndexesReady = true
     })
     .catch((error) => {
-      // Index creation is best-effort — never fail a request over it.
-      console.error("[v0] ensureIndexes: failed", error)
+      // Index creation is best-effort — never fail a request over it. A close
+      // during shutdown is not a failure, so it is not worth an error line.
+      if (!isShutdownError(error)) console.error("[v0] ensureIndexes: failed", error)
       globalForDb.__mirrorIndexesRetryAt = Date.now() + INDEX_RETRY_COOLDOWN_MS
     })
     .finally(() => {
@@ -539,7 +546,7 @@ async function runEnsureIndexes(): Promise<void> {
   ]).catch((error) => {
     // Log but don't crash — indexes are best-effort; the app can still
     // function (albeit slower) without them on the first request.
-    console.error("[v0] ensureIndexes: failed", error)
+    if (!isShutdownError(error)) console.error("[v0] ensureIndexes: failed", error)
   })
 
   // Referral indexes

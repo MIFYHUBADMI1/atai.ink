@@ -16,7 +16,7 @@ export default async function BusinessWorkspacePage({ params }: { params: Promis
   const user = await getCurrentUser()
   const { businessId } = await params
   if (!user) redirect(`/login?next=${encodeURIComponent(`/business/${businessId}`)}`)
-  if (!isBusinessWorkspaceEnabled(user.id)) notFound()
+  if (!(await isBusinessWorkspaceEnabled(user.id))) notFound()
 
   const actor = userActor(user.id)
 

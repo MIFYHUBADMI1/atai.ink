@@ -13,6 +13,7 @@
  */
 import { CliUsageError, parseMode, requireRunId } from "@/lib/connected-business/cli"
 import { rollbackMigration } from "@/lib/connected-business/rollback"
+import { closeDatabase } from "@/lib/db/shutdown"
 
 async function main() {
   const mode = parseMode(process.argv)
@@ -56,7 +57,9 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error)
-  process.exitCode = 1
-})
+main()
+  .catch((error) => {
+    console.error(error)
+    process.exitCode = 1
+  })
+  .finally(() => closeDatabase())

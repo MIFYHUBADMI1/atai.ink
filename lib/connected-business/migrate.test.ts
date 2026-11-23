@@ -149,6 +149,18 @@ describe("migration", () => {
     expect(fakes.businesses.docs).toHaveLength(1)
   })
 
+  it("skips a legacy project that has no owner, rather than inventing one", async () => {
+    fakes.projects.docs.push(project({ userId: undefined as unknown as string }))
+
+    const report = await migrateConnectedBusinesses({ mode: "apply", runId: "run-1", now: 100 })
+
+    expect(report.created).toBe(0)
+    expect(report.skipped).toBe(1)
+    expect(report.items[0].warning).toMatch(/no owner/)
+    expect(fakes.businesses.docs).toHaveLength(0)
+    expect(fakes.members.docs).toHaveLength(0)
+  })
+
   it("migrates a project without a usable address as a business only", async () => {
     fakes.projects.docs.push(project({ sourceUrl: undefined }))
 

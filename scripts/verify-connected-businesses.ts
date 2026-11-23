@@ -6,6 +6,7 @@
  * Exits non-zero when problems are found, so it can gate a deploy.
  */
 import { verifyConnectedBusinesses } from "@/lib/connected-business/verify"
+import { closeDatabase } from "@/lib/db/shutdown"
 
 async function main() {
   const report = await verifyConnectedBusinesses()
@@ -13,7 +14,9 @@ async function main() {
   if (report.problems.length > 0) process.exitCode = 1
 }
 
-main().catch((error) => {
-  console.error(error)
-  process.exitCode = 1
-})
+main()
+  .catch((error) => {
+    console.error(error)
+    process.exitCode = 1
+  })
+  .finally(() => closeDatabase())

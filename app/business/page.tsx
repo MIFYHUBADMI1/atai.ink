@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic"
 export default async function BusinessesPage() {
   const user = await getCurrentUser()
   if (!user) redirect(`/login?next=${encodeURIComponent("/business")}`)
-  if (!isBusinessWorkspaceEnabled(user.id)) notFound()
+  if (!(await isBusinessWorkspaceEnabled(user.id))) notFound()
 
   const businesses = await listBusinessesForUser({ actor: userActor(user.id) })
 

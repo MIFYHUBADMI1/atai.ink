@@ -14,6 +14,8 @@ import { addMember, addOwner } from "@/lib/business/members"
 import { systemActor, userActor } from "@/lib/business/permissions"
 import { createBusiness } from "@/lib/business/service"
 import { migrateConnectedBusinesses } from "@/lib/connected-business/migrate"
+import { preflightConnectedBusinessMigration } from "@/lib/connected-business/preflight"
+import { verifyConnectedBusinesses } from "@/lib/connected-business/verify"
 import { rollbackMigration } from "@/lib/connected-business/rollback"
 
 /**
@@ -357,4 +359,93 @@ describe.skipIf(!REPLICA_URI)("connected business on a real replica set", () => 
     expect(plan).not.toContain("COLLSCAN")
     expect(explained.executionStats.totalDocsExamined).toBe(1)
   })
+
+  it("I — rehearses preflight, apply, verify and rollback end to end", async () => {
+    const projects = await projectsCol()
+    const businesses = await businessesCol()
+    const members = await businessMembersCol()
+    const domains = await businessDomainsCol()
+
+    await projects.insertMany([
+      {
+        id: "proj_alpha",
+        userId: "user_alpha",
+        name: "Alpha Bakery",
+        state: "created",
+        mode: "scratch",
+        sourceUrl: "https://alpha.example/shop",
+        createdAt: 1_000,
+        updatedAt: 1_000,
+      },
+      {
+        id: "proj_beta",
+        userId: "user_beta",
+        name: "Beta Studio",
+        state: "created",
+        mode: "scratch",
+        createdAt: 2_000,
+        updatedAt: 2_000,
+      },
+      // No owner: the run must skip it rather than create a business nobody owns.
+      { id: "proj_gamma", name: "Gamma", state: "created", mode: "scratch", createdAt: 3_000, updatedAt: 3_000 },
+    ] as never)
+
+    // A claim that already belongs to somebody, so F-02 has something to protect.
+    await businesses.insertOne({
+      id: "biz_incumbent",
+      ownerId: "user_incumbent",
+      name: "Incumbent",
+      status: "active",
+      schemaVersion: 1,
+      createdAt: 500,
+      updatedAt: 500,
+    } as never)
+    await members.insertOne({
+      id: "mem_incumbent",
+      businessId: "biz_incumbent",
+      userId: "user_incumbent",
+      role: "owner",
+      status: "active",
+      scope: { kind: "all" },
+      createdAt: 500,
+      updatedAt: 500,
+    } as never)
+    await domains.insertMany([
+      { id: "dom_alpha", projectId: "proj_alpha", hostname: "alpha.example", status: "verified" },
+      { id: "dom_incumbent", projectId: "proj_beta", hostname: "incumbent.example", status: "verified", businessId: "biz_incumbent" },
+    ] as never)
+
+    const preflight = await preflightConnectedBusinessMigration()
+    expect(preflight.verdict).toBe("go")
+    expect(preflight.totals).toMatchObject({
+      projects: 3,
+      eligible: 2,
+      withoutOwner: 1,
+      domainClaimsAlreadyOwned: 1,
+    })
+
+    const dryRun = await migrateConnectedBusinesses({ mode: "dry-run", runId: "rehearsal", now: 5_000 })
+    expect(dryRun).toMatchObject({ planned: 2, created: 0, skipped: 1 })
+    expect(await businesses.countDocuments({ legacyProjectId: { $exists: true } })).toBe(0)
+
+    const applied = await migrateConnectedBusinesses({ mode: "apply", runId: "rehearsal", now: 5_000 })
+    expect(applied).toMatchObject({ created: 2, failed: 0, skipped: 1 })
+
+    const afterApply = await verifyConnectedBusinesses()
+    expect(afterApply.problems).toEqual([])
+    expect(await businesses.countDocuments({ legacyProjectId: { $exists: true } })).toBe(2)
+
+    const rollback = await rollbackMigration({ mode: "apply", runId: "rehearsal", now: 6_000 })
+    expect(rollback).toMatchObject({ applied: true, blocked: false, businesses: 2 })
+
+    expect((await verifyConnectedBusinesses()).problems).toEqual([])
+    expect(await businesses.countDocuments({ legacyProjectId: { $exists: true } })).toBe(0)
+
+    // The claim the run created is released; the claim somebody else owned is
+    // still theirs. That difference is the whole point of the stamp.
+    expect(await domains.findOne({ id: "dom_alpha" })).toMatchObject({ projectId: "proj_alpha" })
+    expect((await domains.findOne({ id: "dom_alpha" }))?.businessId).toBeUndefined()
+    expect((await domains.findOne({ id: "dom_incumbent" }))?.businessId).toBe("biz_incumbent")
+  })
+
 })

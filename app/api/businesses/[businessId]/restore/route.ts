@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic"
 export async function POST(_request: Request, { params }: { params: Promise<{ businessId: string }> }) {
   try {
     const user = await requireUser()
-    requireWorkspace(user.id)
+    await requireWorkspace(user.id, "write")
     const { businessId } = await params
     const business = await restoreBusiness({ businessId, actor: actorOf(user) })
     return ok({ business })

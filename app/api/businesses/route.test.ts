@@ -10,6 +10,7 @@ const { requireUser, listBusinessesForUser, createBusiness, isBusinessWorkspaceE
 vi.mock("@/lib/auth/session", () => ({ requireUser }))
 vi.mock("@/lib/business/service", () => ({ listBusinessesForUser, createBusiness }))
 vi.mock("@/lib/business/flags", () => ({ isBusinessWorkspaceEnabled }))
+vi.mock("@/lib/auth/rate-limit", () => ({ checkRateLimit: vi.fn(async () => {}) }))
 
 const { GET, POST } = await import("./route")
 

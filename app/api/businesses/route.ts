@@ -15,7 +15,7 @@ const CreateBusinessSchema = z.object({
 export async function GET() {
   try {
     const user = await requireUser()
-    requireWorkspace(user.id)
+    await requireWorkspace(user.id, "read")
     return ok({ businesses: await listBusinessesForUser({ actor: actorOf(user) }) })
   } catch (error) {
     return handleRouteError("businesses.list", error)
@@ -25,7 +25,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const user = await requireUser()
-    requireWorkspace(user.id)
+    await requireWorkspace(user.id, "write")
 
     const parsed = CreateBusinessSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) throw new AppError("VALIDATION", "Give the business a name.")

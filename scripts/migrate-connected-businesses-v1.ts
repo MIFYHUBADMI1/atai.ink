@@ -15,6 +15,7 @@ import { randomUUID } from "node:crypto"
 
 import { CliUsageError, flagValue, flagValues, limitOf, parseMode, resolveRunId } from "@/lib/connected-business/cli"
 import { migrateConnectedBusinesses } from "@/lib/connected-business/migrate"
+import { closeDatabase } from "@/lib/db/shutdown"
 
 async function main() {
   const mode = parseMode(process.argv)
@@ -55,7 +56,9 @@ async function main() {
   if (report.failed > 0) process.exitCode = 1
 }
 
-main().catch((error) => {
-  console.error(error)
-  process.exitCode = 1
-})
+main()
+  .catch((error) => {
+    console.error(error)
+    process.exitCode = 1
+  })
+  .finally(() => closeDatabase())

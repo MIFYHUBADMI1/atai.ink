@@ -9,7 +9,7 @@ export async function DELETE(
 ) {
   try {
     const user = await requireUser()
-    requireWorkspace(user.id)
+    await requireWorkspace(user.id, "write")
     const { businessId, userId } = await params
 
     const member = await removeMember({ businessId, userId, actor: actorOf(user) })

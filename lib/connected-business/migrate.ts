@@ -163,6 +163,14 @@ export async function migrateConnectedBusinesses(options: MigrationOptions): Pro
         continue
       }
 
+      // A business with no owner is not a business: nobody could ever reach it,
+      // and the owner member is the only row that grants access. Legacy rows
+      // without a user id are left alone and reported, never invented an owner.
+      if (!project.userId) {
+        items.push({ ...base, status: "skipped", warning: "no owner on the legacy project" })
+        continue
+      }
+
       const stamp = newMigrationStamp(options.runId, now)
       const business = businessDocFor(project, stamp, now)
       const owner = ownerMemberFor(project, business.id, stamp, now)
