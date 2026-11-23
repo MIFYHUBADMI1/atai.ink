@@ -12,6 +12,7 @@
     "start": "next start",
     "cleanup:credit-transactions": "tsx scripts/cleanup-credit-transactions.ts",
     "test": "vitest run",
+    "test:integration": "vitest run test/integration",
     "test:watch": "vitest"
   },
   "dependencies": {

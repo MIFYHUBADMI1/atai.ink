@@ -834,9 +834,13 @@ async function runEnsureIndexes(): Promise<void> {
   const businessDomains = await businessDomainsCol()
   await batchedIndexCreation([
     businessDomains.createIndex({ id: 1 }, { unique: true, sparse: true, name: "business_domains_id_unique" }),
+    // `$exists: false` is not a legal partial-index predicate (MongoDB rejects
+    // it as `$not: {field: {$exists: true}}`), so an equality on `null` is the
+    // supported way to mean "not released": it matches both a missing field and
+    // an explicit null, and the app never writes an explicit null anyway.
     businessDomains.createIndex(
       { hostname: 1 },
-      { unique: true, partialFilterExpression: { releasedAt: { $exists: false } }, name: "business_domains_hostname_active_unique" },
+      { unique: true, partialFilterExpression: { releasedAt: null }, name: "business_domains_hostname_active_unique" },
     ),
     // One business, one claim. The canonical index is the database guarantee
     // behind "this website is already connected" — a check-then-insert race can
@@ -853,8 +857,8 @@ async function runEnsureIndexes(): Promise<void> {
         {
           unique: true,
           partialFilterExpression: {
-            releasedAt: { $exists: false },
-            aliasOf: { $exists: false },
+            releasedAt: null,
+            aliasOf: null,
             canonicalHostname: { $type: "string" },
           },
           name: "business_domains_canonical_active_unique",
@@ -964,7 +968,7 @@ async function runEnsureIndexes(): Promise<void> {
       { businessId: 1, hostname: 1, basePath: 1 },
       {
         unique: true,
-        partialFilterExpression: { archivedAt: { $exists: false } },
+        partialFilterExpression: { archivedAt: null },
         name: "connected_applications_origin_unique",
       },
     ),
