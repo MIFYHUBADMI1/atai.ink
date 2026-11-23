@@ -9,8 +9,9 @@ import type {
   ApiKeyCreateInput,
   ApiKeyPublic,
   ApiKeyCreated,
+  CapabilityScope,
 } from "@/runtime/contracts/capabilities"
-import { generateApiKey, hashApiKey } from "../key-crypto"
+import { generateApiKey, generatePublishableKey, hashApiKey } from "../key-crypto"
 import type { ApiKeyDoc } from "../types"
 
 /**
@@ -38,6 +39,7 @@ function toPublic(doc: ApiKeyDoc): ApiKeyPublic {
     name: doc.name,
     keyPrefix: doc.keyPrefix,
     scopes: doc.scopes,
+    ...(doc.kind === "publishable" ? { kind: doc.kind } : {}),
     status: doc.status,
     createdAt: doc.createdAt,
     lastUsedAt: doc.lastUsedAt,
@@ -60,7 +62,8 @@ export async function createApiKey(
   input: ApiKeyCreateInput,
 ): Promise<ApiKeyCreated> {
   await ensureRuntimeIndexes()
-  const generated = generateApiKey(input.environment)
+  const kind = input.kind ?? "secret"
+  const generated = kind === "publishable" ? generatePublishableKey(input.environment) : generateApiKey(input.environment)
   const now = Date.now()
   const doc: ApiKeyDoc = {
     _id: new ObjectId(),
@@ -71,7 +74,10 @@ export async function createApiKey(
     name: input.name,
     keyHash: generated.keyHash,
     keyPrefix: generated.keyPrefix,
-    scopes: input.scopes,
+    // A publishable key exists in page source: its scope is fixed at the one
+    // capability that can only append events, whatever the caller asked for.
+    scopes: kind === "publishable" ? (["analytics"] as CapabilityScope[]) : input.scopes,
+    kind,
     status: "active",
     createdAt: now,
     ...(input.expiresAt !== undefined ? { expiresAt: input.expiresAt } : {}),

@@ -499,7 +499,8 @@ describe("provisioning — secret hygiene (§11/§30/§41/§42)", () => {
     expect(serialized).not.toContain(injected)
     expect(serialized).not.toContain("plaintextKey")
     expect(serialized).not.toContain("rawKey")
-    expect(serialized).not.toContain("secret")
+    // No field may carry the plaintext — `kind: "secret"` is a value, not one.
+    expect(serialized).not.toMatch(/"secret"\s*:/)
     // keyPrefix is a non-secret 4-char display prefix — allowed, but it must
     // NOT be the plaintext itself.
     expect(doc.keyPrefix).not.toBe(injected)
@@ -508,7 +509,7 @@ describe("provisioning — secret hygiene (§11/§30/§41/§42)", () => {
     const record = provisioningRecords.get("proj_A:production")
     const recordJson = JSON.stringify(record)
     expect(recordJson).not.toContain(injected)
-    expect(recordJson).not.toContain("secret")
+    expect(recordJson).not.toMatch(/"secret"\s*:/)
   })
 
   it("never writes the plaintext into project events or logs (§42/§82)", async () => {

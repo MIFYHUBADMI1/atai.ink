@@ -36,7 +36,14 @@ export class AnalyticsCapability {
             input: {
                 events: input.events.map((event) => ({
                     name: event.name,
+                    ...(event.kind !== undefined ? { kind: event.kind } : {}),
                     ...(event.visitorId !== undefined ? { visitorId: event.visitorId } : {}),
+                    ...(event.sessionId !== undefined ? { sessionId: event.sessionId } : {}),
+                    ...(event.path !== undefined ? { path: event.path } : {}),
+                    ...(event.referrer !== undefined ? { referrer: event.referrer } : {}),
+                    ...(event.device !== undefined ? { device: event.device } : {}),
+                    ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
+                    ...(event.element !== undefined ? { element: event.element } : {}),
                     ...(event.properties !== undefined ? { properties: event.properties } : {}),
                     ...(event.timestamp !== undefined ? { timestamp: event.timestamp } : {}),
                 })),

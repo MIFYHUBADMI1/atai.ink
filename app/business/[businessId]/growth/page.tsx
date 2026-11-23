@@ -4,6 +4,7 @@ import { BadgeCheck, Compass, Globe, ListChecks, PenLine, ShieldQuestion } from 
 import { NotConnected } from "@/components/connected-business/not-connected"
 import { Chip, PageHero, SectionCard } from "@/components/connected-business/page-ui"
 import { GrowthOverviewView } from "@/components/marketing/growth-overview-view"
+import { ProductAnalyticsPanel } from "@/components/marketing/product-analytics"
 import { SiteReadingCard } from "@/components/connected-business/site-reading-card"
 import { SeoAuditPanel } from "@/components/marketing/seo-audit-panel"
 import { buttonVariants } from "@/components/ui/button"
@@ -12,6 +13,8 @@ import { businessPageContext } from "@/lib/connected-business/page-context"
 import { businessNextMoves, businessPriorities } from "@/lib/connected-business/growth"
 import { auditableSiteUrl } from "@/lib/connected-business/site-url"
 import { businessBase } from "@/lib/connected-business/surface"
+import { getProductAnalytics } from "@/lib/analytics/product/service"
+import { emptyProductSummary } from "@/lib/analytics/product/summary"
 import { getGrowthOverview } from "@/lib/marketing/growth-overview"
 import { isSeoAuditEnabledForUser, isStudioWorkspaceEnabled } from "@/lib/marketing/feature-flags"
 import { getSeoAuditAffordability } from "@/lib/marketing/seo/credits"
@@ -69,6 +72,10 @@ export default async function BusinessGrowthPage({
   const seoEnabled = isSeoAuditEnabledForUser(user.id, user.featurePreferences)
   const seoAffordability = seoEnabled ? await getSeoAuditAffordability(user.id) : null
   const seoLatest = seoEnabled ? await getLatestSeoAudit(project.id) : null
+  // The collector reports into the anchor project, so the read is the same one
+  // the build surface makes — the snippet is the only difference between them.
+  // A measurement panel is not worth failing a page over.
+  const product = await getProductAnalytics(project.id, 30).catch(() => emptyProductSummary(30))
 
   const priorityTone = (priority: "immediate" | "short_term" | "later") =>
     priority === "immediate" ? "danger" : priority === "short_term" ? "warning" : "muted"
@@ -191,6 +198,8 @@ export default async function BusinessGrowthPage({
             : null,
         }}
       />
+
+      <ProductAnalyticsPanel summary={product} keysHref={`/business/${business.id}/settings`} />
 
       <SectionCard
         icon={PenLine}

@@ -71,8 +71,26 @@ export interface GeneratedApiKey extends ApiKeyHashedSecret {
   environment: RuntimeEnvironment
 }
 
+/**
+ * A publishable key is embedded in an app's HTML, so its format says so out
+ * loud: `atai_<environment>_pk_<secret>`. It is still a high-entropy secret
+ * that is only ever stored hashed — but a key found in a page source must be
+ * recognisable as one that can do nothing but write analytics.
+ */
+export function generatePublishableKeySecret(environment: RuntimeEnvironment): string {
+  const secret = randomBytes(SECRET_BYTES).toString("base64url")
+  return `atai_${environment}_pk_${secret}`
+}
+
 export function generateApiKey(environment: RuntimeEnvironment): GeneratedApiKey {
-  const secret = generateApiKeySecret(environment)
+  return hashed(generateApiKeySecret(environment), environment)
+}
+
+export function generatePublishableKey(environment: RuntimeEnvironment): GeneratedApiKey {
+  return hashed(generatePublishableKeySecret(environment), environment)
+}
+
+function hashed(secret: string, environment: RuntimeEnvironment): GeneratedApiKey {
   return {
     secret,
     environment,

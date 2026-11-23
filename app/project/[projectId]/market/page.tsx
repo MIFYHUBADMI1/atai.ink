@@ -4,8 +4,11 @@ import { GrowthOverviewView } from "@/components/marketing/growth-overview-view"
 import { LaunchKitPanel } from "@/components/marketing/launch-kit-panel"
 import { MarketGuide } from "@/components/marketing/market-guide"
 import { SeoAuditPanel } from "@/components/marketing/seo-audit-panel"
+import { ProductAnalyticsPanel } from "@/components/marketing/product-analytics"
 import { ProjectComingSoon } from "@/components/workspace/project-coming-soon"
 import { getCurrentUser } from "@/lib/auth/session"
+import { getProductAnalytics } from "@/lib/analytics/product/service"
+import { emptyProductSummary } from "@/lib/analytics/product/summary"
 import { getGrowthOverview } from "@/lib/marketing/growth-overview"
 import { isGrowthOverviewEnabledForUser, isMarketStudioEnabled, isSeoAuditEnabledForUser } from "@/lib/marketing/feature-flags"
 import { getLaunchKitPanelData } from "@/lib/marketing/launch-kit-panel-data"
@@ -54,6 +57,8 @@ export default async function ProjectMarketPage({ params }: { params: Promise<{ 
   const deployed = project.deployment?.status === "success" && Boolean(project.deployment?.productionUrl)
   const seoAffordability = seoEnabled ? await getSeoAuditAffordability(user.id) : null
   const seoLatest = seoEnabled ? await getLatestSeoAudit(project.id) : null
+  // A measurement panel is not worth failing a page over.
+  const product = await getProductAnalytics(project.id, 30).catch(() => emptyProductSummary(30))
 
   return (
     <DashboardShell title={project.name} projectId={project.id}>
@@ -115,6 +120,9 @@ export default async function ProjectMarketPage({ params }: { params: Promise<{ 
               : null,
           }}
           />
+        </div>
+        <div data-tour="product-analytics">
+          <ProductAnalyticsPanel summary={product} keysHref={`/project/${project.id}/runtime/keys`} />
         </div>
       </div>
     </DashboardShell>

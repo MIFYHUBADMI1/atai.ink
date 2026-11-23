@@ -35,6 +35,13 @@ export interface ApiKeyDoc {
   keyPrefix: string
   /** Empty array = all capabilities granted. */
   scopes: CapabilityScope[]
+  /**
+   * `secret` (default) is a bearer credential used from a server.
+   * `publishable` is embedded in a browser snippet: it can only write
+   * analytics events, and it can never be used to read or spend anything.
+   * A key without this field predates publishable keys and is a secret.
+   */
+  kind?: "secret" | "publishable"
   status: ApiKeyStatus
   createdAt: number
   /** Throttled (≥60s between writes) — see touchLastUsed. */

@@ -98,7 +98,9 @@ describe("runtime key service", () => {
 
       const doc = mockInsertOne.mock.calls[0][0] as ApiKeyDoc
       const serialized = JSON.stringify(doc)
-      expect(serialized).not.toContain("secret")
+      // No field may carry the plaintext — `kind: "secret"` is a value, not one.
+      expect(Object.keys(doc)).not.toContain("secret")
+      expect(serialized).not.toMatch(/"secret"\s*:/)
       expect(doc.keyHash).toMatch(/^[a-f0-9]{64}$/)
       expect(doc.status).toBe("active")
     })

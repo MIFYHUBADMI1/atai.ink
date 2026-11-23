@@ -41,6 +41,91 @@ describe("toAnalyticsEvents — project scoping", () => {
   })
 })
 
+describe("toAnalyticsEvents — what a visit is made of", () => {
+  it("keeps the shape of a page view: kind, path, session, device", () => {
+    const [doc] = toAnalyticsEvents(
+      {
+        events: [
+          {
+            name: "page_view",
+            kind: "page_view",
+            path: "/orders/12345?ref=email#top",
+            sessionId: "sess_1",
+            device: "mobile",
+            referrer: "https://www.google.com/search?q=x",
+          },
+        ],
+      },
+      "p",
+      "production",
+      NOW,
+    )
+
+    expect(doc.kind).toBe("page_view")
+    // Ids collapse so `/orders/1` and `/orders/2` are one page in every funnel.
+    expect(doc.path).toBe("/orders/:id")
+    expect(doc.sessionId).toBe("sess_1")
+    expect(doc.device).toBe("mobile")
+    // Only the referring host is kept — the rest of another site's URL is not ours.
+    expect(doc.referrerHost).toBe("www.google.com")
+    expect(doc).not.toHaveProperty("referrer")
+  })
+
+  it("keeps a click label bounded, and drops a device it does not recognise", () => {
+    const [doc] = toAnalyticsEvents(
+      {
+        events: [
+          {
+            name: "click",
+            kind: "click",
+            path: "/pricing",
+            device: "smart-fridge",
+            element: { role: "BUTTON", label: "  Start   free trial " },
+          },
+        ],
+      },
+      "p",
+      "production",
+      NOW,
+    )
+
+    expect(doc.element).toEqual({ role: "button", label: "Start free trial" })
+    expect(doc.device).toBeUndefined()
+  })
+
+  it("keeps a leave duration and rounds it", () => {
+    const [doc] = toAnalyticsEvents(
+      { events: [{ name: "page_leave", kind: "page_leave", path: "/", durationMs: 1234.6 }] },
+      "p",
+      "production",
+      NOW,
+    )
+    expect(doc.durationMs).toBe(1235)
+  })
+
+  it("treats an unknown kind as a custom event and keeps the app's name", () => {
+    const [doc] = toAnalyticsEvents({ events: [{ name: "checkout_started", kind: "nonsense" }] }, "p", "production", NOW)
+    expect(doc.kind).toBe("custom")
+    expect(doc.name).toBe("checkout_started")
+  })
+
+  it("names a page view by its kind, whatever the caller called it", () => {
+    const [doc] = toAnalyticsEvents({ events: [{ name: "Viewed pricing", kind: "page_view", path: "/pricing" }] }, "p", "production", NOW)
+    expect(doc.name).toBe("page_view")
+  })
+
+  it("refuses a nested object smuggled into a click element", () => {
+    expect(() =>
+      toAnalyticsEvents(
+        { events: [{ name: "click", kind: "click", element: { role: "button", label: "x", payload: { a: 1 } } }] },
+        "p",
+        "production",
+        NOW,
+      ),
+    ).toThrow(ProviderExecutionError)
+  })
+})
+
 describe("toAnalyticsEvents — property sanitization", () => {
   it("drops credential-like keys", () => {
     const [doc] = toAnalyticsEvents(
