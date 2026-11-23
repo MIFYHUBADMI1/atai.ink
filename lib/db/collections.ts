@@ -1,5 +1,6 @@
 import { getDb } from "@/lib/db/mongodb"
 import type { UserDoc, SessionDoc, VerificationTokenDoc, RateLimitDoc, ProjectAssetDoc, ProjectAttachmentDoc, ProviderUsageDoc, TopUpDoc, PublishEventDoc, ReferralDoc, DocFeedbackDoc, WebhookEventDoc, PlanningRunDoc, ProjectLikeDoc, UserFollowDoc, ProjectForkDoc, ProjectGitHubDoc, SeoAuditDoc, ContentItemDoc, BrandProfileDoc, GrowthTaskDoc, GrowthTaskHistoryDoc, CampaignDoc, CampaignHistoryDoc, AnalyticsEventDoc } from "@/lib/types/db"
+import type { BusinessDoc, BusinessMemberDoc, ConnectedApplicationDoc } from "@/lib/types/business"
 import type {
   FeatureRequestDoc,
   FeatureRequestInternalNoteDoc,
@@ -252,6 +253,16 @@ export async function projectGitHubCol() {
  */
 export async function businessDomainsCol() {
   return (await getDbCached()).collection<BusinessDomainDoc & { _id?: import("mongodb").ObjectId }>("business_domains")
+}
+
+export async function businessesCol() {
+  return (await getDbCached()).collection<BusinessDoc>("businesses")
+}
+export async function connectedApplicationsCol() {
+  return (await getDbCached()).collection<ConnectedApplicationDoc>("connected_applications")
+}
+export async function businessMembersCol() {
+  return (await getDbCached()).collection<BusinessMemberDoc>("business_members")
 }
 
 export async function featureRequestsCol() {
@@ -930,5 +941,43 @@ async function runEnsureIndexes(): Promise<void> {
     feedbackSettings.createIndex({ id: 1 }, { unique: true, name: "feedback_settings_id_unique" }),
     feedbackAudit.createIndex({ reportId: 1, createdAt: -1 }, { sparse: true }),
     feedbackAudit.createIndex({ createdAt: -1 }),
+  ])
+
+  // Connected businesses (ADR-8). One business per hostname stays enforced on
+  // business_domains; these indexes enforce the model's own invariants. Each is
+  // additive, so a failed build never blocks the rest of the bootstrap.
+  const [businesses, applications, members, domains] = await Promise.all([
+    businessesCol(), connectedApplicationsCol(), businessMembersCol(), businessDomainsCol(),
+  ])
+  await batchedIndexCreation([
+    businesses.createIndex(
+      { legacyProjectId: 1 },
+      {
+        unique: true,
+        partialFilterExpression: { legacyProjectId: { $type: "string" } },
+        name: "businesses_legacy_project_unique",
+      },
+    ),
+    businesses.createIndex({ ownerId: 1, createdAt: -1 }),
+    applications.createIndex(
+      { businessId: 1, hostname: 1, basePath: 1 },
+      {
+        unique: true,
+        partialFilterExpression: { archivedAt: { $exists: false } },
+        name: "connected_applications_origin_unique",
+      },
+    ),
+    applications.createIndex({ businessId: 1, createdAt: 1 }),
+    applications.createIndex(
+      { legacyProjectId: 1 },
+      {
+        unique: true,
+        partialFilterExpression: { legacyProjectId: { $type: "string" } },
+        name: "connected_applications_legacy_unique",
+      },
+    ),
+    members.createIndex({ businessId: 1, userId: 1 }, { unique: true, name: "business_members_unique" }),
+    members.createIndex({ userId: 1, status: 1 }),
+    domains.createIndex({ businessId: 1, createdAt: -1 }),
   ])
 }

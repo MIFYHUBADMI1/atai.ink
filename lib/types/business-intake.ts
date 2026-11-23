@@ -282,6 +282,14 @@ export interface BusinessDomainDoc {
   id: string
   projectId: string
   userId: string
+  /**
+   * Business that owns this claim (ADR-8). Absent on rows written before the
+   * business model existed; the migration sets it, and the read path falls back
+   * to the project until then.
+   */
+  businessId?: string
+  /** The connected application this hostname was proven for, when known. */
+  applicationId?: string
   /** Exact hostname being verified — the verification target, lowercased, no port. */
   hostname: string
   /** The business identity used for uniqueness only: the exact hostname with a

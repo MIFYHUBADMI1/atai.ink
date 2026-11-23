@@ -1,0 +1,112 @@
+import "server-only"
+
+import { AppError } from "@/lib/errors"
+import { businessMembersCol, businessesCol } from "@/lib/db/collections"
+import { getMongoClient } from "@/lib/db/mongodb"
+import { cryptoId } from "@/lib/store/id"
+import { BUSINESS_SCHEMA_VERSION, type BusinessDoc, type SuggestedNameSource } from "@/lib/types/business"
+import { addOwner } from "./members"
+
+/**
+ * Business lifecycle (ADR-8 §5, §7).
+ *
+ * Creation is the only operation that writes two collections, so it runs in one
+ * transaction: a business without its owner membership is a corrupt record the
+ * access gate would treat as unreachable.
+ *
+ * The name is founder-owned once set. `suggestedName` records where the first
+ * suggestion came from and is never used to re-derive `name`.
+ *
+ * @module lib/business/service
+ */
+
+export interface CreateBusinessInput {
+  ownerId: string
+  name?: string
+  suggestedName?: string
+  suggestedNameSource?: SuggestedNameSource
+  now?: number
+}
+
+export async function createBusiness(input: CreateBusinessInput): Promise<BusinessDoc> {
+  const now = input.now ?? Date.now()
+  const suggested = input.suggestedName?.trim() || undefined
+  const name = (input.name ?? suggested ?? "").trim()
+  if (!name) throw new AppError("VALIDATION", "Give the business a name.")
+
+  const business: BusinessDoc = {
+    id: `biz_${cryptoId()}`,
+    ownerId: input.ownerId,
+    name,
+    status: "draft",
+    schemaVersion: BUSINESS_SCHEMA_VERSION,
+    createdAt: now,
+    updatedAt: now,
+  }
+  if (suggested) {
+    business.suggestedName = suggested
+    business.suggestedNameSource = input.suggestedNameSource ?? "hostname"
+  } else if (input.suggestedNameSource) {
+    business.suggestedNameSource = input.suggestedNameSource
+  }
+
+  const client = await getMongoClient()
+  const session = client.startSession()
+  try {
+    await session.withTransaction(async () => {
+      await (await businessesCol()).insertOne(business, { session })
+      await addOwner({ businessId: business.id, userId: input.ownerId, now, session })
+    })
+  } finally {
+    await session.endSession()
+  }
+  return business
+}
+
+export async function getBusiness(businessId: string): Promise<BusinessDoc | null> {
+  return (await businessesCol()).findOne({ id: businessId })
+}
+
+/** Renaming never touches `suggestedName` — the suggestion is history, not a fallback. */
+export async function renameBusiness(input: {
+  businessId: string
+  name: string
+  now?: number
+}): Promise<BusinessDoc> {
+  const name = input.name.trim()
+  if (!name) throw new AppError("VALIDATION", "Give the business a name.")
+  const col = await businessesCol()
+  const result = await col.updateOne(
+    { id: input.businessId },
+    { $set: { name, updatedAt: input.now ?? Date.now() } },
+  )
+  if (result.matchedCount === 0) throw new AppError("BUSINESS_NOT_FOUND")
+  const updated = await col.findOne({ id: input.businessId })
+  if (!updated) throw new AppError("BUSINESS_NOT_FOUND")
+  return updated
+}
+
+/** Archiving is a status change. Claims, events, usage and charges are untouched. */
+export async function archiveBusiness(input: {
+  businessId: string
+  now?: number
+}): Promise<BusinessDoc> {
+  const now = input.now ?? Date.now()
+  const col = await businessesCol()
+  const result = await col.updateOne(
+    { id: input.businessId },
+    { $set: { status: "archived", archivedAt: now, updatedAt: now } },
+  )
+  if (result.matchedCount === 0) throw new AppError("BUSINESS_NOT_FOUND")
+  const updated = await col.findOne({ id: input.businessId })
+  if (!updated) throw new AppError("BUSINESS_NOT_FOUND")
+  return updated
+}
+
+export async function listBusinessesForUser(userId: string): Promise<BusinessDoc[]> {
+  const memberships = await (await businessMembersCol()).find({ userId, status: "active" }).toArray()
+  const ids = memberships.map((membership) => membership.businessId)
+  if (ids.length === 0) return []
+  const rows = await (await businessesCol()).find({ id: { $in: ids } }).toArray()
+  return rows.sort((a, b) => b.createdAt - a.createdAt)
+}

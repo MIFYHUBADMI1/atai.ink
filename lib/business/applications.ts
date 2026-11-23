@@ -1,0 +1,169 @@
+import "server-only"
+
+import { AppError } from "@/lib/errors"
+import { connectedApplicationsCol } from "@/lib/db/collections"
+import { normalizeHostname } from "@/lib/domain/host"
+import { cryptoId } from "@/lib/store/id"
+import {
+  APPLICATION_KINDS,
+  type ApplicationKind,
+  type ConnectedApplicationDoc,
+  type MigrationStamp,
+} from "@/lib/types/business"
+import { PathInputError, applicationOrigin, canonicalBasePath } from "./paths"
+
+/**
+ * Connected applications (ADR-8 §8, D1).
+ *
+ * Identity is (businessId, hostname, basePath). Paths are organisational: every
+ * application on one hostname shares `trustDomain`, because a key for /shop is
+ * only as safe as the server that also holds the key for /dashboard.
+ *
+ * @module lib/business/applications
+ */
+
+export function isApplicationKind(value: string): value is ApplicationKind {
+  return (APPLICATION_KINDS as readonly string[]).includes(value)
+}
+
+export interface CreateApplicationInput {
+  businessId: string
+  name: string
+  kind: ApplicationKind
+  url: string
+  /** Explicit path prefix. When omitted, the URL's own path is used. */
+  basePath?: string
+  hostVerified?: boolean
+  migration?: MigrationStamp
+  now?: number
+}
+
+export async function createApplication(input: CreateApplicationInput): Promise<ConnectedApplicationDoc> {
+  if (!isApplicationKind(input.kind)) {
+    throw new AppError("VALIDATION", "That application type isn't recognised.")
+  }
+  const name = input.name.trim()
+  if (!name) throw new AppError("VALIDATION", "Give the application a name.")
+
+  const { hostname, basePath } = splitAddress(input.url, input.basePath)
+  const col = await connectedApplicationsCol()
+
+  const existing = await col.findOne({
+    businessId: input.businessId,
+    hostname,
+    basePath,
+    archivedAt: { $exists: false },
+  })
+  if (existing) throw duplicateOrigin()
+
+  const now = input.now ?? Date.now()
+  const application: ConnectedApplicationDoc = {
+    id: `app_${cryptoId()}`,
+    businessId: input.businessId,
+    name,
+    kind: input.kind,
+    primaryUrl: input.url.trim(),
+    hostname,
+    basePath,
+    trustDomain: hostname,
+    hostVerified: input.hostVerified === true,
+    connection: {},
+    createdAt: now,
+    updatedAt: now,
+  }
+  if (input.migration) application.migration = input.migration
+
+  try {
+    await col.insertOne(application)
+  } catch (error) {
+    if (isDuplicateKey(error)) throw duplicateOrigin()
+    throw error
+  }
+  return application
+}
+
+/**
+ * Archive one application. It touches this row and nothing else: the business,
+ * its sibling applications, its claims, its events and its charges all survive.
+ */
+export async function archiveApplication(input: {
+  businessId: string
+  applicationId: string
+  now?: number
+}): Promise<ConnectedApplicationDoc> {
+  const col = await connectedApplicationsCol()
+  const now = input.now ?? Date.now()
+  const result = await col.updateOne(
+    { id: input.applicationId, businessId: input.businessId, archivedAt: { $exists: false } },
+    { $set: { archivedAt: now, updatedAt: now } },
+  )
+  if (result.matchedCount === 0) throw new AppError("NOT_FOUND")
+  const updated = await col.findOne({ id: input.applicationId, businessId: input.businessId })
+  if (!updated) throw new AppError("NOT_FOUND")
+  return updated
+}
+
+export async function getApplication(
+  businessId: string,
+  applicationId: string,
+): Promise<ConnectedApplicationDoc | null> {
+  return (await connectedApplicationsCol()).findOne({
+    id: applicationId,
+    businessId,
+    archivedAt: { $exists: false },
+  })
+}
+
+export async function listApplications(
+  businessId: string,
+  options: { includeArchived?: boolean } = {},
+): Promise<ConnectedApplicationDoc[]> {
+  const filter: Record<string, unknown> = { businessId }
+  if (!options.includeArchived) filter.archivedAt = { $exists: false }
+  const rows = await (await connectedApplicationsCol()).find(filter).toArray()
+  return rows.sort((a, b) => a.createdAt - b.createdAt)
+}
+
+/** Display/log form: "example.com/shop". Never a uniqueness key. */
+export function applicationAddress(application: Pick<ConnectedApplicationDoc, "hostname" | "basePath">): string {
+  return applicationOrigin(application)
+}
+
+function splitAddress(url: string, explicitBasePath?: string): { hostname: string; basePath: string } {
+  const value = (url ?? "").trim()
+  if (!value) throw new AppError("VALIDATION", "Enter the application's address.")
+
+  const candidate = value.includes("://") ? value : `https://${value}`
+  let parsed: URL
+  try {
+    parsed = new URL(candidate)
+  } catch {
+    throw new AppError("VALIDATION", "That doesn't look like a website address.")
+  }
+
+  let hostname: string
+  try {
+    hostname = normalizeHostname(parsed.hostname)
+  } catch {
+    throw new AppError("VALIDATION", "That doesn't look like a website address.")
+  }
+
+  let basePath: string
+  try {
+    basePath = canonicalBasePath(explicitBasePath === undefined ? parsed.pathname : explicitBasePath)
+  } catch (error) {
+    throw new AppError(
+      "VALIDATION",
+      error instanceof PathInputError ? error.message : "That path can't be used.",
+    )
+  }
+  return { hostname, basePath }
+}
+
+function duplicateOrigin(): AppError {
+  return new AppError("APPLICATION_ALREADY_EXISTS")
+}
+
+function isDuplicateKey(error: unknown): boolean {
+  return typeof error === "object" && error !== null && (error as { code?: number }).code === 11000
+}

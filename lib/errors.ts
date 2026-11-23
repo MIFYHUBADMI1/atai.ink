@@ -30,6 +30,11 @@ export type ErrorCode =
   | "NOT_FOUND"
   | "EMAIL_ALREADY_REGISTERED"
   | "PAYMENT_UNAVAILABLE"
+  | "BUSINESS_NOT_FOUND"
+  | "BUSINESS_FORBIDDEN"
+  | "BUSINESS_SUSPENDED"
+  | "BUSINESS_NOT_MIGRATED"
+  | "APPLICATION_ALREADY_EXISTS"
   | "UNKNOWN"
 
 export const ERROR_MESSAGES: Record<ErrorCode, string> = {
@@ -54,6 +59,11 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   NOT_FOUND: "We couldn't find that.",
   EMAIL_ALREADY_REGISTERED: "An account with this email already exists.",
   PAYMENT_UNAVAILABLE: "Payment processing is not available right now.",
+  BUSINESS_NOT_FOUND: "We couldn't find that business.",
+  BUSINESS_FORBIDDEN: "You don't have permission to do that in this business.",
+  BUSINESS_SUSPENDED: "This business is suspended. Contact support to restore access.",
+  BUSINESS_NOT_MIGRATED: "This business is being prepared. Try again shortly.",
+  APPLICATION_ALREADY_EXISTS: "An application already exists at that address.",
   UNKNOWN: "Something went wrong. Please try again.",
 }
 
@@ -79,6 +89,11 @@ const STATUS_BY_CODE: Record<ErrorCode, number> = {
   NOT_FOUND: 404,
   EMAIL_ALREADY_REGISTERED: 409,
   PAYMENT_UNAVAILABLE: 503,
+  BUSINESS_NOT_FOUND: 404,
+  BUSINESS_FORBIDDEN: 403,
+  BUSINESS_SUSPENDED: 403,
+  BUSINESS_NOT_MIGRATED: 409,
+  APPLICATION_ALREADY_EXISTS: 409,
   UNKNOWN: 500,
 }
 
