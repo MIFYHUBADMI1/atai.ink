@@ -31,6 +31,7 @@ export type ErrorCode =
   | "EMAIL_ALREADY_REGISTERED"
   | "PAYMENT_UNAVAILABLE"
   | "CATALOG_UNAVAILABLE"
+  | "CATALOG_CONFLICT"
   | "UNKNOWN"
 
 export const ERROR_MESSAGES: Record<ErrorCode, string> = {
@@ -56,6 +57,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   EMAIL_ALREADY_REGISTERED: "An account with this email already exists.",
   PAYMENT_UNAVAILABLE: "Payment processing is not available right now.",
   CATALOG_UNAVAILABLE: "Pricing is temporarily unavailable. Please try again shortly.",
+  CATALOG_CONFLICT: "The catalog changed since you loaded it. Reload and try again.",
   UNKNOWN: "Something went wrong. Please try again.",
 }
 
@@ -82,6 +84,7 @@ const STATUS_BY_CODE: Record<ErrorCode, number> = {
   EMAIL_ALREADY_REGISTERED: 409,
   PAYMENT_UNAVAILABLE: 503,
   CATALOG_UNAVAILABLE: 503,
+  CATALOG_CONFLICT: 409,
   UNKNOWN: 500,
 }
 

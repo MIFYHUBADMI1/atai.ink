@@ -6,6 +6,7 @@ import {
 import type {
   CatalogProductDetail,
   CatalogProductView,
+  CatalogVersionSummary,
   CommercialProductDoc,
   CommercialProductVersionDoc,
   DodoProductMappingDoc,
@@ -31,12 +32,40 @@ function currentVersion(
   return versions.sort((a, b) => b.version - a.version)[0] ?? null
 }
 
+function versionSummary(version: CommercialProductVersionDoc): CatalogVersionSummary {
+  return {
+    id: version.id,
+    version: version.version,
+    status: version.status,
+    name: version.name,
+    description: version.description,
+    tagline: version.tagline,
+    saleMode: version.saleMode,
+    currency: version.currency,
+    priceMinor: version.priceMinor,
+    annualPriceMinor: version.annualPriceMinor,
+    billingIntervals: version.billingIntervals,
+    credits: version.credits,
+    infrastructure: version.infrastructure,
+    changeSummary: version.changeSummary,
+    createdBy: version.createdBy,
+    createdAt: version.createdAt,
+    publishedBy: version.publishedBy,
+    publishedAt: version.publishedAt,
+    checksum: version.checksum,
+  }
+}
+
 function toView(
   product: CommercialProductDoc,
   versions: CommercialProductVersionDoc[],
   mappings: DodoProductMappingDoc[],
 ): CatalogProductView {
   const version = currentVersion(product, [...versions])
+  const draft =
+    versions
+      .filter((candidate) => candidate.status === "draft")
+      .sort((a, b) => b.version - a.version)[0] ?? null
   const productMappings = mappings.filter((mapping) =>
     versions.some((candidate) => candidate.id === mapping.productVersionId),
   )
@@ -51,20 +80,13 @@ function toView(
     tagline: version?.tagline,
     legacyRenewalOnly: version?.saleMode === "legacy_renewal_only",
     currentVersionId: product.currentVersionId,
-    currentVersion: version
-      ? {
-          id: version.id,
-          version: version.version,
-          status: version.status,
-          currency: version.currency,
-          priceMinor: version.priceMinor,
-          annualPriceMinor: version.annualPriceMinor,
-          billingIntervals: version.billingIntervals,
-          credits: version.credits,
-          infrastructure: version.infrastructure,
-        }
-      : null,
+    currentVersion: version ? versionSummary(version) : null,
+    draftVersion: draft ? versionSummary(draft) : null,
     versionCount: versions.length,
+    createdAt: product.createdAt,
+    updatedAt: product.updatedAt,
+    archivedAt: product.archivedAt,
+    archivedBy: product.archivedBy,
     dodoMappings: productMappings.map((mapping) => ({
       cycle: mapping.cycle,
       environment: mapping.environment,

@@ -257,6 +257,31 @@ describe("A7.1 published catalog resolver", () => {
     ).rejects.toMatchObject({ reason: "NO_ACTIVE_PUBLICATION" })
   })
 
+  it("does not treat an A7.2 candidate publication as active", async () => {
+    const store = await seededStore()
+    const seeded = await store.getCatalogVersion(CATALOG_VERSION)
+    const products = await store.listProducts()
+    const candidate: CommercialCatalogVersionDoc = {
+      id: "cat_candidate_test",
+      version: "CATALOG_A72_CANDIDATE",
+      status: "candidate",
+      productVersionIds: products
+        .filter((product) => product.status === "published" && product.currentVersionId)
+        .map((product) => product.currentVersionId as string),
+      priceBookVersion: seeded?.priceBookVersion ?? "PRICE_BOOK_V1",
+      entitlementVersion: seeded?.entitlementVersion ?? "ENT_V1",
+      publisher: "test",
+      publishedAt: BASE,
+      checksum: "",
+    }
+    candidate.checksum = publicationChecksum(candidate)
+    await store.upsertCatalogVersion(candidate)
+
+    await expect(
+      resolveCommercialCatalog({ env: DB_ENV, store, now: BASE }),
+    ).rejects.toMatchObject({ reason: "NO_ACTIVE_PUBLICATION" })
+  })
+
   it("rejects multiple active publications", async () => {
     const store = await activeStore()
     const second: CommercialCatalogVersionDoc = {

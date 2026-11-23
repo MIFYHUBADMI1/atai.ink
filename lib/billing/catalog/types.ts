@@ -20,7 +20,7 @@ export type CatalogDodoEnvironment = "test_mode" | "live_mode"
 export type CatalogDodoMappingStatus = "unvalidated" | "valid" | "invalid" | "superseded"
 export type CatalogInfrastructurePurchaseModel = "credit_funded" | "direct_purchase"
 export type CatalogInfrastructureRenewal = "manual" | "auto" | "none"
-export type CatalogPublicationStatus = "seeded" | "active" | "superseded"
+export type CatalogPublicationStatus = "seeded" | "candidate" | "active" | "superseded"
 
 export interface CatalogCreditTerms {
   creditType: CatalogCreditType
@@ -76,6 +76,8 @@ export interface CommercialProductDoc {
   createdBy: string
   createdAt: number
   updatedAt: number
+  archivedBy?: string
+  archivedAt?: number
 }
 
 export interface CommercialProductVersionDoc {
@@ -136,6 +138,28 @@ export interface CommercialCatalogVersionDoc {
   checksum: string
 }
 
+export interface CatalogVersionSummary {
+  id: string
+  version: number
+  status: CatalogProductStatus
+  name: string
+  description: string
+  tagline?: string
+  saleMode: CatalogSaleMode
+  currency: string
+  priceMinor: number | null
+  annualPriceMinor: number | null
+  billingIntervals: BillingInterval[]
+  credits: CatalogCreditTerms | null
+  infrastructure?: CatalogInfrastructureTerms
+  changeSummary: string
+  createdBy: string
+  createdAt: number
+  publishedBy?: string
+  publishedAt?: number
+  checksum: string
+}
+
 export interface CatalogProductView {
   id: string
   type: CatalogProductType
@@ -147,18 +171,13 @@ export interface CatalogProductView {
   tagline?: string
   legacyRenewalOnly: boolean
   currentVersionId: string | null
-  currentVersion: {
-    id: string
-    version: number
-    status: CatalogProductStatus
-    currency: string
-    priceMinor: number | null
-    annualPriceMinor: number | null
-    billingIntervals: BillingInterval[]
-    credits: CatalogCreditTerms | null
-    infrastructure?: CatalogInfrastructureTerms
-  } | null
+  currentVersion: CatalogVersionSummary | null
+  draftVersion: CatalogVersionSummary | null
   versionCount: number
+  createdAt: number
+  updatedAt: number
+  archivedAt?: number
+  archivedBy?: string
   dodoMappings: Array<{
     cycle: CatalogDodoCycle
     environment: CatalogDodoEnvironment

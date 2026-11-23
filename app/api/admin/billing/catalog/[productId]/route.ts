@@ -1,10 +1,11 @@
 import { requireAdmin } from "@/lib/auth/session"
 import { fail, handleRouteError, ok } from "@/lib/api/respond"
 import { getCatalogProduct } from "@/lib/billing/catalog/service"
+import { updateCatalogProduct } from "@/lib/billing/catalog/authoring"
 
 export const dynamic = "force-dynamic"
 
-/** Read-only A7.0 product detail. No create/edit/publish/archive verbs. */
+/** Product detail. Mutations use the explicit authoring routes. */
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ productId: string }> },
@@ -17,5 +18,25 @@ export async function GET(
     return ok({ product })
   } catch (error) {
     return handleRouteError("api.admin.billing.catalog.detail", error)
+  }
+}
+
+/** Edit a product by creating a replacement draft version. */
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ productId: string }> },
+) {
+  try {
+    const admin = await requireAdmin()
+    const { productId } = await params
+    const body = await req.json().catch(() => ({}))
+    const result = await updateCatalogProduct({
+      productId,
+      body,
+      actor: { id: admin.id, email: admin.email },
+    })
+    return ok(result)
+  } catch (error) {
+    return handleRouteError("api.admin.billing.catalog.update", error)
   }
 }
