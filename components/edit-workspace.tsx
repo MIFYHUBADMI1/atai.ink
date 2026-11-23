@@ -772,13 +772,14 @@ function PublishPanel({
   } | null>(null)
 
   // Poll deployment status
-  const { data: deployData } = useSWR<{ ok: boolean; data: { status: string | null; productionUrl?: string; customDomain?: { hostname: string; status: string } | null } }>(
+  const { data: deployData } = useSWR<{ ok: boolean; data: { status: string | null; productionUrl?: string; customDomain?: { hostname: string; status: string } | null; deployCost?: number } }>(
     totalumProjectId ? `/api/projects/${projectId}/deploy` : null,
     jsonFetcher,
     { refreshInterval: deploying ? 10000 : 0 },
   )
 
   const deployInfo = deployData?.data
+  const publishCostLabel = deployInfo?.deployCost === undefined ? "" : ` (${deployInfo.deployCost.toLocaleString()} credits)`
   const subdomainDenied = access?.subdomain.allowed === false ? access.subdomain.reason ?? "Your plan does not include a production subdomain." : null
   const customDomainDenied = access?.customDomain.allowed === false ? access.customDomain.reason ?? "Your plan does not include a custom domain." : null
   const isDeployed = deployInfo?.status === "success"
@@ -912,12 +913,12 @@ function PublishPanel({
         ) : isDeployed ? (
           <>
             <RefreshCw className="size-3.5" />
-            Republish (500 credits)
+            Republish{publishCostLabel}
           </>
         ) : (
           <>
             <Globe className="size-3.5" />
-            Publish to Production (500 credits)
+            Publish to Production{publishCostLabel}
           </>
         )}
       </Button>

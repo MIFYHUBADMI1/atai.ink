@@ -36,6 +36,8 @@ interface PlanCardProps {
   currentBusinesses?: number
   /** Selected billing cycle from the pricing page toggle (commercial only). */
   billingCycle?: "monthly" | "annual"
+  /** Welcome credits shown on the free plan; resolved from billing settings. */
+  welcomeBonusCredits?: number
 }
 
 const COMMERCIAL_PLAN_IDS = new Set<string>(["explorer", "starter", "growth", "scale", "enterprise"])
@@ -72,6 +74,7 @@ export function PlanCard({
   allPlans,
   currentBusinesses,
   billingCycle = "monthly",
+  welcomeBonusCredits,
 }: PlanCardProps) {
   const [selected, setSelected] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -259,7 +262,9 @@ export function PlanCard({
         <p className="mt-1 text-xs text-muted-foreground font-mono">
           {plan.mirrorCredits > 0
             ? `${plan.mirrorCredits.toLocaleString()} ${CREDIT_UNIT_NAME}`
-            : "500 credits on verification"}
+            : welcomeBonusCredits
+              ? `${welcomeBonusCredits.toLocaleString()} credits on verification`
+              : "Free credits on verification"}
           {plan.provisionalCredits ? " (provisional)" : ""}
         </p>
         {plan.provisionalCredits ? (

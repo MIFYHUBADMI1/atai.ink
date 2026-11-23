@@ -8,41 +8,45 @@ import { AuthTrigger } from "@/components/auth/auth-trigger"
 import { getCurrentUser } from "@/lib/auth/session"
 import { SITE_URL } from "@/lib/env"
 import { cn } from "@/lib/utils"
+import { getRewardSettings } from "@/lib/billing/runtime-config"
+import type { PublicRewards } from "@/lib/billing/public-config-types"
 
 export const metadata: Metadata = {
   title: "Referral program — Invite a founder, both get credits",
   description:
-    "Share your Atai referral link. The person who joins gets 500 bonus credits, you get 500 when they verify, and 1,500 more when their builds reach 75,000 credits.",
+    "Share your Atai referral link. The person who joins gets bonus credits, and you earn credits when they verify their account and build.",
   alternates: { canonical: "/referral-program" },
   openGraph: {
     title: "Atai referral program — Invite a founder, both get credits",
     description:
-      "Share your Atai referral link. The person who joins gets 500 bonus credits, you earn credits when they verify and build.",
+      "Share your Atai referral link. The person who joins gets bonus credits, and you earn credits when they verify and build.",
     url: `${SITE_URL}/referral-program`,
     type: "website",
   },
 }
 
-const EARNINGS = [
-  {
-    icon: Gift,
-    title: "The person who joins",
-    amount: "500 credits",
-    body: "A one-time bonus added to their account when they register through your link, on top of the standard welcome credits.",
-  },
-  {
-    icon: Users,
-    title: "You, when they verify",
-    amount: "500 credits",
-    body: "Once the person you invited confirms their account, 500 credits land in your balance automatically.",
-  },
-  {
-    icon: Rocket,
-    title: "You, when they build",
-    amount: "1,500 credits",
-    body: "When their successful builds reach 75,000 eligible credits, you receive the final 1,500-credit milestone reward.",
-  },
-]
+function earningsFor(rewards: PublicRewards) {
+  return [
+    {
+      icon: Gift,
+      title: "The person who joins",
+      amount: `${rewards.referralSignupBonus.toLocaleString()} credits`,
+      body: "A one-time bonus added to their account when they register through your link, on top of the standard welcome credits.",
+    },
+    {
+      icon: Users,
+      title: "You, when they verify",
+      amount: `${rewards.referralVerificationReward.toLocaleString()} credits`,
+      body: `Once the person you invited confirms their account, ${rewards.referralVerificationReward.toLocaleString()} credits land in your balance automatically.`,
+    },
+    {
+      icon: Rocket,
+      title: "You, when they build",
+      amount: `${rewards.referralMilestoneReward.toLocaleString()} credits`,
+      body: `When their successful builds reach ${rewards.referralMilestoneThreshold.toLocaleString()} eligible credits, you receive the final ${rewards.referralMilestoneReward.toLocaleString()}-credit milestone reward.`,
+    },
+  ]
+}
 
 const STEPS = [
   {
@@ -62,23 +66,27 @@ const STEPS = [
   },
 ]
 
-const RULES = [
-  "A referral counts once per person. One business owner belongs to one referrer.",
-  "The referred person must be new to Atai; existing accounts cannot be claimed retroactively.",
-  "Rewards are credited automatically — you do not need to claim them.",
-  "Self-referrals, duplicate accounts, and referral rings are blocked and may forfeit rewards.",
-  "Referral credits are promotional: they have no cash value and cannot be refunded or transferred.",
-  "The maximum reward per referred person is 2,000 credits (500 verification + 1,500 milestone).",
-]
+function rulesFor(rewards: PublicRewards) {
+  const max = rewards.referralVerificationReward + rewards.referralMilestoneReward
+  return [
+    "A referral counts once per person. One business owner belongs to one referrer.",
+    "The referred person must be new to Atai; existing accounts cannot be claimed retroactively.",
+    "Rewards are credited automatically — you do not need to claim them.",
+    "Self-referrals, duplicate accounts, and referral rings are blocked and may forfeit rewards.",
+    "Referral credits are promotional: they have no cash value and cannot be refunded or transferred.",
+    `The maximum reward per referred person is ${max.toLocaleString()} credits (${rewards.referralVerificationReward.toLocaleString()} verification + ${rewards.referralMilestoneReward.toLocaleString()} milestone).`,
+  ]
+}
 
-const FAQ = [
+function faqFor(rewards: PublicRewards) {
+  return [
   {
     q: "When do I get my referral credits?",
-    a: "You receive 500 credits as soon as the person you invited verifies their account. The 1,500-credit milestone arrives when their successful builds reach 75,000 eligible credits.",
+    a: `You receive ${rewards.referralVerificationReward.toLocaleString()} credits as soon as the person you invited verifies their account. The ${rewards.referralMilestoneReward.toLocaleString()}-credit milestone arrives when their successful builds reach ${rewards.referralMilestoneThreshold.toLocaleString()} eligible credits.`,
   },
   {
     q: "Does the person I invite get anything?",
-    a: "Yes. They receive 500 bonus credits when they register through your link, on top of the standard welcome credits every new account gets.",
+    a: `Yes. They receive ${rewards.referralSignupBonus.toLocaleString()} bonus credits when they register through your link, on top of the standard welcome credits every new account gets.`,
   },
   {
     q: "Does it work with Google and GitHub sign-up?",
@@ -92,10 +100,14 @@ const FAQ = [
     q: "How many people can I refer?",
     a: "There is no fixed limit, but unusually high referral counts are reviewed for fraud before rewards are released.",
   },
-]
+  ]
+}
 
 export default async function ReferralProgramPage() {
-  const user = await getCurrentUser()
+  const [user, rewards] = await Promise.all([getCurrentUser(), getRewardSettings()])
+  const earnings = earningsFor(rewards)
+  const rules = rulesFor(rewards)
+  const faq = faqFor(rewards)
   const cta = user
     ? { href: "/referrals", label: "Get my referral link" }
     : { href: "/register", label: "Create an account" }
@@ -111,8 +123,8 @@ export default async function ReferralProgramPage() {
         </h1>
         <p className="mt-5 max-w-2xl text-pretty text-lg leading-8 text-muted-foreground">
           Atai grows when more people own their business. Share your referral link and both sides
-          benefit: the person who joins receives 500 bonus credits, and you earn credits as they
-          verify their account and start building.
+          benefit: the person who joins receives {rewards.referralSignupBonus.toLocaleString()} bonus
+          credits, and you earn credits as they verify their account and start building.
         </p>
         <div className="mt-8 flex flex-wrap items-center gap-3">
           {user ? (
@@ -132,7 +144,7 @@ export default async function ReferralProgramPage() {
         <div className="mx-auto w-full max-w-5xl px-6 py-14 lg:px-10">
           <h2 className="text-2xl font-semibold tracking-tight">What you both earn</h2>
           <div className="mt-8 grid gap-4 sm:grid-cols-3">
-            {EARNINGS.map(({ icon: Icon, title, amount, body }) => (
+            {earnings.map(({ icon: Icon, title, amount, body }) => (
               <div key={title} className="rounded-xl border border-border bg-background p-5">
                 <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10">
                   <Icon className="size-5 text-primary" />
@@ -171,7 +183,7 @@ export default async function ReferralProgramPage() {
             <h2 className="text-2xl font-semibold tracking-tight">Program rules</h2>
           </div>
           <ul className="mt-6 space-y-3">
-            {RULES.map((rule) => (
+            {rules.map((rule) => (
               <li key={rule} className="flex items-start gap-3 text-sm leading-6 text-muted-foreground">
                 <span className="mt-2 size-1.5 shrink-0 rounded-full bg-primary" />
                 {rule}
@@ -184,7 +196,7 @@ export default async function ReferralProgramPage() {
       <section className="mx-auto w-full max-w-4xl px-6 py-14 lg:px-10">
         <h2 className="text-2xl font-semibold tracking-tight">Questions</h2>
         <div className="mt-6 divide-y divide-border rounded-xl border border-border">
-          {FAQ.map((item) => (
+          {faq.map((item) => (
             <details key={item.q} className="group px-5 py-4">
               <summary className="cursor-pointer list-none text-sm font-medium marker:hidden">{item.q}</summary>
               <p className="mt-3 text-sm leading-6 text-muted-foreground">{item.a}</p>

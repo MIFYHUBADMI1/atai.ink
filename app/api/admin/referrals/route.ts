@@ -5,6 +5,7 @@ import { referralsCol, usersCol } from "@/lib/db/collections"
 import { readAuthBody } from "@/lib/api/request-body"
 import { checkRateLimit } from "@/lib/auth/rate-limit"
 import { AppError } from "@/lib/errors"
+import { getRewardSettings } from "@/lib/billing/runtime-config"
 
 /**
  * GET /api/admin/referrals
@@ -19,7 +20,10 @@ export async function GET(req: Request) {
     const offset = Number(url.searchParams.get("offset") ?? 0)
     if (!Number.isInteger(limit) || limit < 1 || limit > 200 || !Number.isInteger(offset) || offset < 0 || offset > 10_000) throw new AppError("VALIDATION")
 
-    const { referrals, total } = await getAllReferrals(limit, offset)
+    const [{ referrals, total }, rewards] = await Promise.all([
+      getAllReferrals(limit, offset),
+      getRewardSettings(),
+    ])
 
     // Enrich with user names (privacy: only show names, not emails)
     const userIds = new Set<string>()
@@ -52,7 +56,7 @@ export async function GET(req: Request) {
       createdAt: r.createdAt,
     }))
 
-    return ok({ referrals: enriched, total })
+    return ok({ referrals: enriched, total, rewards })
   } catch (e) {
     return handleRouteError("api.admin.referrals", e)
   }

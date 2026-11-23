@@ -47,6 +47,9 @@ interface FeedbackConfig {
   maxAudioSeconds: number
   maxAttachmentBytes: number
   categories: readonly { id: FeedbackCategory; label: string }[]
+  rewardsEnabled: boolean
+  minReward: number
+  maxReward: number
 }
 
 interface UploadedAttachment {
@@ -544,8 +547,14 @@ export function FeedbackReportModal({
                   <div>
                     <p className="text-sm font-semibold">Help the team — get rewarded</p>
                     <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                      Genuine, verified reports earn permanent Atai Credits — from <strong className="text-foreground">1,000</strong> for
-                      minor issues up to <strong className="text-foreground">2,000,000</strong> for exceptional discoveries.
+                      Genuine, verified reports earn permanent Atai Credits
+                      {config ? (
+                        <>
+                          {" "}— from <strong className="text-foreground">{config.minReward.toLocaleString()}</strong> for
+                          minor issues up to <strong className="text-foreground">{config.maxReward.toLocaleString()}</strong> for
+                          exceptional discoveries.
+                        </>
+                      ) : null}{" "}
                       Rewards are approved by the team after review, never automatically.
                     </p>
                   </div>

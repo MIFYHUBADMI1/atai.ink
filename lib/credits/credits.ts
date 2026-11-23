@@ -100,7 +100,7 @@ export function classifyComplexity(spec: {
   return "complex"
 }
 
-// Legacy mode costs (unchanged)
+// Default mirror-pipeline costs, re-exported for callers that need a static value.
 export const SCRAPE_COST = DEFAULT_MIRROR_PIPELINE_COSTS.scrapeCost
 export const PLAN_COST = DEFAULT_MIRROR_PIPELINE_COSTS.planCost
 export const DEEP_CRAWL_COST = DEFAULT_MIRROR_PIPELINE_COSTS.deepCrawlCost
@@ -109,7 +109,7 @@ export const DEEP_CRAWL_COST = DEFAULT_MIRROR_PIPELINE_COSTS.deepCrawlCost
 export const HEAVY_SCRAPE_COST = DEFAULT_MIRROR_PIPELINE_COSTS.heavyScrapeCost
 export const HEAVY_PLAN_COST = DEFAULT_MIRROR_PIPELINE_COSTS.heavyPlanCost
 
-// Deep crawl heavy mode cost (total: 1000 credits = 500 base + 500 heavy pipeline)
+// Deep crawl heavy mode cost (base crawl plus the heavy pipeline).
 export const DEEP_CRAWL_HEAVY_COST = DEFAULT_MIRROR_PIPELINE_COSTS.heavyDeepCrawlCost
 
 /**

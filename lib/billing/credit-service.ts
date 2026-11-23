@@ -28,9 +28,6 @@ import { planCreditConsumption } from "@/lib/billing/consume-plan"
 import {
   PRICING_MODEL_VERSION,
   COST_MODEL_VERSION,
-  WELCOME_BONUS_CREDITS,
-  REFERRAL_VERIFICATION_REWARD,
-  REFERRAL_MILESTONE_REWARD,
   CONSUMPTION_ORDER,
   CREDITS_PER_BASELINE_UNIT,
 } from "./config"

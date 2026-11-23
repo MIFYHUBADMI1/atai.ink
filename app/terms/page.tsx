@@ -31,6 +31,9 @@ import {
 import { SiteHeader } from "@/components/site-header"
 import { SiteFooter } from "@/components/site-footer"
 import { SITE_URL } from "@/lib/env"
+import { formatUSD } from "@/lib/billing/config"
+import { resolvePublicCommercialCatalog } from "@/lib/billing/catalog/published-resolver"
+import { getPublicBillingConfig } from "@/lib/billing/public-config"
 
 export const metadata: Metadata = {
   title: "Terms of Service | Atai",
@@ -97,7 +100,7 @@ const faqStructuredData = {
       name: "What are Atai Credits?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Atai Credits are an internal usage unit that powers platform actions such as building applications, analyzing websites, and generating plans. New users receive 500 free credits upon account verification.",
+        text: "Atai Credits are an internal usage unit that powers platform actions such as building applications, analyzing websites, and generating plans. New users receive free credits upon account verification.",
       },
     },
     {
@@ -188,7 +191,7 @@ const faqItems = [
   },
   {
     q: "What are Atai Credits?",
-    a: "Atai Credits power platform actions such as building applications, analyzing websites, and generating plans. New users receive 500 free credits upon account verification.",
+    a: "Atai Credits power platform actions such as building applications, analyzing websites, and generating plans. New users receive free credits upon account verification.",
   },
   {
     q: "Can I use Atai to build a commercial business?",
@@ -204,7 +207,7 @@ const faqItems = [
   },
   {
     q: "What plans does Atai offer?",
-    a: "Atai offers five plans: Explorer (free), Starter, Growth, Scale, and Enterprise. Full plan details and current prices are on the Atai pricing page.",
+    a: "Atai offers a free plan and paid plans for different stages of a business. Full plan details and current prices are on the Atai pricing page.",
   },
   {
     q: "How do I get support?",
@@ -239,7 +242,16 @@ function Section({
   )
 }
 
-export default function TermsPage() {
+export const dynamic = "force-dynamic"
+
+export default async function TermsPage() {
+  const [catalog, billing] = await Promise.all([
+    resolvePublicCommercialCatalog().catch(() => null),
+    getPublicBillingConfig().catch(() => null),
+  ])
+  const plans = catalog?.plans.filter((plan) => plan.active) ?? []
+  const rewards = billing?.rewards
+  const welcomeBonus = rewards?.welcomeBonus
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(termsPageStructuredData) }} />
@@ -346,7 +358,10 @@ export default function TermsPage() {
               <li>Accept responsibility for all activity under your account</li>
               <li>Notify us immediately if you suspect unauthorized access</li>
             </ul>
-            <p>You may sign in via email and password or via Google. Account verification unlocks your 500 free credits to start building straight away.</p>
+            <p>
+              You may sign in via email and password or via Google. Account verification unlocks your{" "}
+              {welcomeBonus ? `${welcomeBonus.toLocaleString()} free credits` : "free credits"} to start building straight away.
+            </p>
             <p>You must not share account credentials, create fraudulent accounts, impersonate others, or attempt unauthorized access to any account or system.</p>
           </Section>
 
@@ -442,7 +457,9 @@ export default function TermsPage() {
           <Section id="credits" number="11" icon={CreditCard} title="Atai Credits">
             <p>Atai Credits are the internal usage unit that powers the platform. Credits are consumed when you build applications, run AI planning sessions, analyze websites, and perform other platform actions.</p>
             <ul className="list-disc list-inside space-y-1 ml-4">
-              <li>New users receive 500 free credits upon account verification</li>
+              <li>
+                New users receive {welcomeBonus ? `${welcomeBonus.toLocaleString()} free credits` : "free credits"} upon account verification
+              </li>
               <li>Credits are included in paid subscription plans</li>
               <li>Additional credits can be purchased</li>
               <li>Credits can be earned through the referral program</li>
@@ -457,21 +474,31 @@ export default function TermsPage() {
           </Section>
 
           <Section id="pricing" number="12" icon={DollarSign} title="Plans & Pricing">
-            <p>Atai offers five subscription plans designed to meet you wherever you are in your business journey:</p>
+            <p>Atai offers a free plan and paid subscription plans designed to meet you wherever you are in your business journey:</p>
             <div className="grid gap-3 sm:grid-cols-2 my-4">
-              {[
-                { plan: "Explorer — Free", desc: "Plan your business with the AI co-founder and research markets and competitors. Planning only — no production launch or hosting. 500 planning credits on email verification; community support." },
-                { plan: "Starter — $89.99/mo", desc: "Launch 1 business (1 production app on your Atai subdomain). AI co-founder, specialist teams, SEO & content marketing, business-intelligence basics, standard support." },
-                { plan: "Growth — $199.99/mo", desc: "Up to 4 businesses and 1 custom domain. Advanced AI co-founder, expanded teams, ads & competition monitoring, full learning paths, direct support. Our most popular plan." },
-                { plan: "Scale — $499.99/mo", desc: "Unlimited businesses and up to 4 custom domains. Premium AI co-founder and specialist teams, the full business-intelligence suite, priority compute, premium support." },
-                { plan: "Enterprise — Custom", desc: "Everything in Scale, tailored: custom credit volume, dedicated infrastructure, SLA-backed uptime, white-glove onboarding, and a dedicated account manager." },
-              ].map(({ plan, desc }) => (
-                <div key={plan} className="rounded-lg border border-border bg-card p-4">
-                  <p className="font-medium text-sm text-foreground">{plan}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{desc}</p>
-                </div>
-              ))}
+              {plans.map((plan) => {
+                const price = plan.custom
+                  ? "Custom"
+                  : plan.priceUSD === 0
+                    ? "Free"
+                    : `${formatUSD(plan.priceUSD)}/mo`
+                const description = [plan.tagline, ...plan.features.slice(0, 2)]
+                  .filter(Boolean)
+                  .join(" · ")
+                return (
+                  <div key={plan.id} className="rounded-lg border border-border bg-card p-4">
+                    <p className="font-medium text-sm text-foreground">{plan.name} — {price}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{description}</p>
+                  </div>
+                )
+              })}
             </div>
+            {plans.length === 0 ? (
+              <p>
+                Current plans and prices are shown on the{" "}
+                <Link href="/pricing" className="text-primary hover:underline">Atai pricing page</Link>.
+              </p>
+            ) : null}
             <p>Paid plans can be billed monthly or annually. Annual billing is 12 months for the price of 11 (about 8% saved), charged once for the year, with credits issued monthly. Each paid plan includes a monthly credit allowance; the current allowance for each plan, permanent credit packs, and any promotional rates are shown on the <Link href="/pricing" className="text-primary hover:underline">Atai pricing page</Link>. Prices, credit allowances, and plan features may change with notice. Cancelling or downgrading a plan never deletes your data.</p>
           </Section>
 
@@ -500,10 +527,29 @@ export default function TermsPage() {
           <Section id="referrals" number="15" icon={Gift} title="Referral Program">
             <p>Atai&apos;s referral program lets you earn credits by bringing other founders onto the platform. Every person you bring along makes the Atai community stronger — and we reward that.</p>
             <ul className="list-disc list-inside space-y-1 ml-4">
-              <li>When someone registers with your referral code, they receive <strong className="text-foreground">500 bonus credits</strong> on top of the standard welcome credits</li>
-              <li>When a referred user registers with your referral code and verifies their account, you earn <strong className="text-foreground">500 credits</strong></li>
-              <li>When the referred user reaches a qualifying build threshold, you earn an additional <strong className="text-foreground">1,500 credits</strong></li>
-              <li>Maximum referral reward per referred user: 2,000 credits</li>
+              <li>
+                When someone registers with your referral code, they receive{" "}
+                <strong className="text-foreground">
+                  {rewards ? `${rewards.referralSignupBonus.toLocaleString()} bonus credits` : "bonus credits"}
+                </strong>{" "}
+                on top of the standard welcome credits
+              </li>
+              <li>
+                When a referred user registers with your referral code and verifies their account, you earn{" "}
+                <strong className="text-foreground">
+                  {rewards ? `${rewards.referralVerificationReward.toLocaleString()} credits` : "credits"}
+                </strong>
+              </li>
+              <li>
+                When the referred user reaches a qualifying build threshold, you earn an additional{" "}
+                <strong className="text-foreground">
+                  {rewards ? `${rewards.referralMilestoneReward.toLocaleString()} credits` : "credits"}
+                </strong>
+              </li>
+              <li>
+                Maximum referral reward per referred user:{" "}
+                {rewards ? `${(rewards.referralVerificationReward + rewards.referralMilestoneReward).toLocaleString()} credits` : "see the referral program page"}
+              </li>
             </ul>
             <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 flex items-start gap-3">
               <AlertTriangle className="size-4 text-amber-500 mt-0.5 shrink-0" />

@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { SITE_URL } from "@/lib/env"
 import { DocsContent } from "@/components/docs-content"
+import { getPublicBillingConfig } from "@/lib/billing/public-config"
 
 const DOC_SECTIONS = [
   ["getting-started", "Getting Started"],
@@ -93,14 +94,17 @@ const jsonLd = [
   },
 ]
 
-export default function DocsPage() {
+export const dynamic = "force-dynamic"
+
+export default async function DocsPage() {
+  const billing = await getPublicBillingConfig()
   return (
     <main data-atai-tour="docs-hub" className="min-h-screen bg-background text-foreground">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
       />
-      <DocsContent />
+      <DocsContent billing={billing} />
     </main>
   )
 }

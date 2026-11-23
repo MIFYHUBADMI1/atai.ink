@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { jsonFetcher, patchJson } from "@/lib/client/api"
 import { toast } from "sonner"
+import type { PublicRewards } from "@/lib/billing/public-config-types"
 
 interface ReferralInfo {
   referralCode: string
@@ -27,6 +28,7 @@ interface ReferralInfo {
     eligibleUsage: number
     createdAt: number
   }>
+  rewards: PublicRewards
 }
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -121,6 +123,9 @@ export function ReferralDashboard() {
     )
   }
 
+  const { referralVerificationReward: verification, referralMilestoneReward: milestone, referralSignupBonus: signup, referralMilestoneThreshold: threshold } = data.rewards
+  const maxReward = verification + milestone
+
   return (
     <section className="mx-auto flex w-full max-w-4xl flex-col gap-10 px-6 py-10 lg:px-10 lg:py-14">
       {/* Hero */}
@@ -203,9 +208,9 @@ export function ReferralDashboard() {
               <Gift className="size-6 text-green-500" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold">500 Credits</h3>
+              <h3 className="text-lg font-semibold">{verification.toLocaleString()} Credits</h3>
               <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                Earn 500 credits when someone joins through your referral link and verifies their account.
+                Earn {verification.toLocaleString()} credits when someone joins through your referral link and verifies their account.
               </p>
             </div>
           </CardContent>
@@ -216,9 +221,9 @@ export function ReferralDashboard() {
               <Rocket className="size-6 text-primary" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold">+1,500 Credits</h3>
+              <h3 className="text-lg font-semibold">+{milestone.toLocaleString()} Credits</h3>
               <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                Earn an additional 1,500 credits when your referral successfully uses 75,000 credits to build applications.
+                Earn an additional {milestone.toLocaleString()} credits when your referral successfully uses {threshold.toLocaleString()} credits to build applications.
               </p>
             </div>
           </CardContent>
@@ -228,10 +233,10 @@ export function ReferralDashboard() {
       {/* Max per referral */}
       <div className="rounded-lg border border-border bg-card/50 px-6 py-4 text-center">
         <p className="text-lg font-medium">
-          Up to <span className="text-primary font-semibold">2,000 Credits</span> per successful referral
+          Up to <span className="text-primary font-semibold">{maxReward.toLocaleString()} Credits</span> per successful referral
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
-          Whoever you invite also gets 500 bonus credits when they join, on top of their welcome credits.
+          Whoever you invite also gets {signup.toLocaleString()} bonus credits when they join, on top of their welcome credits.
         </p>
       </div>
 
@@ -286,7 +291,7 @@ export function ReferralDashboard() {
               <p className="text-xs text-muted-foreground">Verification Rewards</p>
               <p className="mt-2 text-xl font-semibold">{data.stats.verificationRewards}</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                {(data.stats.verificationRewards * 500).toLocaleString()} credits awarded
+                {(data.stats.verificationRewards * verification).toLocaleString()} credits awarded
               </p>
             </CardContent>
           </Card>
@@ -295,7 +300,7 @@ export function ReferralDashboard() {
               <p className="text-xs text-muted-foreground">Usage Milestones</p>
               <p className="mt-2 text-xl font-semibold">{data.stats.milestoneRewards}</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                {(data.stats.milestoneRewards * 1500).toLocaleString()} credits awarded
+                {(data.stats.milestoneRewards * milestone).toLocaleString()} credits awarded
               </p>
             </CardContent>
           </Card>
@@ -318,10 +323,10 @@ export function ReferralDashboard() {
                 let rewardText = "Pending"
                 let rewardColor = "text-muted-foreground"
                 if (r.verificationRewardIssued && r.milestoneRewardIssued) {
-                  rewardText = "+2,000"
+                  rewardText = `+${maxReward.toLocaleString()}`
                   rewardColor = "text-green-500"
                 } else if (r.verificationRewardIssued) {
-                  rewardText = "+500"
+                  rewardText = `+${verification.toLocaleString()}`
                   rewardColor = "text-green-500"
                 }
                 return (
@@ -352,14 +357,14 @@ export function ReferralDashboard() {
             {data.referrals
               .filter((r) => !r.milestoneRewardIssued && r.eligibleUsage > 0)
               .map((r) => {
-                const progress = Math.min((r.eligibleUsage / 75000) * 100, 100)
+                const progress = threshold > 0 ? Math.min((r.eligibleUsage / threshold) * 100, 100) : 0
                 return (
                   <Card key={r.id}>
                     <CardContent className="py-4">
                       <div className="flex items-center justify-between mb-2">
                         <p className="text-sm font-medium">Referral activity</p>
                         <p className="text-xs text-muted-foreground">
-                          {formatUsage(r.eligibleUsage)} / 75,000
+                          {formatUsage(r.eligibleUsage)} / {threshold.toLocaleString()}
                         </p>
                       </div>
                       <div className="h-2 rounded-full bg-muted overflow-hidden">
@@ -369,12 +374,12 @@ export function ReferralDashboard() {
                           role="progressbar"
                           aria-valuenow={r.eligibleUsage}
                           aria-valuemin={0}
-                          aria-valuemax={75000}
-                          aria-label={`${formatUsage(r.eligibleUsage)} of 75,000 credits used`}
+                          aria-valuemax={threshold}
+                          aria-label={`${formatUsage(r.eligibleUsage)} of ${threshold.toLocaleString()} credits used`}
                         />
                       </div>
                       <p className="mt-1.5 text-xs text-muted-foreground">
-                        {(75000 - r.eligibleUsage).toLocaleString()} credits remaining to milestone
+                        {Math.max(0, threshold - r.eligibleUsage).toLocaleString()} credits remaining to milestone
                       </p>
                     </CardContent>
                   </Card>

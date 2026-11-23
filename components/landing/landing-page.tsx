@@ -1,9 +1,11 @@
 "use client"
 
+import useSWR from "swr"
 import { SiteHeader } from "@/components/site-header"
 import { SiteFooter } from "@/components/site-footer"
 import { ReferralProgramSection } from "@/components/referral/referral-program-section"
-import { useSession } from "@/lib/client/api"
+import { jsonFetcher, useSession } from "@/lib/client/api"
+import type { PublicBillingConfig } from "@/lib/billing/public-config-types"
 import { LandingHero } from "@/components/landing/hero"
 import {
   LandingAudience,
@@ -22,6 +24,7 @@ import {
 
 export default function LandingPage() {
   const { session } = useSession()
+  const { data: publicBilling } = useSWR<PublicBillingConfig>("/api/billing/public-config", jsonFetcher)
   const ctaHref = session ? "/dashboard" : "/register"
   const ctaLabel = session ? "Open my businesses" : "Start my business"
 
@@ -41,8 +44,12 @@ export default function LandingPage() {
       <LandingManage />
       <LandingGrow />
       <LandingAudience />
-      <ReferralProgramSection />
-      <LandingFinalCta ctaHref={ctaHref} ctaLabel={ctaLabel} />
+      <ReferralProgramSection rewards={publicBilling?.rewards} />
+      <LandingFinalCta
+        ctaHref={ctaHref}
+        ctaLabel={ctaLabel}
+        welcomeBonus={publicBilling?.rewards.welcomeBonus}
+      />
       <SiteFooter />
     </main>
   )

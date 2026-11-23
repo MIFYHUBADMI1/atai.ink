@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/auth/session"
 import { ok, handleRouteError } from "@/lib/api/respond"
 import { usersCol, projectsCol, buildRunsCol, creditLedgerCol, topupsCol, publishEventsCol, referralsCol } from "@/lib/db/collections"
 import { CREDIT_BACK_REVERSAL_TRANSACTION_TYPES } from "@/lib/billing/reversal-types"
+import { getRewardSettings } from "@/lib/billing/runtime-config"
 
 interface OnboardingBreakdown {
   label: string
@@ -297,6 +298,7 @@ export async function GET(request: NextRequest) {
       .toArray()
 
     // Referral analytics
+    const rewards = await getRewardSettings()
     const referralsCol_ = await referralsCol()
     const referralsAgg = await referralsCol_.aggregate([
       {
@@ -308,8 +310,8 @@ export async function GET(request: NextRequest) {
           totalCreditsAwarded: {
             $sum: {
               $add: [
-                { $cond: ["$verificationRewardIssued", 500, 0] },
-                { $cond: ["$milestoneRewardIssued", 1500, 0] },
+                { $cond: ["$verificationRewardIssued", rewards.referralVerificationReward, 0] },
+                { $cond: ["$milestoneRewardIssued", rewards.referralMilestoneReward, 0] },
               ],
             },
           },

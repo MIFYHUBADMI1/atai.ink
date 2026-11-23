@@ -7,6 +7,7 @@ import {
   ArrowRight, CreditCard, DollarSign, Users, ShoppingCart, TrendingUp,
   TrendingDown, RefreshCw, AlertTriangle, Loader2, BarChart3, Coins,
   ArrowUpRight, ArrowDownLeft, Package, Shield, Calendar, Download, Boxes,
+  Gift, Settings, Scale, Route,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -468,6 +469,48 @@ export default function AdminBillingPage() {
           <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-4">Billing Management</p>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <QuickLink
+              href="/admin/billing/configuration"
+              title="Pricing & Credits"
+              description="Every runtime credit cost, reward, and billing setting in one place."
+              icon={Settings}
+            />
+            <QuickLink
+              href="/admin/billing/offers"
+              title="Offers & Campaigns"
+              description="Add bonus credits to plans or credit packs for a launch, season, or promotion."
+              icon={Gift}
+            />
+            <QuickLink
+              href="/admin/billing/catalog"
+              title="Catalog Authoring"
+              description="Create products, change plan and pack prices, publish versions, and activate the customer catalog."
+              icon={Boxes}
+            />
+            <QuickLink
+              href="/admin/runtime/pricing"
+              title="Runtime API Pricing"
+              description="Per-model token and request prices for the runtime API."
+              icon={BarChart3}
+            />
+            <QuickLink
+              href="/admin/ads/packages"
+              title="Advertising Packages"
+              description="Promotional package prices, durations, and reach estimates."
+              icon={Package}
+            />
+            <QuickLink
+              href="/admin/billing/reconciliation"
+              title="Reconciliation"
+              description="Compare payments, credit grants, and entitlements before changing prices."
+              icon={Scale}
+            />
+            <QuickLink
+              href="/admin/dodo-products"
+              title="Dodo Products"
+              description="Provision provider products; map their ids in Catalog authoring."
+              icon={Route}
+            />
+            <QuickLink
               href="/admin/payments"
               title="Payment Records"
               description="View Dodo payment records and webhook events."
@@ -480,21 +523,15 @@ export default function AdminBillingPage() {
               icon={CreditCard}
             />
             <QuickLink
-              href="/admin/billing/catalog"
-              title="Catalog Authoring"
-              description="Create products, publish versions, and activate the customer catalog."
-              icon={Boxes}
-            />
-            <QuickLink
               href="/admin/billing/plans"
               title="Subscription Plans"
-              description="View and configure subscription plan details and pricing."
+              description="Review active plans and prices; edit them in Catalog authoring."
               icon={Package}
             />
             <QuickLink
               href="/admin/billing/credit-packs"
               title="Credit Packs"
-              description="Manage permanent credit packs and their pricing."
+              description="Review active packs and prices; edit them in Catalog authoring."
               icon={Coins}
             />
             <QuickLink
@@ -514,12 +551,6 @@ export default function AdminBillingPage() {
               title="Webhook Events"
               description="View Dodo payment webhook events and their processing status."
               icon={BarChart3}
-            />
-            <QuickLink
-              href="/admin/billing/configuration"
-              title="Billing Configuration"
-              description="View and manage billing system configuration and pricing."
-              icon={Shield}
             />
             <QuickLink
               href="/admin/transactions"

@@ -10,6 +10,7 @@ import {
 } from "@/lib/billing/entitlements"
 import type { UsageAlerts } from "@/lib/billing/entitlements"
 import { resolvePublicCommercialCatalog } from "@/lib/billing/catalog/published-resolver"
+import { getRewardSettings } from "@/lib/billing/runtime-config"
 
 /**
  * GET /api/billing/overview
@@ -25,7 +26,7 @@ export async function GET() {
   try {
     const user = await requireUser()
 
-    const [balance, history, subRows, catalog] = await Promise.all([
+    const [balance, history, subRows, catalog, rewards] = await Promise.all([
       getBalance(user.id),
       getCreditHistory(user.id, 50),
       (await subscriptionRecordsCol())
@@ -34,6 +35,7 @@ export async function GET() {
         .limit(1)
         .toArray(),
       resolvePublicCommercialCatalog(),
+      getRewardSettings(),
     ])
 
     const sub = subRows[0]
@@ -96,6 +98,7 @@ export async function GET() {
       packs: catalog.packs,
       activeCommercialPlanId,
       businessCount,
+      welcomeBonusCredits: rewards.welcomeBonus,
     })
   } catch (e) {
     return handleRouteError("api.billing.overview", e)

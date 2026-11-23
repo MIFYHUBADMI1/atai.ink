@@ -15,8 +15,8 @@ import { infrastructureDenial } from "@/lib/infrastructure/access"
 
 /**
  * Deploy credit cost — admin-configurable via runtime settings
- * (lib/billing/runtime-config.ts). Falls back to 500 when the settings
- * store is unavailable.
+ * (lib/billing/runtime-config.ts). Falls back to the configured default when
+ * the settings store is unavailable.
  */
 async function getDeployCredits(): Promise<number> {
   const costs = await getDeploymentCosts()
@@ -366,6 +366,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         versionId: deployStatus.versionId,
         productionUrl: totalumProject.productionProjectUrl,
         customDomain: totalumProject.customDomain,
+        deployCost: await getDeployCredits(),
       })
     } catch (err) {
       // Handle project not found - reset state to ready
@@ -428,6 +429,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
           status: project.deployment?.status === "success" ? "success" : project.state === "deploying" ? "deploying" : null,
           productionUrl: project.deployment?.productionUrl ?? latest?.productionUrl ?? project.developmentUrl,
           customDomain: latest?.customDomain ? { hostname: latest.customDomain, status: latest.status } : null,
+          deployCost: await getDeployCredits(),
         })
       }
       return handleRouteError("api.projects.deploy.status", err)

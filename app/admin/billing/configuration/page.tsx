@@ -1,11 +1,12 @@
 "use client"
 
+import Link from "next/link"
 import useSWR from "swr"
 import { useEffect, useState } from "react"
 import {
   Loader2, AlertTriangle, Shield, Settings, Coins, DollarSign, Package,
   RefreshCw, CreditCard, Webhook, Key, ArrowRight, CheckCircle2, XCircle,
-  TrendingUp, Star, Zap, MessageSquare, Brain, Hammer, Globe, Rocket, GitFork, Database, Gift,
+  TrendingUp, Star, Zap, MessageSquare, Brain, Hammer, Globe, Rocket, GitFork, Database, Gift, Sparkles,
   Building2,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -101,6 +102,16 @@ interface BillingConfig {
     deployCost: number
     defaults: { deployCost: number }
   }
+  visualPricing: {
+    markup: number
+    creditsPerUsd: number
+    fallbackCredits: number
+    estimatedCredits: number
+    defaults: {
+      markup: number; creditsPerUsd: number; fallbackCredits: number
+      estimatedCredits: number
+    }
+  }
   forkPricing: {
     simpleForkCost: number
     mediumForkCost: number
@@ -120,6 +131,34 @@ interface BillingConfig {
     businessPrice: number
     defaults: { basicPrice: number; starterPrice: number; proPrice: number; businessPrice: number }
   }
+}
+
+function ControlLink({
+  href,
+  title,
+  description,
+  icon: Icon,
+}: {
+  href: string
+  title: string
+  description: string
+  icon: React.ElementType
+}) {
+  return (
+    <Link
+      href={href}
+      className="group flex items-start gap-3 rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/30 hover:bg-accent/40"
+    >
+      <div className="rounded-lg bg-primary/10 p-2">
+        <Icon className="size-4 text-primary" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-sm font-medium">{title}</p>
+        <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{description}</p>
+      </div>
+      <ArrowRight className="ml-auto mt-1 size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+    </Link>
+  )
 }
 
 // ── Collaborate AI costs — editable card ─────────────────────────────────────
@@ -623,6 +662,107 @@ function DeploymentCostsCard({
   )
 }
 
+// ── Visual-generation pricing — editable card ───────────────────────────
+
+function VisualPricingCard({
+  pricing,
+  onSaved,
+}: {
+  pricing: BillingConfig["visualPricing"]
+  onSaved: () => void
+}) {
+  const fields = [
+    { key: "markup", label: "Provider-cost markup", step: 0.01, min: 1, max: 10, unit: "×" },
+    { key: "creditsPerUsd", label: "Charging rate", step: 1, min: 1, max: 1_000_000, unit: "credits per $1" },
+    { key: "fallbackCredits", label: "No-cost fallback", step: 1, min: 0, max: 1_000_000, unit: "credits" },
+    { key: "estimatedCredits", label: "UI estimate", step: 1, min: 0, max: 1_000_000, unit: "credits" },
+  ] as const
+
+  const [values, setValues] = useState<Record<string, string>>(
+    Object.fromEntries(fields.map((field) => [field.key, String(pricing[field.key])])),
+  )
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    setValues(Object.fromEntries(fields.map((field) => [field.key, String(pricing[field.key])])))
+  }, [pricing])
+
+  const nums = Object.fromEntries(fields.map((field) => [field.key, Number(values[field.key])]))
+  const valid = fields.every((field) => {
+    const value = nums[field.key]
+    return Number.isFinite(value) && value >= field.min && value <= field.max && (field.key === "markup" || Number.isInteger(value))
+  })
+  const dirty = fields.some((field) => nums[field.key] !== pricing[field.key])
+
+  async function save() {
+    if (!valid || !dirty || saving) return
+    setSaving(true)
+    try {
+      await patchJson("/api/admin/billing/configuration", {
+        visualPricing: {
+          markup: nums.markup,
+          creditsPerUsd: nums.creditsPerUsd,
+          fallbackCredits: nums.fallbackCredits,
+          estimatedCredits: nums.estimatedCredits,
+        },
+      })
+      toast.success("Visual-generation pricing updated.")
+      onSaved()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not update visual-generation pricing.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Card>
+      <CardContent className="py-5">
+        <div className="flex items-center gap-2 mb-1">
+          <Sparkles className="size-4 text-primary" />
+          <p className="font-medium">Visual generation</p>
+          <Badge variant="secondary" className="ml-auto text-[10px]">Runtime-editable</Badge>
+        </div>
+        <p className="mb-4 text-xs text-muted-foreground">
+          Image charges use the provider cost × markup, converted at the charging rate. The fallback
+          applies when a premium model reports no cost. These values are not Atai&apos;s universal credit valuation.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {fields.map((field) => (
+            <div key={field.key}>
+              <label htmlFor={`visual-${field.key}`} className="text-xs text-muted-foreground">{field.label}</label>
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  id={`visual-${field.key}`}
+                  type="number"
+                  min={field.min}
+                  max={field.max}
+                  step={field.step}
+                  value={values[field.key]}
+                  onChange={(e) => setValues((current) => ({ ...current, [field.key]: e.target.value }))}
+                  className="w-28 rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+                <span className="text-xs text-muted-foreground">{field.unit}</span>
+                {nums[field.key] !== pricing.defaults[field.key] && (
+                  <span className="text-[10px] text-muted-foreground">Default: {pricing.defaults[field.key]}</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 flex items-center gap-2">
+          <Button size="sm" onClick={save} disabled={!valid || !dirty || saving}>
+            {saving ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
+            Save changes
+          </Button>
+          {dirty && valid && <span className="text-[11px] text-amber-500">Unsaved changes</span>}
+          {!valid && <span className="text-[11px] text-destructive">Check each value&apos;s range and whole-number requirement</span>}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 // ── Fork pricing — editable card ─────────────────────────────────────────
 
 function ForkPricingCard({
@@ -960,8 +1100,71 @@ export default function AdminConfigurationPage() {
 
         <CatalogSourceBanner source={config?.catalogSource} />
 
-        {/* ── Dodo Integration ── */}
         <section className="mt-8">
+          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-4">Pricing & credits control</p>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <ControlLink
+              href="/admin/billing/catalog"
+              title="Catalog authoring"
+              description="Plan and credit-pack prices, credits, entitlements, and Dodo mappings."
+              icon={Package}
+            />
+            <ControlLink
+              href="/admin/billing/offers"
+              title="Offers & campaigns"
+              description="Bonus credits on plans or packs for a launch, season, or promotion."
+              icon={Gift}
+            />
+            <ControlLink
+              href="/admin/runtime/pricing"
+              title="Runtime API pricing"
+              description="Per-model token and request prices for the runtime API."
+              icon={TrendingUp}
+            />
+            <ControlLink
+              href="/admin/ads/packages"
+              title="Advertising packages"
+              description="Promotional package prices, durations, and reach estimates."
+              icon={Rocket}
+            />
+            <ControlLink
+              href="/admin/dodo-products"
+              title="Dodo products"
+              description="Provision provider products; map their ids in Catalog authoring."
+              icon={CreditCard}
+            />
+            <ControlLink
+              href="/admin/billing/reconciliation"
+              title="Reconciliation"
+              description="Check payments, grants, and entitlements before changing a price."
+              icon={Shield}
+            />
+          </div>
+        </section>
+
+        <nav className="mt-6 flex flex-wrap items-center gap-2 text-xs" aria-label="Billing configuration sections">
+          {[
+            ["#payment-integration", "Payment integration"],
+            ["#rewards", "Rewards"],
+            ["#build-costs", "Build costs"],
+            ["#website-research", "Website research"],
+            ["#forks", "Marketplace forks"],
+            ["#infrastructure", "Infrastructure"],
+            ["#business", "Connecting a business"],
+            ["#deployment", "Deployment"],
+            ["#visual-pricing", "Visual generation"],
+            ["#collaborate", "AI collaboration"],
+            ["#plans", "Plans"],
+            ["#credit-packs", "Credit packs"],
+          ].map(([href, label]) => (
+            <a key={href} href={href} className="rounded-full border border-border px-2.5 py-1 text-muted-foreground hover:border-primary/30 hover:text-foreground">
+              {label}
+            </a>
+          ))}
+        </nav>
+
+        {/* ── Dodo Integration ── */}
+        <section id="payment-integration" className="mt-8 scroll-mt-24">
           <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-4">Payment Integration</p>
           <Card>
             <CardContent className="py-5">
@@ -1066,50 +1269,64 @@ export default function AdminConfigurationPage() {
           </div>
         </section>
 
+        <section id="rewards" className="mt-8 scroll-mt-24">
+          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-4">Rewards & Bonuses</p>
+          {config?.systemConfig && (
+            <RewardsCard system={config.systemConfig} onSaved={() => mutate()} />
+          )}
+        </section>
+
         {/* ── Runtime-Editable Costs ── */}
-        <section className="mt-8">
+        <section id="build-costs" className="mt-8 scroll-mt-24">
           <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-4">Build Costs</p>
           {config?.buildTierCosts && (
             <BuildTierCostsCard costs={config.buildTierCosts} onSaved={() => mutate()} />
           )}
         </section>
 
-        <section className="mt-8">
+        <section id="website-research" className="mt-8 scroll-mt-24">
           <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-4">Website Research Costs</p>
           {config?.mirrorPipelineCosts && (
             <MirrorPipelineCostsCard costs={config.mirrorPipelineCosts} onSaved={() => mutate()} />
           )}
         </section>
 
-        <section className="mt-8">
+        <section id="forks" className="mt-8 scroll-mt-24">
           <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-4">Marketplace Forks</p>
           {config?.forkPricing && (
             <ForkPricingCard costs={config.forkPricing} onSaved={() => mutate()} />
           )}
         </section>
 
-        <section className="mt-8">
+        <section id="infrastructure" className="mt-8 scroll-mt-24">
           <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-4">Infrastructure Plan Prices</p>
           {config?.infrastructurePrices && (
             <InfrastructurePricesCard costs={config.infrastructurePrices} onSaved={() => mutate()} />
           )}
         </section>
 
-        <section className="mt-8">
+        <section id="business" className="mt-8 scroll-mt-24">
           <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-4">Connecting a Business</p>
           {config?.existingBusinessCosts && (
             <ExistingBusinessCostsCard costs={config.existingBusinessCosts} onSaved={() => mutate()} />
           )}
         </section>
 
-        <section className="mt-8">
+        <section id="deployment" className="mt-8 scroll-mt-24">
           <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-4">Deployment Cost</p>
           {config?.deploymentCosts && (
             <DeploymentCostsCard costs={config.deploymentCosts} onSaved={() => mutate()} />
           )}
         </section>
 
-        <section className="mt-8">
+        <section id="visual-pricing" className="mt-8 scroll-mt-24">
+          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-4">Visual Generation</p>
+          {config?.visualPricing && (
+            <VisualPricingCard pricing={config.visualPricing} onSaved={() => mutate()} />
+          )}
+        </section>
+
+        <section id="collaborate" className="mt-8 scroll-mt-24">
           <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-4">AI Collaboration Costs</p>
           {config?.collaborateCosts && (
             <CollaborateCostsCard costs={config.collaborateCosts} onSaved={() => mutate()} />
@@ -1184,7 +1401,7 @@ export default function AdminConfigurationPage() {
 
 
         {/* ── Subscription Plans ── */}
-        <section className="mt-8">
+        <section id="plans" className="mt-8 scroll-mt-24">
           <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-4">Subscription Plans</p>
           <p className="mb-3 text-xs text-muted-foreground">
             Read-only values from the active catalog source. Use Catalog authoring to change a plan.
@@ -1229,7 +1446,7 @@ export default function AdminConfigurationPage() {
         </section>
 
         {/* ── Permanent Credit Packs ── */}
-        <section className="mt-8">
+        <section id="credit-packs" className="mt-8 scroll-mt-24">
           <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-4">Permanent Credit Packs</p>
           <p className="mb-3 text-xs text-muted-foreground">
             Read-only values from the active catalog source. Use Catalog authoring to change a pack.

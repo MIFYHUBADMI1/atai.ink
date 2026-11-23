@@ -14,6 +14,7 @@ interface Props {
   isOwner: boolean
   isLoggedIn: boolean
   forkCost: number
+  ownerRoyalty: number
   savingsPct: number
   forkTier: "simple" | "medium" | "complex"
 }
@@ -34,6 +35,7 @@ export function PublicProjectActions({
   isOwner,
   isLoggedIn,
   forkCost,
+  ownerRoyalty,
   savingsPct,
   forkTier,
 }: Props) {
@@ -228,9 +230,7 @@ export function PublicProjectActions({
         <div className="rounded-lg bg-muted/50 px-4 py-3 text-center">
           <p className="text-xs text-muted-foreground">This is your project</p>
           <p className="mt-0.5 text-xs font-medium text-foreground">
-            You earn {
-              forkTier === "complex" ? "15,000" : forkTier === "medium" ? "10,000" : "5,000"
-            } credits per fork
+            You earn {ownerRoyalty.toLocaleString()} credits per fork
           </p>
         </div>
       )}

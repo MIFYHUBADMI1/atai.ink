@@ -11,7 +11,8 @@ import {
   isOpenRouterConfigured,
   openRouterHeaders,
 } from "@/lib/runtime/router/adapters/openrouter/config"
-import { computeVisualCredits, VISUAL_FALLBACK_CREDITS } from "@/lib/billing/visual-pricing"
+import { computeVisualCredits } from "@/lib/billing/visual-pricing"
+import { getVisualPricing } from "@/lib/billing/runtime-config"
 import { scopedIntentKey } from "@/lib/billing/operation-identity"
 import {
   DEFAULT_IMAGE_MODEL,
@@ -171,9 +172,10 @@ async function post(
     })
 
     // Upfront balance check: flat-priced models need their fixed cost;
-    // premium models are charged at most the no-cost fallback (1600) until
+    // premium models are charged at most the no-cost fallback until
     // OpenRouter reports the real price with the image.
-    const upfrontCredits = modelInfo.fixedCreditCost ?? VISUAL_FALLBACK_CREDITS
+    const visualPricing = await getVisualPricing()
+    const upfrontCredits = modelInfo.fixedCreditCost ?? visualPricing.fallbackCredits
     const available = await getAvailableCredits(user.id)
     if (available < upfrontCredits) {
       return failInsufficientCredits({
@@ -244,10 +246,13 @@ async function post(
 
     // Pricing: default model = flat 100 credits; premium = provider cost +
     // 45% margin at $1 = 4000 credits; premium without a reported cost = 1600.
-    const { credits, finalCost } = computeVisualCredits({
-      fixedCreditCost: modelInfo.fixedCreditCost,
-      providerCost: result.cost ?? null,
-    })
+    const { credits, finalCost } = computeVisualCredits(
+      {
+        fixedCreditCost: modelInfo.fixedCreditCost,
+        providerCost: result.cost ?? null,
+      },
+      visualPricing,
+    )
 
     const charged = await consumeCredits({
       userId: user.id,

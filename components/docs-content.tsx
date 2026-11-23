@@ -40,13 +40,14 @@ import { VideoEmbed } from "@/components/video-embed"
 import { useOnboardingVideoEmbedUrl } from "@/lib/client/onboarding-video"
 import { ScrollProgress } from "@/components/scroll-progress"
 import { BrandMark } from "@/components/brand-logo"
+import type { PublicBillingConfig } from "@/lib/billing/public-config-types"
 
 /* ═══════════════════════════════════════════════════════════════
    SECTION METADATA (for search)
    ═══════════════════════════════════════════════════════════════ */
 
 const sectionMeta = [
-  { id: "getting-started", label: "Getting Started", icon: Rocket, keywords: ["signup", "register", "account", "first project", "quick start", "begin", "new user", "500 credits", "free"] },
+  { id: "getting-started", label: "Getting Started", icon: Rocket, keywords: ["signup", "register", "account", "first project", "quick start", "begin", "new user", "free credits", "free"] },
   { id: "how-it-works", label: "How It Works", icon: Zap, keywords: ["understand", "plan", "build", "workflow", "process", "stages", "overview"] },
   { id: "pipeline-modes", label: "Atai Standard & Pro", icon: Crown, keywords: ["standard", "pro", "mode", "pipeline", "stages", "quality", "credits", "comparison", "7 stage"] },
   { id: "website-mode", label: "Website Mode", icon: Globe, keywords: ["url", "website", "reference", "inspiration", "scrape", "crawl", "deep crawl", "relevant", "link", "paste", "competitor"] },
@@ -69,7 +70,8 @@ const sectionMeta = [
    COMPONENT
    ═══════════════════════════════════════════════════════════════ */
 
-export function DocsContent() {
+export function DocsContent({ billing }: { billing: PublicBillingConfig }) {
+  const { buildTierCosts, mirrorPipelineCosts, deploymentCosts, rewards } = billing
   const onboardingVideoEmbed = useOnboardingVideoEmbedUrl()
   const [visibleIds, setVisibleIds] = useState<string[]>(
     sectionMeta.map((s) => s.id),
@@ -206,13 +208,13 @@ export function DocsContent() {
               <ul className="space-y-2">
                 <li className="flex items-start gap-2"><CheckCircle2 className="size-4 text-primary mt-1 shrink-0" /> A free Atai account</li>
                 <li className="flex items-start gap-2"><CheckCircle2 className="size-4 text-primary mt-1 shrink-0" /> A website that inspires you, an existing product, or a business idea to start from</li>
-                <li className="flex items-start gap-2"><CheckCircle2 className="size-4 text-primary mt-1 shrink-0" /> Credits for building (new accounts start with 500 free credits)</li>
+                <li className="flex items-start gap-2"><CheckCircle2 className="size-4 text-primary mt-1 shrink-0" /> Credits for building (new accounts start with {rewards.welcomeBonus.toLocaleString()} free credits)</li>
               </ul>
 
               <h3 className="text-lg font-semibold text-foreground mt-8">Your journey from idea to business</h3>
               <div className="space-y-4">
                 {[
-                  { step: 1, title: "Create an account", body: "Sign up with your email or Google account. You get 500 free credits to start — no credit card required." },
+                  { step: 1, title: "Create an account", body: `Sign up with your email or Google account. You get ${rewards.welcomeBonus.toLocaleString()} free credits to start — no credit card required.` },
                   { step: 2, title: "Choose your starting point", body: "Describe your business idea, use a website that inspires you, or bring an existing GitHub codebase." },
                   { step: 3, title: "Atai analyses and plans", body: "Atai reads your input, understands the business, and creates a structured plan you can review." },
                   { step: 4, title: "Collaborate & refine the plan", body: "Review your plan on the Collaborate page. Chat with the AI to adjust features, flows, and business model before anything is built." },
@@ -734,42 +736,24 @@ export function DocsContent() {
               <h3 className="text-lg font-semibold text-foreground">How credits work</h3>
               <ul className="space-y-2">
                 <li className="flex items-start gap-2"><CheckCircle2 className="size-4 text-primary mt-1 shrink-0" /> <span><strong className="text-foreground">Subscription & permanent credits</strong> — monthly plans plus one-time credit packs</span></li>
-                <li className="flex items-start gap-2"><CheckCircle2 className="size-4 text-primary mt-1 shrink-0" /> <span><strong className="text-foreground">500 free credits</strong> — every new account starts with credits to try Atai</span></li>
+                <li className="flex items-start gap-2"><CheckCircle2 className="size-4 text-primary mt-1 shrink-0" /> <span><strong className="text-foreground">{rewards.welcomeBonus.toLocaleString()} free credits</strong> — every new account starts with credits to try Atai</span></li>
                 <li className="flex items-start gap-2"><CheckCircle2 className="size-4 text-primary mt-1 shrink-0" /> <span><strong className="text-foreground">Buy more anytime</strong> — purchase permanent credit packs or subscribe through secure checkout</span></li>
               </ul>
 
-              <h3 className="text-lg font-semibold text-foreground mt-8">What costs credits — Legacy mode</h3>
+              <h3 className="text-lg font-semibold text-foreground mt-8">What costs credits</h3>
               <div className="grid gap-2 sm:grid-cols-2">
                 {[
-                  { action: "Website analysis (scrape)", cost: "5 credits" },
-                  { action: "Plan generation", cost: "5 credits" },
-                  { action: "Deep crawl", cost: "500 credits" },
-                  { action: "Simple application build", cost: "50,000 credits" },
-                  { action: "Medium application build", cost: "75,000 credits" },
-                  { action: "Complex application build", cost: "100,000 credits" },
-                  { action: "Publish / deploy", cost: "500 credits" },
+                  { action: "Website analysis (scrape)", cost: mirrorPipelineCosts.scrapeCost },
+                  { action: "Plan generation", cost: mirrorPipelineCosts.planCost },
+                  { action: "Deep crawl", cost: mirrorPipelineCosts.deepCrawlCost },
+                  { action: "Simple application build", cost: buildTierCosts.simple },
+                  { action: "Medium application build", cost: buildTierCosts.medium },
+                  { action: "Complex application build", cost: buildTierCosts.complex },
+                  { action: "Publish / deploy", cost: deploymentCosts.deployCost },
                 ].map(({ action, cost }) => (
                   <div key={action} className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3">
                     <span className="text-sm font-medium text-foreground">{action}</span>
-                    <span className="font-mono text-sm text-primary">{cost}</span>
-                  </div>
-                ))}
-              </div>
-
-              <h3 className="text-lg font-semibold text-foreground mt-8">What costs credits — Heavy mode</h3>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {[
-                  { action: "Website analysis (scrape)", cost: "100 credits" },
-                  { action: "Plan generation", cost: "100 credits" },
-                  { action: "Deep crawl", cost: "1,000 credits" },
-                  { action: "Simple application build", cost: "100,000 credits" },
-                  { action: "Medium application build", cost: "112,500 credits" },
-                  { action: "Complex application build", cost: "133,333 credits" },
-                  { action: "Publish / deploy", cost: "500 credits" },
-                ].map(({ action, cost }) => (
-                  <div key={action} className="flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">
-                    <span className="text-sm font-medium text-foreground">{action}</span>
-                    <span className="font-mono text-sm text-primary">{cost}</span>
+                    <span className="font-mono text-sm text-primary">{cost.toLocaleString()} credits</span>
                   </div>
                 ))}
               </div>
@@ -854,7 +838,13 @@ export function DocsContent() {
 
               <h3 className="text-lg font-semibold text-foreground mt-8">Refer and earn</h3>
               <p>
-                Invite friends to Atai and both sides earn bonus credits. Someone who joins through your link receives <strong className="text-foreground">500 bonus credits</strong>. You receive <strong className="text-foreground">500 credits</strong> when they verify their account, plus <strong className="text-foreground">1,500 credits</strong> when their successful builds reach 75,000 eligible credits. Share your link from the <strong className="text-foreground">Refer &amp; Earn</strong> page in your account menu, or read the <a href="/referral-program" className="text-primary underline">referral program guide</a>.
+                Invite friends to Atai and both sides earn bonus credits. Someone who joins through your link receives{" "}
+                <strong className="text-foreground">{rewards.referralSignupBonus.toLocaleString()} bonus credits</strong>. You receive{" "}
+                <strong className="text-foreground">{rewards.referralVerificationReward.toLocaleString()} credits</strong> when they verify their account, plus{" "}
+                <strong className="text-foreground">{rewards.referralMilestoneReward.toLocaleString()} credits</strong> when their successful builds reach{" "}
+                {rewards.referralMilestoneThreshold.toLocaleString()} eligible credits. Share your link from the{" "}
+                <strong className="text-foreground">Refer &amp; Earn</strong> page in your account menu, or read the{" "}
+                <a href="/referral-program" className="text-primary underline">referral program guide</a>.
               </p>
             </div>
             <SectionFeedbackInline sectionId="account" />
@@ -1041,7 +1031,7 @@ export function DocsContent() {
           {/* ─── CTA ─── */}
           <section className="rounded-xl border border-border bg-card p-8">
             <h2 className="text-2xl font-semibold tracking-tight text-center">Ready to build?</h2>
-            <p className="mt-3 text-center text-muted-foreground">Start with 500 free credits. No credit card required.</p>
+            <p className="mt-3 text-center text-muted-foreground">Start with {rewards.welcomeBonus.toLocaleString()} free credits. No credit card required.</p>
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
               <AuthTrigger view="signup" next="/new/idea" className={buttonVariants({ size: "lg" }) + " inline-flex"}>
                 Get started free <ArrowRight className="size-4 ml-1.5" />

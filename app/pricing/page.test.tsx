@@ -28,7 +28,29 @@ vi.mock("@/lib/auth/session", () => ({
 
 vi.mock("@/lib/billing/runtime-config", () => ({
   getBuildTierCosts: vi.fn(async () => ({ simple: 50_000, medium: 75_000, complex: 100_000 })),
+  getMirrorPipelineCosts: vi.fn(async () => ({
+    scrapeCost: 5,
+    heavyScrapeCost: 100,
+    planCost: 5,
+    heavyPlanCost: 100,
+    deepCrawlCost: 500,
+    heavyDeepCrawlCost: 1_000,
+  })),
   getDeploymentCosts: vi.fn(async () => ({ deployCost: 10_000 })),
+  getRewardSettings: vi.fn(async () => ({
+    welcomeBonus: 500,
+    referralSignupBonus: 500,
+    referralVerificationReward: 500,
+    referralMilestoneReward: 1_500,
+    referralMilestoneThreshold: 75_000,
+  })),
+  getPromotionalOffers: vi.fn(async () => []),
+  getVisualPricing: vi.fn(async () => ({
+    markup: 1.45,
+    creditsPerUsd: 4000,
+    fallbackCredits: 1600,
+    estimatedCredits: 1000,
+  })),
 }))
 
 vi.mock("@/lib/billing/catalog/published-resolver", () => ({

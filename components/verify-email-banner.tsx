@@ -4,7 +4,9 @@ import { useState } from "react"
 import { MailWarning, X } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
-import { postJson, useSession } from "@/lib/client/api"
+import useSWR from "swr"
+import { jsonFetcher, postJson, useSession } from "@/lib/client/api"
+import type { PublicBillingConfig } from "@/lib/billing/public-config-types"
 
 type ResendResult = { sent: true } | { sent: false; reason: "unconfigured" | "delivery_failed" } | { alreadyVerified: true }
 
@@ -15,6 +17,8 @@ type ResendResult = { sent: true } | { sent: false; reason: "unconfigured" | "de
  */
 export function VerifyEmailBanner() {
   const { session, isLoading, refresh } = useSession()
+  const { data: publicBilling } = useSWR<PublicBillingConfig>("/api/billing/public-config", jsonFetcher)
+  const welcomeBonus = publicBilling?.rewards.welcomeBonus
   const [sending, setSending] = useState(false)
   const [dismissed, setDismissed] = useState(false)
 
@@ -49,7 +53,8 @@ export function VerifyEmailBanner() {
       <div className="flex items-center gap-3">
         <MailWarning className="size-4 shrink-0 text-amber-500" />
         <p className="text-sm text-foreground">
-          Verify <span className="font-medium">{session.user.email}</span> to unlock your 500 bonus credits.
+          Verify <span className="font-medium">{session.user.email}</span> to unlock your{" "}
+          {welcomeBonus ? `${welcomeBonus.toLocaleString()} bonus credits` : "bonus credits"}.
         </p>
       </div>
       <div className="flex items-center gap-2">

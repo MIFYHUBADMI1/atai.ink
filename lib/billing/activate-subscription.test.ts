@@ -80,6 +80,34 @@ describe("activatePaidSubscription — commercial attribution", () => {
     vi.resetModules()
   })
 
+  it("adds a checkout offer bonus to the first subscription grant", async () => {
+    const activate = await loadActivate()
+    const nextBilling = new Date(Date.now() + 30 * DAY_MS).toISOString()
+    const result = await activate({
+      subscriptionId: "dodo_sub_offer",
+      productId: "pdt_growth_m",
+      metadata: {
+        userId: "u1",
+        planId: "growth",
+        billingCycle: "monthly",
+        offerId: "offer_launch",
+        offerBonusCredits: "25000",
+      },
+      nextBillingDate: nextBilling,
+    })
+    expect(result).toMatchObject({ ok: true, planId: "growth" })
+    expect(grantSubscriptionCredits).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "u1",
+        amount: 425_000,
+        metadata: expect.objectContaining({
+          offerId: "offer_launch",
+          offerBonusCredits: 25_000,
+        }),
+      }),
+    )
+  })
+
   it("attributes a commercial Growth purchase to Growth (absent from the legacy catalog)", async () => {
     const activate = await loadActivate()
     const nextBilling = new Date(Date.now() + 30 * DAY_MS).toISOString()

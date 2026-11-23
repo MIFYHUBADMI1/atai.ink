@@ -4,8 +4,12 @@ import { buildUpdate } from "@/lib/db/update"
 import type { UserDoc } from "@/lib/types/db"
 import { cryptoId, store } from "@/lib/store/store"
 import { grantCredits } from "@/lib/billing/credit-service"
+import { getRewardSettings } from "@/lib/billing/runtime-config"
 
-const STARTING_CREDITS = 500
+async function getStartingCredits(): Promise<number> {
+  const { welcomeBonus } = await getRewardSettings()
+  return welcomeBonus
+}
 
 export interface PublicUser {
   id: string
@@ -104,7 +108,7 @@ export async function createPasswordUser(params: {
     emailVerified: false,
     // Password users start with 0 credits — credits are granted on email
     // verification (see markEmailVerified). Google-auth users are pre-verified
-    // by Google and receive STARTING_CREDITS immediately.
+    // by Google and receive the welcome bonus immediately.
     credits: 0,
     subscriptionCredits: 0,
     permanentCredits: 0,
@@ -147,7 +151,7 @@ export async function createGoogleUser(params: {
   await grantCredits({
     userId,
     creditType: "permanent",
-    amount: STARTING_CREDITS,
+    amount: await getStartingCredits(),
     transactionType: "signup_bonus",
     idempotencyKey: `signup_${userId}_google`,
     metadata: {
@@ -181,7 +185,7 @@ export async function linkGoogleToUser(userId: string, googleId: string, imageUr
     await grantCredits({
       userId,
       creditType: "permanent",
-      amount: STARTING_CREDITS,
+      amount: await getStartingCredits(),
       transactionType: "signup_bonus",
       idempotencyKey: `signup_${userId}_google_link`,
       metadata: {
@@ -225,7 +229,7 @@ export async function markEmailVerified(userId: string): Promise<void> {
     await grantCredits({
       userId,
       creditType: "permanent",
-      amount: STARTING_CREDITS,
+      amount: await getStartingCredits(),
       transactionType: "signup_bonus",
       idempotencyKey: `signup_${userId}_email_verified`,
       metadata: {
@@ -296,7 +300,7 @@ export async function softDeleteUser(userId: string): Promise<void> {
   )
 }
 
-export { toPublicUser, STARTING_CREDITS }
+export { toPublicUser }
 export type { UserDoc }
 
 // ─── GitHub auth helpers ──────────────────────────────────────────────────────
@@ -339,7 +343,7 @@ export async function createGitHubUser(params: {
   await grantCredits({
     userId,
     creditType: "permanent",
-    amount: STARTING_CREDITS,
+    amount: await getStartingCredits(),
     transactionType: "signup_bonus",
     idempotencyKey: `signup_${userId}_github`,
     metadata: { reason: "GitHub signup — welcome credits", authProvider: "github" },

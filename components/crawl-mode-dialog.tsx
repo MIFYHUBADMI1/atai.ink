@@ -5,6 +5,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button"
 import { ScanSearch, Cpu, Zap, ArrowRight, Shield, Globe, Brain, Layers } from "lucide-react"
 import { cn } from "@/lib/utils"
+import useSWR from "swr"
+import { jsonFetcher } from "@/lib/client/api"
+import type { PublicBillingConfig } from "@/lib/billing/public-config-types"
 
 export type CrawlMode = "relevant" | "deep"
 
@@ -17,6 +20,10 @@ interface CrawlModeDialogProps {
 
 export function CrawlModeDialog({ open, onOpenChange, onSelect, url }: CrawlModeDialogProps) {
   const [selected, setSelected] = useState<CrawlMode | null>(null)
+  const { data: publicBilling } = useSWR<PublicBillingConfig>("/api/billing/public-config", jsonFetcher)
+  const deepCrawlCost = publicBilling?.mirrorPipelineCosts.deepCrawlCost
+  const deepCrawlLabel = deepCrawlCost === undefined ? "Credits apply" : `${deepCrawlCost.toLocaleString()} credits`
+  const deepCrawlButtonLabel = deepCrawlCost === undefined ? "Deep crawl" : `Deep crawl for ${deepCrawlLabel.toLowerCase()}`
 
   function handleConfirm() {
     if (selected) {
@@ -98,7 +105,7 @@ export function CrawlModeDialog({ open, onOpenChange, onSelect, url }: CrawlMode
                   <p className="font-medium">Deep Crawl</p>
                   <span className="rounded-full bg-green-500/10 px-2 py-0.5 font-mono text-[10px] text-green-500">New</span>
                   <span className="rounded-full bg-amber-500/10 px-2 py-0.5 font-mono text-[10px] text-amber-500">Beta</span>
-                  <span className="rounded-full bg-primary/10 px-2 py-0.5 font-mono text-[10px] text-primary">500 credits</span>
+                  <span className="rounded-full bg-primary/10 px-2 py-0.5 font-mono text-[10px] text-primary">{deepCrawlLabel}</span>
                 </div>
                 <p className="mt-1.5 text-sm leading-6 text-muted-foreground">
                   We deploy 30+ AI agents to study your entire site — every page, every route, every state. They handle heavy JavaScript, authentication middleware, protected dashboards, dynamic content, and user-facing lockages. Everything is captured as a detailed reference for your own business plan.
@@ -131,7 +138,7 @@ export function CrawlModeDialog({ open, onOpenChange, onSelect, url }: CrawlMode
           </Button>
           <Button onClick={handleConfirm} disabled={!selected} className="gap-1.5">
             <Zap className="size-3.5" />
-            {selected === "deep" ? "Deep crawl for 500 credits" : "Analyze with AI"}
+            {selected === "deep" ? deepCrawlButtonLabel : "Analyze with AI"}
             <ArrowRight className="size-3.5" />
           </Button>
         </div>

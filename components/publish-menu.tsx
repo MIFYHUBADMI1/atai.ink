@@ -7,7 +7,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { postJson, deleteJson, useProject } from "@/lib/client/api"
+import useSWR from "swr"
+import { jsonFetcher, postJson, deleteJson, useProject } from "@/lib/client/api"
+import type { PublicBillingConfig } from "@/lib/billing/public-config-types"
 import { ensureProtocol } from "@/lib/utils"
 import { toast } from "sonner"
 import type { ProjectAccessView } from "@/lib/billing/entitlements/types"
@@ -33,6 +35,9 @@ export function PublishMenu({ projectId, projectName, totalumProjectId, access, 
     dnsRecordsToAdd?: Array<{ type: string; name: string; value: string }>
   } | null>(null)
   const [removingDomain, setRemovingDomain] = useState(false)
+  const { data: publicBilling } = useSWR<PublicBillingConfig>("/api/billing/public-config", jsonFetcher)
+  const deployCost = publicBilling?.deploymentCosts.deployCost
+  const deployCostLabel = deployCost === undefined ? "Credits" : `${deployCost.toLocaleString()} credits`
 
   const { project } = useProject(totalumProjectId ? projectId : null, { pollWhileBuilding: true })
   const subdomainDenied = access?.subdomain.allowed === false ? access.subdomain.reason ?? "Your plan does not include a production subdomain." : null
@@ -354,7 +359,8 @@ export function PublishMenu({ projectId, projectName, totalumProjectId, access, 
               <Badge variant="secondary" className="text-[10px] ml-1 bg-amber-500/10 text-amber-600 border-amber-500/30">Beta</Badge>
             </DialogTitle>
             <DialogDescription>
-              Choose how you want to publish your application. Both options cost 500 credits and include HTTPS, CDN, and lifetime hosting.
+              Choose how you want to publish your application. Both options use{" "}
+              {deployCost === undefined ? "Atai Credits" : deployCostLabel} and include HTTPS, CDN, and lifetime hosting.
             </DialogDescription>
           </DialogHeader>
           {subdomainDenied && (
@@ -428,7 +434,7 @@ export function PublishMenu({ projectId, projectName, totalumProjectId, access, 
               <div className="mt-auto pt-2">
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-sm font-medium">Cost</span>
-                  <Badge variant="secondary" className="font-mono">500 credits</Badge>
+                  <Badge variant="secondary" className="font-mono">{deployCostLabel}</Badge>
                 </div>
                 <Button
                   onClick={handleDeploySubdomain}
@@ -511,7 +517,7 @@ export function PublishMenu({ projectId, projectName, totalumProjectId, access, 
               <div className="mt-auto pt-2">
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-sm font-medium">Cost</span>
-                  <Badge variant="secondary" className="font-mono">500 credits</Badge>
+                  <Badge variant="secondary" className="font-mono">{deployCostLabel}</Badge>
                 </div>
                 {isDeployed ? (
                   <Button

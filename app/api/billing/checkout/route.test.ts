@@ -14,11 +14,12 @@ import { beforeEach, afterEach, describe, expect, it, vi } from "vitest"
  *    purchasable through checkout.
  */
 
-const { createSession, getCurrentUser, listProducts, createProduct } = vi.hoisted(() => ({
+const { createSession, getCurrentUser, listProducts, createProduct, getPromotionalOffers } = vi.hoisted(() => ({
   createSession: vi.fn(),
   getCurrentUser: vi.fn(),
   listProducts: vi.fn(),
   createProduct: vi.fn(),
+  getPromotionalOffers: vi.fn(),
 }))
 
 vi.mock("@/lib/auth/session", () => ({ getCurrentUser }))
@@ -47,6 +48,8 @@ vi.mock("@/lib/billing/checkout-return", () => ({
 vi.mock("@/lib/logging/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
+
+vi.mock("@/lib/billing/runtime-config", () => ({ getPromotionalOffers }))
 
 vi.mock("dodopayments", () => {
   class FakeDodoPayments {
@@ -92,6 +95,7 @@ describe("POST /api/billing/checkout — commercial cycles", () => {
     })
     listProducts.mockReset().mockResolvedValue([])
     createProduct.mockReset().mockResolvedValue({ product_id: "pdt_created" })
+    getPromotionalOffers.mockReset().mockResolvedValue([])
   })
   afterEach(() => {
     for (const k of ENV_KEYS) delete process.env[k]
@@ -145,6 +149,33 @@ describe("POST /api/billing/checkout — commercial cycles", () => {
     expect(created.price.payment_frequency_interval).toBe("Month")
     const session = createSession.mock.calls[0][0]
     expect(session.product_cart).toEqual([{ product_id: "pdt_created", quantity: 1 }])
+  })
+
+  it("stamps a live offer's bonus credits on the checkout metadata", async () => {
+    getPromotionalOffers.mockResolvedValue([
+      {
+        id: "offer_launch",
+        name: "Launch bonus",
+        description: "",
+        status: "active",
+        target: "subscription",
+        productIds: ["growth"],
+        bonusCredits: 25_000,
+        startsAt: null,
+        endsAt: null,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ])
+    const POST = await loadRoute()
+    const res = await POST(post({ type: "subscription", productId: "growth" }))
+    expect(res.status).toBe(200)
+    const session = createSession.mock.calls[0][0]
+    expect(session.metadata).toMatchObject({
+      planId: "growth",
+      offerId: "offer_launch",
+      offerBonusCredits: "25000",
+    })
   })
 
   it("refuses a legacy plan id — the commercial catalog is the only one sold", async () => {

@@ -14,6 +14,7 @@ import {
   getMirrorPipelineCosts,
   getExistingBusinessCosts,
   getDeploymentCosts,
+  getVisualPricing,
   getForkPricing,
   getInfrastructurePrices,
   updateBillingSettings,
@@ -22,6 +23,7 @@ import {
   DEFAULT_MIRROR_PIPELINE_COSTS,
   DEFAULT_EXISTING_BUSINESS_COSTS,
   DEFAULT_DEPLOYMENT_COSTS,
+  DEFAULT_VISUAL_PRICING_CONFIG,
   DEFAULT_FORK_PRICING,
   DEFAULT_INFRASTRUCTURE_PRICES,
   getRewardSettings,
@@ -42,6 +44,7 @@ export async function GET() {
     const mirrorPipelineCosts = await getMirrorPipelineCosts()
     const existingBusinessCosts = await getExistingBusinessCosts()
     const deploymentCosts = await getDeploymentCosts()
+    const visualPricing = await getVisualPricing()
     const forkPricing = await getForkPricing()
     const infrastructurePrices = await getInfrastructurePrices()
     const rewards = await getRewardSettings()
@@ -124,6 +127,12 @@ export async function GET() {
       deploymentCosts: {
         deployCost: deploymentCosts.deployCost,
         defaults: DEFAULT_DEPLOYMENT_COSTS,
+      },
+
+      // ── Visual-generation pricing (runtime-configurable) ──
+      visualPricing: {
+        ...visualPricing,
+        defaults: DEFAULT_VISUAL_PRICING_CONFIG,
       },
 
       // ── Fork pricing (runtime-configurable) ──
@@ -244,6 +253,14 @@ const PatchSchema = z.object({
       deployCost: z.number().int().min(0).max(1_000_000).optional(),
     })
     .optional(),
+  visualPricing: z
+    .object({
+      markup: z.number().min(1).max(10).optional(),
+      creditsPerUsd: z.number().int().min(1).max(1_000_000).optional(),
+      fallbackCredits: z.number().int().min(0).max(1_000_000).optional(),
+      estimatedCredits: z.number().int().min(0).max(1_000_000).optional(),
+    })
+    .optional(),
   forkPricing: z
     .object({
       simpleForkCost: z.number().int().min(0).max(10_000_000).optional(),
@@ -292,7 +309,7 @@ export async function PATCH(req: Request) {
     }
     if (
       !parsed.data.collaborate && !parsed.data.buildTiers && !parsed.data.mirrorPipeline &&
-      !parsed.data.existingBusiness && !parsed.data.deployment && !parsed.data.forkPricing && !parsed.data.infrastructurePrices &&
+      !parsed.data.existingBusiness && !parsed.data.deployment && !parsed.data.visualPricing && !parsed.data.forkPricing && !parsed.data.infrastructurePrices &&
       !parsed.data.rewards && !parsed.data.runtimePricing
     ) {
       return fail("VALIDATION", "No configuration changes provided.", 422)
@@ -304,6 +321,7 @@ export async function PATCH(req: Request) {
       ...(parsed.data.mirrorPipeline ? { mirrorPipeline: parsed.data.mirrorPipeline } : {}),
       ...(parsed.data.existingBusiness ? { existingBusiness: parsed.data.existingBusiness } : {}),
       ...(parsed.data.deployment ? { deployment: parsed.data.deployment } : {}),
+      ...(parsed.data.visualPricing ? { visualPricing: parsed.data.visualPricing } : {}),
       ...(parsed.data.forkPricing ? { forkPricing: parsed.data.forkPricing } : {}),
       ...(parsed.data.infrastructurePrices ? { infrastructurePrices: parsed.data.infrastructurePrices } : {}),
       ...(parsed.data.rewards ? { rewards: parsed.data.rewards } : {}),
@@ -318,6 +336,7 @@ export async function PATCH(req: Request) {
       mirrorPipeline: updated.mirrorPipeline,
       existingBusiness: updated.existingBusiness,
       deployment: updated.deployment,
+      visualPricing: updated.visualPricing,
       forkPricing: updated.forkPricing,
       infrastructurePrices: updated.infrastructurePrices,
       runtimePricing: updated.runtimePricing,
@@ -329,6 +348,7 @@ export async function PATCH(req: Request) {
       mirrorPipelineCosts: updated.mirrorPipeline,
       existingBusinessCosts: updated.existingBusiness,
       deploymentCosts: updated.deployment,
+      visualPricing: updated.visualPricing,
       forkPricing: updated.forkPricing,
       infrastructurePrices: updated.infrastructurePrices,
       runtimePricing: updated.runtimePricing,

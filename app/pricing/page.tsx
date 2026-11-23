@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { ArrowRight, BookOpen, Check, Store, Users, Building2, Globe, Link as LinkIcon, Shield, HelpCircle, ChevronDown, Coins, Rocket, Wallet } from "lucide-react"
+import { ArrowRight, BookOpen, Check, Store, Users, Building2, Globe, Link as LinkIcon, Shield, HelpCircle, ChevronDown, Coins, Rocket, Wallet, Gift } from "lucide-react"
 import { buttonVariants } from "@/components/ui/button"
 import { SiteHeader } from "@/components/site-header"
 import { SiteFooter } from "@/components/site-footer"
@@ -11,11 +11,10 @@ import {
   BUILD_TIERS,
   CREDIT_UNIT_NAME,
   formatUSD,
-  WELCOME_BONUS_CREDITS,
   type SubscriptionPlan,
 } from "@/lib/billing/config"
 import { resolvePublicCommercialCatalog } from "@/lib/billing/catalog/published-resolver"
-import { getBuildTierCosts, getDeploymentCosts } from "@/lib/billing/runtime-config"
+import { getPublicBillingConfig } from "@/lib/billing/public-config"
 import { PricingPlanGrid } from "@/components/billing/pricing-plan-grid"
 import { CheckoutButton } from "@/components/billing/checkout-button"
 import { AuthTrigger } from "@/components/auth/auth-trigger"
@@ -30,12 +29,13 @@ import { AuthTrigger } from "@/components/auth/auth-trigger"
  */
 
 /** Per plan: what a founder can actually do with it this month. */
-const PLAN_GUIDANCE: Record<string, { bestFor: string; outcomes: string[] }> = {
+function planGuidanceFor(welcomeBonus: number): Record<string, { bestFor: string; outcomes: string[] }> {
+  return {
   explorer: {
     bestFor: "Map it out first",
     outcomes: [
       "Plan your business with the AI co-founder before spending a cent",
-      "500 planning credits on email verification — enough to explore, not to launch",
+      `${welcomeBonus.toLocaleString()} planning credits on email verification — enough to explore, not to launch`,
       "Upgrade when you are ready to go live",
     ],
   },
@@ -71,9 +71,8 @@ const PLAN_GUIDANCE: Record<string, { bestFor: string; outcomes: string[] }> = {
       "We help your first businesses go out the door",
     ],
   },
+  }
 }
-
-const planGuidance = PLAN_GUIDANCE
 
 /** What launching costs, in the size of business rather than lines of work. */
 const LAUNCH_SIZES = [
@@ -254,14 +253,18 @@ export default async function PricingPage() {
 
   // Read the same billing authority the build pipeline charges from, so an
   // admin price override shows here instead of drifting from the real charge.
-  const [buildTierCosts, deploymentCosts, catalog] = await Promise.all([
-    getBuildTierCosts(),
-    getDeploymentCosts(),
+  const [publicBilling, catalog] = await Promise.all([
+    getPublicBillingConfig(),
     resolvePublicCommercialCatalog(),
   ])
+  const { buildTierCosts, deploymentCosts, rewards, offers } = publicBilling
   const simpleCredits = buildTierCosts.simple
   const deployCost = deploymentCosts.deployCost
-  const tierCosts: Record<string, number> = buildTierCosts
+  const tierCosts: Record<string, number> = {
+    simple: buildTierCosts.simple,
+    medium: buildTierCosts.medium,
+    complex: buildTierCosts.complex,
+  }
   const launches = LAUNCHES.map((entry) => ({
     ...entry,
     tier: { ...entry.tier, credits: tierCosts[entry.tier.id] },
@@ -285,7 +288,7 @@ export default async function PricingPage() {
           Atai&rsquo;s AI teams plan it, build it, put it online and keep working on it —
           winning customers, taking payments and handling the daily work, so you have
           something that earns. You pay for that work in Atai Credits.
-          {` Start with ${WELCOME_BONUS_CREDITS.toLocaleString()} free credits; no card needed.`}
+          {` Start with ${rewards.welcomeBonus.toLocaleString()} free credits; no card needed.`}
         </p>
         <ul className="mx-auto mt-7 flex max-w-3xl flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm text-muted-foreground">
           {["Your own website or product", "Hosting and security set up", "Customer sign-in and records", "Take payments", "Your admin console", "No code to write"].map((item) => (
@@ -306,6 +309,42 @@ export default async function PricingPage() {
       </section>
 
       <SectionNav />
+
+      {offers.length > 0 ? (
+        <section className="border-b border-border bg-primary/[0.03]">
+          <div className="mx-auto max-w-5xl px-6 py-10">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">Current offers</p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-tight">Extra credits, while they last</h2>
+              </div>
+              <p className="text-xs text-muted-foreground">Applied automatically at checkout. No code needed.</p>
+            </div>
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              {offers.map((offer) => (
+                <div key={offer.id} className="rounded-2xl border border-primary/20 bg-card p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium">{offer.name}</p>
+                      {offer.description ? (
+                        <p className="mt-1 text-sm leading-6 text-muted-foreground">{offer.description}</p>
+                      ) : null}
+                    </div>
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 font-mono text-xs font-semibold text-primary">
+                      <Gift className="size-3" />
+                      +{offer.bonusCredits.toLocaleString()}
+                    </span>
+                  </div>
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    With {offer.target === "subscription" ? "any plan" : offer.target === "credit_pack" ? "any credit pack" : "any plan or credit pack"}
+                    {offer.endsAt !== null ? ` · ends ${new Date(offer.endsAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : ""}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       {/* The money, in three sentences */}
       <section className="border-y border-border bg-card/40">
@@ -352,7 +391,7 @@ export default async function PricingPage() {
         <PricingPlanGrid
           plans={plans}
           isLoggedIn={!!user}
-          guidance={planGuidance}
+          guidance={planGuidanceFor(rewards.welcomeBonus)}
           allPlans={plans}
         />
       </section>
@@ -481,7 +520,7 @@ export default async function PricingPage() {
                 <p className="mt-1 text-sm text-muted-foreground">{CREDIT_UNIT_NAME}, yours for good</p>
                 <p className="mt-3 text-xl font-semibold">{formatUSD(pack.priceUSD)}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  ${(pack.priceUSD / pack.credits).toFixed(4)} per credit
+                  {pack.credits > 0 ? `$${(pack.priceUSD / pack.credits).toFixed(4)} per credit` : "—"}
                 </p>
                 {user ? (
                   <CheckoutButton
@@ -620,7 +659,7 @@ export default async function PricingPage() {
       </section>
 
       {/* Referral program */}
-      <ReferralProgramSection />
+      <ReferralProgramSection rewards={rewards} />
 
       {/* CTA */}
       <section className="mx-auto max-w-4xl px-6 py-16 text-center">
@@ -629,7 +668,7 @@ export default async function PricingPage() {
         </div>
         <h2 className="mt-4 text-2xl font-semibold tracking-tight">The first step costs nothing</h2>
         <p className="mx-auto mt-3 max-w-xl text-muted-foreground text-pretty">
-          Tell Atai what you want to run. You get {WELCOME_BONUS_CREDITS.toLocaleString()} credits,
+          Tell Atai what you want to run. You get {rewards.welcomeBonus.toLocaleString()} credits,
           a real plan for the business, and a clear price for launching it before you spend anything.
         </p>
         <div className="mt-6 flex items-center justify-center gap-3">

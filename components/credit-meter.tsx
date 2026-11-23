@@ -2,7 +2,9 @@
 
 import Link from "next/link"
 import { Coins } from "lucide-react"
-import { useSession } from "@/lib/client/api"
+import useSWR from "swr"
+import { jsonFetcher, useSession } from "@/lib/client/api"
+import type { PublicBillingConfig } from "@/lib/billing/public-config-types"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 
@@ -17,6 +19,8 @@ export function CreditMeter({
   compact?: boolean
 }) {
   const { session, isLoading } = useSession()
+  const { data: publicBilling } = useSWR<PublicBillingConfig>("/api/billing/public-config", jsonFetcher)
+  const welcomeBonus = publicBilling?.rewards.welcomeBonus
 
   if (isLoading) {
     return <Skeleton className={cn("h-9 w-24 shrink-0 rounded-md sm:w-32", className)} />
@@ -40,7 +44,7 @@ export function CreditMeter({
           "flex h-9 shrink-0 items-center rounded-md border border-border bg-card px-2 sm:px-3",
           needsVerification && "border-amber-500/40",
         )}
-        title={needsVerification ? "Verify your email to receive 500 welcome credits" : `${available.toLocaleString()} available${planTotal ? ` · ${planTotal.toLocaleString()} on your plan` : ` · ${balance.toLocaleString()} in wallet`}`}
+        title={needsVerification ? `Verify your email to receive ${welcomeBonus ? `${welcomeBonus.toLocaleString()} welcome credits` : "welcome credits"}` : `${available.toLocaleString()} available${planTotal ? ` · ${planTotal.toLocaleString()} on your plan` : ` · ${balance.toLocaleString()} in wallet`}`}
       >
         <span className={compact ? "flex items-center gap-1.5" : "flex items-center gap-1.5 sm:hidden"}>
           <Coins className="size-3.5 text-muted-foreground" />

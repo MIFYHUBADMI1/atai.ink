@@ -28,24 +28,29 @@
  * module — never this constant, and never a second copy of either ratio.
  */
 
-/** 45% profit margin applied on top of the provider-reported cost. */
-export const VISUAL_MARKUP = 1.45
+export interface VisualPricingConfig {
+  /** Profit margin applied on top of the provider-reported cost. */
+  markup: number
+  /** Visual CHARGING rate: $1 of marked-up provider cost in credits. */
+  creditsPerUsd: number
+  /** Charge when a premium model returns an image but reports no cost. */
+  fallbackCredits: number
+  /** Upfront estimate shown in the collaboration UI before generating. */
+  estimatedCredits: number
+}
 
-/**
- * Visual CHARGING rate: $1 of (marked-up) provider cost = 4000 credits.
- *
- * Scoped to premium image generation only. This must never be used as, or
- * confused with, ATAI's universal Finance valuation
- * (`ATAI_CREDITS_PER_USD` in lib/billing/credit-valuation.ts = 3750).
- */
-export const VISUAL_CREDITS_PER_USD = 4000
+export const DEFAULT_VISUAL_PRICING: VisualPricingConfig = {
+  markup: 1.45,
+  creditsPerUsd: 4000,
+  fallbackCredits: 1600,
+  estimatedCredits: 1000,
+}
 
-/** Charge when a premium model returns an image but reports no cost. */
-export const VISUAL_FALLBACK_CREDITS = 1600
-
-/** Upfront estimate shown in the collaboration UI before generating. */
-export const VISUAL_ESTIMATED_CREDITS = 1000
-
+/** Backwards-compatible names for the default values. */
+export const VISUAL_MARKUP = DEFAULT_VISUAL_PRICING.markup
+export const VISUAL_CREDITS_PER_USD = DEFAULT_VISUAL_PRICING.creditsPerUsd
+export const VISUAL_FALLBACK_CREDITS = DEFAULT_VISUAL_PRICING.fallbackCredits
+export const VISUAL_ESTIMATED_CREDITS = DEFAULT_VISUAL_PRICING.estimatedCredits
 /** Flat cost per image on the default (basic tier) model. */
 export const VISUAL_DEFAULT_MODEL_CREDITS = 100
 
@@ -66,10 +71,13 @@ export interface VisualPricingResult {
  * @param providerCost - Cost in USD reported by OpenRouter with the image,
  *   or null/undefined/0 when the endpoint did not report one.
  */
-export function computeVisualCredits(params: {
-  fixedCreditCost?: number | null
-  providerCost?: number | null
-}): VisualPricingResult {
+export function computeVisualCredits(
+  params: {
+    fixedCreditCost?: number | null
+    providerCost?: number | null
+  },
+  pricing: VisualPricingConfig = DEFAULT_VISUAL_PRICING,
+): VisualPricingResult {
   const { fixedCreditCost, providerCost } = params
 
   // Flat-priced models (the default design model) always cost the same.
@@ -82,11 +90,11 @@ export function computeVisualCredits(params: {
 
   // Dynamic pricing: cost + 45% margin, converted at $1 = 4000 credits.
   if (providerCost != null && providerCost > 0) {
-    const finalCost = providerCost * VISUAL_MARKUP
-    const credits = Math.max(1, Math.ceil(finalCost * VISUAL_CREDITS_PER_USD))
+    const finalCost = providerCost * pricing.markup
+    const credits = Math.max(1, Math.ceil(finalCost * pricing.creditsPerUsd))
     return { credits, providerCost, finalCost }
   }
 
   // Premium model that generated an image without reporting a cost.
-  return { credits: VISUAL_FALLBACK_CREDITS }
+  return { credits: pricing.fallbackCredits }
 }

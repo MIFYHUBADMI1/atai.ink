@@ -100,6 +100,8 @@ export async function publicFeedbackConfig() {
     maxAttachmentBytes: s.maxAttachmentBytes,
     categories: FEEDBACK_CATEGORIES,
     rewardsEnabled: s.rewardsEnabled,
+    minReward: s.minReward,
+    maxReward: s.maxReward,
   }
 }
 

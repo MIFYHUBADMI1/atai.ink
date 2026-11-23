@@ -11,7 +11,6 @@
 import {
   PERMANENT_CREDIT_PACKS,
   BUILD_TIERS,
-  WELCOME_BONUS_CREDITS,
   getPackById,
 } from "./config"
 import type { PermanentCreditPack, BuildTier } from "./config"
@@ -43,6 +42,3 @@ export function getPackageById(id: string): PermanentCreditPack | undefined {
 //                      code no longer references it)
 // REFERENCE_EXPIRY_MS — removed (was for manual payment references)
 // priceUGX fields — removed (currency is now USD)
-
-/** Welcome bonus credits for new users. */
-export const WELCOME_BONUS = WELCOME_BONUS_CREDITS

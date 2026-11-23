@@ -19,6 +19,7 @@ import { buttonVariants } from "@/components/ui/button"
 import { SiteHeader } from "@/components/site-header"
 import { SiteFooter } from "@/components/site-footer"
 import { SITE_URL } from "@/lib/env"
+import { getPublicBillingConfig } from "@/lib/billing/public-config"
 
 /* ═══════════════════════════════════════════════════════════════
    SEO METADATA
@@ -143,7 +144,14 @@ const faqItems = [
    PAGE
    ═══════════════════════════════════════════════════════════════ */
 
-export default function RefundPolicyPage() {
+export const dynamic = "force-dynamic"
+
+export default async function RefundPolicyPage() {
+  const billing = await getPublicBillingConfig().catch(() => null)
+  const buildTiers = billing?.buildTierCosts
+  const pipeline = billing?.mirrorPipelineCosts
+  const deployCost = billing?.deploymentCosts.deployCost
+  const rewards = billing?.rewards
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(refundPageStructuredData) }} />
@@ -229,10 +237,24 @@ export default function RefundPolicyPage() {
                 Credits that have been consumed through platform actions — including website analysis, plan generation, application generation, and deployment — are not refundable. This includes:
               </p>
               <ul className="list-disc list-inside space-y-1 ml-4">
-                <li>Credits consumed during successful website analysis (5 credits)</li>
-                <li>Credits consumed during plan generation (5 credits)</li>
-                <li>Credits consumed during application generation (50,000 / 75,000 / 100,000 credits, depending on complexity)</li>
-                <li>Credits consumed during deployment (500 credits)</li>
+                <li>
+                  Credits consumed during successful website analysis
+                  {pipeline ? ` (${pipeline.scrapeCost.toLocaleString()} credits)` : ""}
+                </li>
+                <li>
+                  Credits consumed during plan generation
+                  {pipeline ? ` (${pipeline.planCost.toLocaleString()} credits)` : ""}
+                </li>
+                <li>
+                  Credits consumed during application generation
+                  {buildTiers
+                    ? ` (${buildTiers.simple.toLocaleString()} / ${buildTiers.medium.toLocaleString()} / ${buildTiers.complex.toLocaleString()} credits, depending on complexity)`
+                    : " (depending on complexity; the current amount is shown before the build starts)"}
+                </li>
+                <li>
+                  Credits consumed during deployment
+                  {deployCost ? ` (${deployCost.toLocaleString()} credits)` : ""}
+                </li>
                 <li>Credits consumed during follow-up AI development prompts</li>
               </ul>
               <p>
@@ -332,7 +354,12 @@ export default function RefundPolicyPage() {
             </h2>
             <div className="space-y-4 text-base leading-7 text-muted-foreground">
               <p>
-                Promotional credits — including the 500 free welcome credits, the 500 referral signup bonus for the person who joins, referral verification rewards (500 credits), and referral milestone rewards (1,500 credits) — are not eligible for refund, cash exchange, or transfer.
+                Promotional credits — including the{" "}
+                {rewards ? `${rewards.welcomeBonus.toLocaleString()} free welcome credits` : "free welcome credits"}, the{" "}
+                {rewards ? `${rewards.referralSignupBonus.toLocaleString()} referral signup bonus` : "referral signup bonus"} for the person who joins,
+                referral verification rewards
+                {rewards ? ` (${rewards.referralVerificationReward.toLocaleString()} credits)` : ""}, and referral milestone rewards
+                {rewards ? ` (${rewards.referralMilestoneReward.toLocaleString()} credits)` : ""} — are not eligible for refund, cash exchange, or transfer.
               </p>
               <p>
                 Promotional credits have no cash value and cannot be redeemed for money except where required by applicable law.

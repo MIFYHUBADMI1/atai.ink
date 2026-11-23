@@ -26,6 +26,7 @@ import {
   Building2,
 } from "lucide-react"
 import { AppHeader } from "@/components/app-header"
+import { getPublicBillingConfig } from "@/lib/billing/public-config"
 
 export const metadata: Metadata = {
   title: "Developers - Build with Atai Infrastructure | Unified API",
@@ -194,7 +195,9 @@ await atai.notifications.send({
 })`,
 }
 
-export default function DevelopersPage() {
+export default async function DevelopersPage() {
+  const billing = await getPublicBillingConfig().catch(() => null)
+  const welcomeCredits = billing?.rewards.welcomeBonus
   return (
     <main className="min-h-screen bg-background">
       <AppHeader />
@@ -250,7 +253,7 @@ export default function DevelopersPage() {
               </div>
               <div className="flex items-center gap-2">
                 <Check className="size-4 text-emerald-500" />
-                <span>500 free credits</span>
+                <span>{welcomeCredits ? `${welcomeCredits.toLocaleString()} free credits` : "Free credits"}</span>
               </div>
               <div className="flex items-center gap-2">
                 <Check className="size-4 text-emerald-500" />
@@ -469,7 +472,7 @@ export default function DevelopersPage() {
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-lg text-muted-foreground">
             Whether you're building a business with Atai or using our infrastructure for your own project,
-            get started with 500 free credits.
+            get started with {welcomeCredits ? `${welcomeCredits.toLocaleString()} free credits` : "free credits"}.
           </p>
           <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
             <Link
@@ -487,7 +490,7 @@ export default function DevelopersPage() {
           </div>
 
           <p className="mt-6 text-sm text-muted-foreground">
-            500 free credits • No credit card required • Production-ready
+            {welcomeCredits ? `${welcomeCredits.toLocaleString()} free credits` : "Free credits"} • No credit card required • Production-ready
           </p>
         </div>
       </section>

@@ -2,6 +2,7 @@ import { ok, fail, handleRouteError } from "@/lib/api/respond"
 import { requireUser } from "@/lib/auth/session"
 import { getOrCreateReferralCode, getReferralsByReferrer, getReferralStats, normalizeCustomReferralCode, setReferralCode } from "@/lib/referrals/referrals"
 import { getPublicBaseUrl } from "@/lib/env"
+import { getRewardSettings } from "@/lib/billing/runtime-config"
 
 /**
  * GET /api/referrals
@@ -11,7 +12,10 @@ export async function GET() {
   try {
     const user = await requireUser()
 
-    const referralCode = await getOrCreateReferralCode(user.id)
+    const [referralCode, rewards] = await Promise.all([
+      getOrCreateReferralCode(user.id),
+      getRewardSettings(),
+    ])
     const referralLink = `${getPublicBaseUrl()}/register?ref=${referralCode}`
     const stats = await getReferralStats(user.id)
 
@@ -31,6 +35,7 @@ export async function GET() {
       referralLink,
       stats,
       referrals: referralList,
+      rewards,
     })
   } catch (e) {
     return handleRouteError("api.referrals", e)

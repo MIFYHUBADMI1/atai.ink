@@ -167,9 +167,9 @@ export interface ReferralDoc {
   referralCode: string
   /** Current status of this referral relationship. */
   status: ReferralStatus
-  /** Whether the 500-credit verification reward has been issued. */
+  /** Whether the configured verification reward has been issued. */
   verificationRewardIssued: boolean
-  /** Whether the 1,500-credit usage milestone reward has been issued. */
+  /** Whether the configured usage milestone reward has been issued. */
   milestoneRewardIssued: boolean
   /** Cumulative eligible application-generation usage by the referred user (credits consumed on successful builds only). */
   eligibleUsage: number

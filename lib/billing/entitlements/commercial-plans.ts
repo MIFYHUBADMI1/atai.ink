@@ -112,7 +112,7 @@ const COMMERCIAL_FEATURES: Record<CommercialPlanId, { features: string[]; notInc
   explorer: {
     features: [
       "Plan your business with the AI co-founder",
-      "500 planning credits on email verification",
+      "Planning credits on email verification",
       "Research markets & competitors",
       "Explore what Atai can build for you",
       "Community support",
@@ -128,7 +128,7 @@ const COMMERCIAL_FEATURES: Record<CommercialPlanId, { features: string[]; notInc
   },
   starter: {
     features: [
-      "150,000 Atai Credits / month (provisional)",
+      "Monthly Atai Credits included (provisional)",
       "Launch 1 business",
       "1 production app on your Atai subdomain",
       "AI co-founder (core)",
@@ -147,7 +147,7 @@ const COMMERCIAL_FEATURES: Record<CommercialPlanId, { features: string[]; notInc
   },
   growth: {
     features: [
-      "400,000 Atai Credits / month (provisional)",
+      "Monthly Atai Credits included (provisional)",
       "Launch up to 4 businesses",
       "4 production apps",
       "1 custom domain",
@@ -163,7 +163,7 @@ const COMMERCIAL_FEATURES: Record<CommercialPlanId, { features: string[]; notInc
   },
   scale: {
     features: [
-      "1,200,000 Atai Credits / month (provisional)",
+      "Monthly Atai Credits included (provisional)",
       "Unlimited businesses",
       "Unlimited production apps",
       "4 custom domains",

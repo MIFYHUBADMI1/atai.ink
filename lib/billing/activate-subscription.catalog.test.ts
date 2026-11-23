@@ -19,7 +19,7 @@ vi.mock("@/lib/db/collections", () => ({
     insertOne: subInsertOne,
   })),
 }))
-vi.mock("@/lib/billing/credit-service", () => ({ grantSubscriptionCredits }))
+vi.mock("@/lib/billing/credit-service", () => ({ grantSubscriptionCredits, grantCredits: vi.fn() }))
 vi.mock("@/lib/billing/subscription-payment-grants", () => ({
   findSubscriptionGrantEntry: vi.fn(async () => null),
   linkSubscriptionGrantToPayment: vi.fn(async () => ({ linked: false })),

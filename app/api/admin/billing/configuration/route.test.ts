@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   getMirrorPipelineCosts: vi.fn(),
   getExistingBusinessCosts: vi.fn(),
   getDeploymentCosts: vi.fn(),
+  getVisualPricing: vi.fn(),
   getForkPricing: vi.fn(),
   getInfrastructurePrices: vi.fn(),
   getRewardSettings: vi.fn(),
@@ -24,6 +25,7 @@ vi.mock("@/lib/billing/runtime-config", () => ({
   getMirrorPipelineCosts: mocks.getMirrorPipelineCosts,
   getExistingBusinessCosts: mocks.getExistingBusinessCosts,
   getDeploymentCosts: mocks.getDeploymentCosts,
+  getVisualPricing: mocks.getVisualPricing,
   getForkPricing: mocks.getForkPricing,
   getInfrastructurePrices: mocks.getInfrastructurePrices,
   getRewardSettings: mocks.getRewardSettings,
@@ -37,6 +39,9 @@ vi.mock("@/lib/billing/runtime-config", () => ({
   },
   DEFAULT_EXISTING_BUSINESS_COSTS: { readCost: 1, assessmentCost: 2 },
   DEFAULT_DEPLOYMENT_COSTS: { deployCost: 1 },
+  DEFAULT_VISUAL_PRICING_CONFIG: {
+    markup: 1.45, creditsPerUsd: 4000, fallbackCredits: 1600, estimatedCredits: 1000,
+  },
   DEFAULT_FORK_PRICING: {
     simpleForkCost: 1, mediumForkCost: 2, complexForkCost: 3,
     simpleOwnerRoyalty: 4, mediumOwnerRoyalty: 5, complexOwnerRoyalty: 6,
@@ -60,6 +65,9 @@ describe("GET /api/admin/billing/configuration", () => {
     })
     mocks.getExistingBusinessCosts.mockResolvedValue({ readCost: 1, assessmentCost: 2 })
     mocks.getDeploymentCosts.mockResolvedValue({ deployCost: 1 })
+    mocks.getVisualPricing.mockResolvedValue({
+      markup: 1.45, creditsPerUsd: 4000, fallbackCredits: 1600, estimatedCredits: 1000,
+    })
     mocks.getForkPricing.mockResolvedValue({
       simpleForkCost: 1, mediumForkCost: 2, complexForkCost: 3,
       simpleOwnerRoyalty: 4, mediumOwnerRoyalty: 5, complexOwnerRoyalty: 6,

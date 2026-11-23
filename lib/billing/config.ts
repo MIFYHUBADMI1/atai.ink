@@ -149,7 +149,7 @@ export const LEGACY_SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     name: "Free",
     tagline: "Legacy free plan.",
     priceUSD: 0,
-    mirrorCredits: 0,          // No monthly grant — one-time 500-credit welcome bonus on email verification
+    mirrorCredits: 0,          // No monthly grant — one-time welcome bonus on email verification
     interval: "monthly",
     active: true,
     features: [],
@@ -269,34 +269,9 @@ export function getPackById(id: string): PermanentCreditPack | undefined {
   return PERMANENT_CREDIT_PACKS.find((p) => p.id === id)
 }
 
-// ─── Welcome & Referral Credits ──────────────────────────────────────────────
-
-export const WELCOME_BONUS_CREDITS = 500
-export const REFERRAL_VERIFICATION_REWARD = 500
-export const REFERRAL_MILESTONE_REWARD = 1_500
-export const REFERRAL_MILESTONE_THRESHOLD = 75_000
-
 // ─── Fork Pricing ─────────────────────────────────────────────────────────────
 
-export const FORK_PRICING = {
-  simple: {
-    forkCost: 15_000,       // credits charged to forker
-    ownerRoyalty: 5_000,    // credits awarded to project owner
-    savingsPct: 45,         // "saves you X% of credits to build"
-  },
-  medium: {
-    forkCost: 45_000,
-    ownerRoyalty: 10_000,
-    savingsPct: 25,
-  },
-  complex: {
-    forkCost: 50_000,
-    ownerRoyalty: 15_000,
-    savingsPct: 35,
-  },
-} as const
-
-export type ForkTier = keyof typeof FORK_PRICING
+export type ForkTier = "simple" | "medium" | "complex"
 
 // ─── Credit Types ────────────────────────────────────────────────────────────
 

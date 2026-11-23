@@ -49,10 +49,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
  * POST /api/projects/:id/fork
  * Forks a public project into the current user's workspace.
  *
- * Pricing (per FORK_PRICING in billing/config.ts):
- *   simple  → 15,000 credits (saves 45%) — owner earns  5,000
- *   medium  → 45,000 credits (saves 25%) — owner earns 10,000
- *   complex → 50,000 credits (saves 35%) — owner earns 15,000
+ * Pricing (runtime billing config):
+ *   simple / medium / complex — each priced from the active build-tier costs,
+ *   with the owner royalty taken from the same runtime billing config.
  *
  * Credit flow:
  *   1. Verify forker has enough balance.

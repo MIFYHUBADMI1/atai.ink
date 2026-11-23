@@ -11,6 +11,11 @@ import { jsonFetcher } from "@/lib/client/api"
 import { AdminNav } from "@/components/admin-nav"
 import { toast } from "sonner"
 
+interface AdminRewards {
+  referralVerificationReward: number
+  referralMilestoneReward: number
+}
+
 interface AdminReferral {
   id: string
   referrerUserId: string
@@ -44,7 +49,7 @@ function formatDate(ts: number): string {
 }
 
 export default function AdminReferralsPage() {
-  const { data, error, isLoading } = useSWR<{ referrals: AdminReferral[]; total: number }>(
+  const { data, error, isLoading } = useSWR<{ referrals: AdminReferral[]; total: number; rewards: AdminRewards }>(
     "/api/admin/referrals",
     jsonFetcher,
     { refreshInterval: 30000 },
@@ -73,6 +78,8 @@ export default function AdminReferralsPage() {
   }
 
   const referrals = data?.referrals ?? []
+  const verificationReward = data?.rewards?.referralVerificationReward ?? 0
+  const milestoneReward = data?.rewards?.referralMilestoneReward ?? 0
   const filtered = referrals.filter((r) => {
     if (!search) return true
     const q = search.toLowerCase()
@@ -86,8 +93,8 @@ export default function AdminReferralsPage() {
 
   const totalCreditsAwarded = referrals.reduce((sum, r) => {
     let credits = 0
-    if (r.verificationRewardIssued) credits += 500
-    if (r.milestoneRewardIssued) credits += 1500
+    if (r.verificationRewardIssued) credits += verificationReward
+    if (r.milestoneRewardIssued) credits += milestoneReward
     return sum + credits
   }, 0)
 
@@ -210,7 +217,7 @@ export default function AdminReferralsPage() {
               {filtered.map((r) => {
                 const status = STATUS_LABELS[r.status] ?? { label: r.status, color: "text-muted-foreground", icon: Users }
                 const StatusIcon = status.icon
-                const totalReward = (r.verificationRewardIssued ? 500 : 0) + (r.milestoneRewardIssued ? 1500 : 0)
+                const totalReward = (r.verificationRewardIssued ? verificationReward : 0) + (r.milestoneRewardIssued ? milestoneReward : 0)
                 const hasFlags = r.fraudFlags && r.fraudFlags.length > 0
 
                 return (
@@ -251,13 +258,13 @@ export default function AdminReferralsPage() {
                           {r.verificationRewardIssued && (
                             <Badge variant="secondary" className="gap-1 text-[10px]">
                               <Gift className="size-2.5" />
-                              +500
+                              +{verificationReward.toLocaleString()}
                             </Badge>
                           )}
                           {r.milestoneRewardIssued && (
                             <Badge variant="secondary" className="gap-1 text-[10px]">
                               <Rocket className="size-2.5" />
-                              +1,500
+                              +{milestoneReward.toLocaleString()}
                             </Badge>
                           )}
                         </div>

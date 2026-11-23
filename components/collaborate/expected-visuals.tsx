@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import useSWR from "swr"
 import {
   Sparkles,
   Loader2,
@@ -15,6 +16,7 @@ import {
 import { toast } from "sonner"
 import { jsonFetcher, postJson } from "@/lib/client/api"
 import { VISUAL_ESTIMATED_CREDITS } from "@/lib/billing/visual-pricing"
+import type { PublicBillingConfig } from "@/lib/billing/public-config-types"
 import {
   IMAGE_MODELS,
   DEFAULT_IMAGE_MODEL,
@@ -76,9 +78,11 @@ export function ExpectedVisuals({
   const [viewer, setViewer] = useState<SavedVisual | null>(null)
 
   const selectedModelInfo = IMAGE_MODELS.find((m) => m.id === selectedModel)
+  const { data: publicBilling } = useSWR<PublicBillingConfig>("/api/billing/public-config", jsonFetcher)
+  const visualEstimate = publicBilling?.visualPricing?.estimatedCredits ?? VISUAL_ESTIMATED_CREDITS
   // Flat-priced models show their exact cost; premium models show the
   // upfront estimate (the real charge comes from OpenRouter's reported cost).
-  const estimatedCredits = selectedModelInfo?.fixedCreditCost || VISUAL_ESTIMATED_CREDITS
+  const estimatedCredits = selectedModelInfo?.fixedCreditCost || visualEstimate
 
   const loadVisuals = useCallback(async () => {
     try {
@@ -298,6 +302,7 @@ export function ExpectedVisuals({
                 onSelect={() => selectModel(model.id)}
                 expanded={expandedModel === model.id}
                 onToggleExpand={() => setExpandedModel(expandedModel === model.id ? null : model.id)}
+                visualEstimate={visualEstimate}
               />
             ))}
 
@@ -315,6 +320,7 @@ export function ExpectedVisuals({
                 onSelect={() => selectModel(model.id)}
                 expanded={expandedModel === model.id}
                 onToggleExpand={() => setExpandedModel(expandedModel === model.id ? null : model.id)}
+                visualEstimate={visualEstimate}
               />
             ))}
           </div>
@@ -524,10 +530,11 @@ interface ModelRowProps {
   onSelect: () => void
   expanded: boolean
   onToggleExpand: () => void
+  visualEstimate: number
 }
 
-function ModelRow({ model, isSelected, onSelect, expanded, onToggleExpand }: ModelRowProps) {
-  const estimatedCost = model.fixedCreditCost || VISUAL_ESTIMATED_CREDITS
+function ModelRow({ model, isSelected, onSelect, expanded, onToggleExpand, visualEstimate }: ModelRowProps) {
+  const estimatedCost = model.fixedCreditCost || visualEstimate
 
   return (
     <div className={`border-b border-border last:border-b-0 ${isSelected ? "bg-primary/5" : ""}`}>

@@ -34,6 +34,8 @@ type BillingOverview = {
   activeCommercialPlanId?: string | null
   /** The user's current business count. */
   businessCount?: number
+  /** Welcome credits granted on email verification. */
+  welcomeBonusCredits?: number
 }
 
 function formatCredits(amount: number): string {
@@ -286,7 +288,13 @@ export default function BillingSettingsPage() {
             </div>
             <div className="flex items-start gap-2">
               <span className="font-mono text-primary">3</span>
-              <span>New users get 500 free permanent credits on email verification</span>
+              <span>
+                New users get{" "}
+                {billingData?.welcomeBonusCredits
+                  ? `${billingData.welcomeBonusCredits.toLocaleString()} free permanent credits`
+                  : "free permanent credits"}{" "}
+                on email verification
+              </span>
             </div>
           </div>
         </section>
@@ -315,6 +323,7 @@ export default function BillingSettingsPage() {
                   isLoggedIn={true}
                   allPlans={plans}
                   currentBusinesses={currentBusinesses}
+                  welcomeBonusCredits={billingData?.welcomeBonusCredits}
                 />
               ))}
             </div>
@@ -349,7 +358,7 @@ export default function BillingSettingsPage() {
                   )}
                 </div>
                 <div className="mt-3 text-xs text-muted-foreground">
-                  ${(pack.priceUSD / pack.credits).toFixed(4)} per credit
+                  {pack.credits > 0 ? `$${(pack.priceUSD / pack.credits).toFixed(4)} per credit` : "—"}
                 </div>
                 <CheckoutButton
                   type="permanent"

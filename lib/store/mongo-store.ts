@@ -16,8 +16,6 @@ import {
 } from "@/lib/billing/credit-service"
 import type { CreditLedgerEntry } from "@/lib/billing/billing-types"
 
-const STARTING_CREDITS = 500
-
 /**
  * MongoDB-backed implementation of the same `DataStore` interface the
  * in-memory store implements — the Firecrawl/Totalum orchestration code
@@ -672,5 +670,4 @@ function stripMongoId<T extends { _id?: unknown }>(doc: T): Omit<T, "_id"> {
   return rest
 }
 
-export { STARTING_CREDITS }
 export { cryptoId }

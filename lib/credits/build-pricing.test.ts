@@ -146,10 +146,8 @@ describe("manual and automatic builds reserve from the same authority", () => {
 describe("pricing page reads the billing authority instead of hardcoded numbers", () => {
   const source = read(PRICING_PAGE)
 
-  it("imports the runtime build-tier and deployment costs", () => {
-    expect(source).toContain(
-      `import { getBuildTierCosts, getDeploymentCosts } from "@/lib/billing/runtime-config"`,
-    )
+  it("imports the public billing config", () => {
+    expect(source).toContain(`import { getPublicBillingConfig } from "@/lib/billing/public-config"`)
   })
 
   it("derives the displayed launch and publishing costs from the authority", () => {

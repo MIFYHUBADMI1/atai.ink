@@ -52,6 +52,17 @@ describe("computeVisualCredits", () => {
     expect(computeVisualCredits({}).credits).toBe(1600)
   })
 
+  it("uses admin-supplied runtime pricing instead of the defaults", () => {
+    const pricing = {
+      markup: 2,
+      creditsPerUsd: 1000,
+      fallbackCredits: 7,
+      estimatedCredits: 8,
+    }
+    expect(computeVisualCredits({ providerCost: 0.05 }, pricing).credits).toBe(100)
+    expect(computeVisualCredits({ providerCost: null }, pricing).credits).toBe(7)
+  })
+
   it("keeps the pricing constants at their specified values", () => {
     expect(VISUAL_MARKUP).toBe(1.45)
     expect(VISUAL_CREDITS_PER_USD).toBe(4000)

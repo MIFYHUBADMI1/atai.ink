@@ -2,6 +2,12 @@ import { getDb } from "@/lib/db/mongodb"
 import { z } from "zod"
 import { logger } from "@/lib/logging/logger"
 import { BUILD_TIERS, type ForkTier } from "@/lib/billing/config"
+import {
+  DEFAULT_PROMOTIONAL_OFFERS,
+  PromotionalOfferSchema,
+  type PromotionalOffer,
+} from "@/lib/billing/offers"
+import { DEFAULT_VISUAL_PRICING } from "@/lib/billing/visual-pricing"
 
 /**
  * Runtime billing configuration.
@@ -141,6 +147,20 @@ export const DEFAULT_INFRASTRUCTURE_PRICES: InfrastructurePrices = {
   businessPrice: 95_000,
 }
 
+const VisualPricingSchema = z.object({
+  /** Profit margin applied on top of a provider-reported image cost. */
+  markup: z.number().min(1).max(10),
+  /** Visual charging rate: $1 of marked-up provider cost in credits. */
+  creditsPerUsd: z.number().int().min(1).max(1_000_000),
+  /** Charge when a premium image model reports no cost. */
+  fallbackCredits: z.number().int().min(0).max(1_000_000),
+  /** Upfront estimate shown before generating an image. */
+  estimatedCredits: z.number().int().min(0).max(1_000_000),
+})
+export type VisualPricing = z.infer<typeof VisualPricingSchema>
+
+export const DEFAULT_VISUAL_PRICING_CONFIG: VisualPricing = DEFAULT_VISUAL_PRICING
+
 const RewardsSchema = z.object({
   /** One-time welcome bonus granted on email verification. */
   welcomeBonus: z.number().int().min(0).max(1_000_000),
@@ -266,12 +286,15 @@ const BillingSettingsSchema = z.object({
   mirrorPipeline: MirrorPipelineCostsSchema,
   existingBusiness: ExistingBusinessCostsSchema,
   deployment: DeploymentCostsSchema,
+  visualPricing: VisualPricingSchema,
   forkPricing: ForkPricingSchema,
   infrastructurePrices: InfrastructurePricesSchema,
   rewards: RewardsSchema,
   runtimePricing: RuntimePricingSchema,
   /** Phase 9.5 — admin-managed runtime pricing rules (provider-level). */
   runtimePricingRules: z.array(RuntimePricingRuleSchema).max(500),
+  /** Checkout campaigns: bonus credits layered on a product purchase. */
+  promotions: z.array(PromotionalOfferSchema).max(100),
 })
 export type BillingSettings = z.infer<typeof BillingSettingsSchema>
 
@@ -282,12 +305,15 @@ interface SettingsDoc {
   mirrorPipeline?: Partial<MirrorPipelineCosts>
   existingBusiness?: Partial<ExistingBusinessCosts>
   deployment?: Partial<DeploymentCosts>
+  visualPricing?: Partial<VisualPricing>
   forkPricing?: Partial<ForkPricing>
   infrastructurePrices?: Partial<InfrastructurePrices>
   rewards?: Partial<Rewards>
   runtimePricing?: Partial<RuntimePricing>
   /** Phase 9.5 rules — replaced atomically, never merged per-field. */
   runtimePricingRules?: RuntimePricingRule[]
+  /** Checkout campaigns — replaced atomically, never merged per-field. */
+  promotions?: PromotionalOffer[]
   updatedAt: number
 }
 
@@ -309,11 +335,13 @@ async function loadSettings(): Promise<BillingSettings> {
     mirrorPipeline: { ...DEFAULT_MIRROR_PIPELINE_COSTS },
     existingBusiness: { ...DEFAULT_EXISTING_BUSINESS_COSTS },
     deployment: { ...DEFAULT_DEPLOYMENT_COSTS },
+    visualPricing: { ...DEFAULT_VISUAL_PRICING_CONFIG },
     forkPricing: { ...DEFAULT_FORK_PRICING },
     infrastructurePrices: { ...DEFAULT_INFRASTRUCTURE_PRICES },
     rewards: { ...DEFAULT_REWARDS },
     runtimePricing: { ...DEFAULT_RUNTIME_PRICING },
     runtimePricingRules: DEFAULT_RUNTIME_PRICING_RULES.map((r) => ({ ...r })),
+    promotions: DEFAULT_PROMOTIONAL_OFFERS.map((offer) => ({ ...offer, productIds: [...offer.productIds] })),
   }
   try {
     const db = await getDb()
@@ -325,6 +353,7 @@ async function loadSettings(): Promise<BillingSettings> {
         mirrorPipeline: { ...DEFAULT_MIRROR_PIPELINE_COSTS, ...(doc.mirrorPipeline ?? {}) },
         existingBusiness: { ...DEFAULT_EXISTING_BUSINESS_COSTS, ...(doc.existingBusiness ?? {}) },
         deployment: { ...DEFAULT_DEPLOYMENT_COSTS, ...(doc.deployment ?? {}) },
+        visualPricing: { ...DEFAULT_VISUAL_PRICING_CONFIG, ...(doc.visualPricing ?? {}) },
         forkPricing: { ...DEFAULT_FORK_PRICING, ...(doc.forkPricing ?? {}) },
         infrastructurePrices: { ...DEFAULT_INFRASTRUCTURE_PRICES, ...(doc.infrastructurePrices ?? {}) },
         rewards: { ...DEFAULT_REWARDS, ...(doc.rewards ?? {}) },
@@ -332,6 +361,12 @@ async function loadSettings(): Promise<BillingSettings> {
         runtimePricingRules: Array.isArray(doc.runtimePricingRules)
           ? doc.runtimePricingRules
           : [...DEFAULT_RUNTIME_PRICING_RULES],
+        promotions: Array.isArray(doc.promotions)
+          ? doc.promotions
+              .map((offer) => PromotionalOfferSchema.safeParse(offer))
+              .filter((result): result is { success: true; data: PromotionalOffer } => result.success)
+              .map((result) => result.data)
+          : [],
       })
       if (parsed.success) value = parsed.data
     }
@@ -377,6 +412,12 @@ export async function getExistingBusinessCosts(): Promise<ExistingBusinessCosts>
 export async function getDeploymentCosts(): Promise<DeploymentCosts> {
   const settings = await loadSettings()
   return settings.deployment
+}
+
+/** Current visual-generation pricing (DB override layered over code defaults). */
+export async function getVisualPricing(): Promise<VisualPricing> {
+  const settings = await loadSettings()
+  return settings.visualPricing
 }
 
 /** Current fork pricing (DB override layered over code defaults). */
@@ -427,6 +468,27 @@ export async function getRuntimePricingRules(): Promise<readonly RuntimePricingR
   return settings.runtimePricingRules
 }
 
+/** Current checkout offers. A missing collection or a malformed row never
+ * blocks checkout: the loader returns the valid offers it can read. */
+export async function getPromotionalOffers(): Promise<PromotionalOffer[]> {
+  const settings = await loadSettings()
+  return settings.promotions.map((offer) => ({ ...offer, productIds: [...offer.productIds] }))
+}
+
+/** Persist the full offer set. The array is replaced atomically so deleting an
+ * offer is a single write; the admin API is responsible for authorization. */
+export async function updatePromotionalOffers(offers: PromotionalOffer[]): Promise<PromotionalOffer[]> {
+  const db = await getDb()
+  const parsed = z.array(PromotionalOfferSchema).max(100).parse(offers)
+  await db.collection<SettingsDoc>(SETTINGS_COLLECTION).updateOne(
+    { _id: SETTINGS_DOC_ID },
+    { $set: { promotions: parsed, updatedAt: Date.now() } },
+    { upsert: true },
+  )
+  invalidateBillingSettings()
+  return parsed
+}
+
 /** Persist the full admin-managed runtime pricing rule set (Phase 9.5).
  * The array is validated as a whole and replaced atomically; the caller
  * (admin API) is responsible for authorization and audit logging. */
@@ -453,6 +515,7 @@ export async function updateBillingSettings(
     mirrorPipeline?: Partial<MirrorPipelineCosts>
     existingBusiness?: Partial<ExistingBusinessCosts>
     deployment?: Partial<DeploymentCosts>
+    visualPricing?: Partial<VisualPricing>
     forkPricing?: Partial<ForkPricing>
     infrastructurePrices?: Partial<InfrastructurePrices>
     rewards?: Partial<Rewards>
@@ -467,6 +530,7 @@ export async function updateBillingSettings(
     mirrorPipeline: { ...current.mirrorPipeline, ...(patch.mirrorPipeline ?? {}) },
     existingBusiness: { ...current.existingBusiness, ...(patch.existingBusiness ?? {}) },
     deployment: { ...current.deployment, ...(patch.deployment ?? {}) },
+    visualPricing: { ...current.visualPricing, ...(patch.visualPricing ?? {}) },
     forkPricing: { ...current.forkPricing, ...(patch.forkPricing ?? {}) },
     infrastructurePrices: { ...current.infrastructurePrices, ...(patch.infrastructurePrices ?? {}) },
     rewards: { ...current.rewards, ...(patch.rewards ?? {}) },

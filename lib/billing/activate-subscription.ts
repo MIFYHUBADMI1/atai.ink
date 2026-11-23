@@ -251,14 +251,33 @@ export async function activatePaidSubscription(input: ActivateInput): Promise<Ac
   const paidPeriodStart = input.previousBillingDate
     ? new Date(input.previousBillingDate).getTime()
     : now
+
+  // A checkout offer adds a one-time bonus to the FIRST grant. Keeping it in
+  // the same subscription bucket means it follows the plan's expiry and a
+  // refund reverses it with the rest of the period grant. The amount is
+  // stamped on the checkout metadata, so a later offer edit cannot change
+  // what this customer was promised.
+  const offerBonusCredits = Math.max(
+    0,
+    Math.trunc(Number(stringMeta(input.metadata, "offerBonusCredits") ?? 0) || 0),
+  )
+  const firstGrantAmount = grantAmount + offerBonusCredits
   const granted = await grantSubscriptionCredits({
     userId,
-    amount: grantAmount,
+    amount: firstGrantAmount,
     subscriptionId,
     planId: recordPlanId,
     periodStart: paidPeriodStart,
     periodEnd: grantPeriodEnd,
-    metadata: { dodoCustomerId: input.customerId, productId: input.productId, event: "activation", billingCycle },
+    metadata: {
+      dodoCustomerId: input.customerId,
+      productId: input.productId,
+      event: "activation",
+      billingCycle,
+      ...(offerBonusCredits > 0
+        ? { offerId: stringMeta(input.metadata, "offerId") ?? "checkout_offer", offerBonusCredits }
+        : {}),
+    },
   })
   if (!granted) {
     // The payment must never be linked to a grant that did not happen.
@@ -304,7 +323,7 @@ export async function activatePaidSubscription(input: ActivateInput): Promise<Ac
       planId: recordPlanId,
       periodStart: paidPeriodStart,
       periodEnd: grantPeriodEnd,
-      amount: grantAmount,
+      amount: firstGrantAmount,
       creditsAllocated,
       paidPeriodStart,
       paidPeriodEnd,
@@ -325,6 +344,7 @@ export async function activatePaidSubscription(input: ActivateInput): Promise<Ac
     planId: recordPlanId,
     billingCycle,
     granted,
+    offerBonusCredits,
     termsPinned: !!existing?.purchasedTerms || !!buildTerms,
   })
 

@@ -223,7 +223,7 @@ export const PAGE_TOURS: TourDefinition[] = [
       id: "depth",
       kind: "info",
       title: "First question: how deeply should it read?",
-      text: "Intelligent Analysis is the standard pass — structure, offer, customer logic, flows. Deep Crawl sends 30+ agents over every page and costs 500 credits; the price is on the button before you choose it.",
+      text: "Intelligent Analysis is the standard pass — structure, offer, customer logic, flows. Deep Crawl sends 30+ agents over every page and costs credits; the price is on the button before you choose it.",
       why: "Most founders only need the standard pass; the deep crawl is for serious competitive research.",
     },
     {

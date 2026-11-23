@@ -542,9 +542,11 @@ export function LandingAudience() {
 export function LandingFinalCta({
   ctaHref,
   ctaLabel,
+  welcomeBonus,
 }: {
   ctaHref: string
   ctaLabel: string
+  welcomeBonus?: number
 }) {
   const { session } = useSession()
   return (
@@ -583,7 +585,9 @@ export function LandingFinalCta({
               See how Atai works
             </a>
           </div>
-          <p className="mt-6 text-sm text-white/50">Free to start — 500 credits after verification. No credit card required.</p>
+          <p className="mt-6 text-sm text-white/50">
+            Free to start{welcomeBonus ? ` — ${welcomeBonus.toLocaleString()} credits after verification` : ""}. No credit card required.
+          </p>
         </FadeIn>
       </div>
     </section>

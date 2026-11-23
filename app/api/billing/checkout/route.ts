@@ -17,6 +17,8 @@ import {
 import { checkoutSessionLocks, checkoutRateLimiter } from "@/lib/cache/locks"
 import { detectCountryFromRequest, resolveBillingCurrency } from "@/lib/billing/currency"
 import { checkoutReturnUrl } from "@/lib/billing/checkout-return"
+import { resolvePromotionalOffer } from "@/lib/billing/offers"
+import { getPromotionalOffers } from "@/lib/billing/runtime-config"
 
 /**
  * Create a Dodo Payments checkout session.
@@ -82,6 +84,9 @@ export async function POST(req: Request) {
     }
 
     const catalog = await resolvePublicCommercialCatalog()
+    // An offer only adds bonus credits; it never changes the catalog price.
+    // A failed settings read must not block a checkout.
+    const promotionalOffers = await getPromotionalOffers().catch(() => [])
 
     const { apiKey, environment } = getDodoConfig()
 
@@ -169,6 +174,7 @@ export async function POST(req: Request) {
         }
 
         const chargeUSD = cycle === "annual" ? (plan.annualPriceUSD as number) : plan.priceUSD
+        const offer = resolvePromotionalOffer(promotionalOffers, "subscription", plan.id)
 
         // A pre-provisioned product id is used as-is. Without one, the product
         // is created on demand at the catalog price — never at a legacy price.
@@ -202,6 +208,9 @@ export async function POST(req: Request) {
             planId: plan.id,
             credits: String(plan.mirrorCredits),
             billingCycle: cycle,
+            ...(offer
+              ? { offerId: offer.id, offerBonusCredits: String(offer.bonusCredits) }
+              : {}),
           },
         })
 
@@ -226,6 +235,9 @@ export async function POST(req: Request) {
           )
         }
 
+        const offer = resolvePromotionalOffer(promotionalOffers, "credit_pack", pack.id)
+        const bonusCredits = offer?.bonusCredits ?? 0
+
         // Auto-provision the product if not configured
         const product = await getOrCreatePermanentProduct(
           pack.id,
@@ -241,6 +253,8 @@ export async function POST(req: Request) {
           packId: pack.id,
           productId: product.productId,
           autoCreated: !pack.dodoProductId,
+          offerId: offer?.id,
+          bonusCredits,
         })
 
         const session = await client.checkoutSessions.create({
@@ -252,7 +266,11 @@ export async function POST(req: Request) {
             userId: user.id,
             type: "permanent",
             packageId: pack.id,
-            credits: String(pack.credits),
+            baseCredits: String(pack.credits),
+            credits: String(pack.credits + bonusCredits),
+            ...(offer
+              ? { offerId: offer.id, offerBonusCredits: String(offer.bonusCredits) }
+              : {}),
           },
         })
 

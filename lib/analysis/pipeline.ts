@@ -492,10 +492,10 @@ export async function runScratchAnalysis(projectId: string, pipelineMode?: "lega
  * Deep crawl pipeline: crawls the ENTIRE site, then processes it based on pipeline mode.
  * 
  * Pipeline Modes:
- * - legacy: Uses original AI website analysis (included in 500 credit crawl cost)
- * - heavy: Runs full 7-stage pipeline after crawl (500 + 20 = 520 credits total)
+ * - legacy: Uses original AI website analysis (included in the crawl cost)
+ * - heavy: Runs the full 7-stage pipeline after the crawl
  * 
- * Charges 500 credits (DEEP_CRAWL_COST) upfront for crawling.
+ * Charges the configured deep-crawl cost upfront for crawling.
  */
 export async function runDeepCrawlAnalysis(projectId: string, pipelineMode?: "legacy" | "heavy") {
   console.log("[v0] pipeline.deepCrawl: start", { projectId, pipelineMode })
@@ -519,7 +519,7 @@ export async function runDeepCrawlAnalysis(projectId: string, pipelineMode?: "le
       return
     }
 
-    // Check credits before crawling (500 for legacy, 1000 for heavy)
+    // Check credits before crawling at the configured mode-specific cost.
     const canAfford = await hasSufficientCredits(project.userId, deepCrawlCost)
     if (!canAfford) {
       await recordCreditBlock(projectId, project.userId, { required: deepCrawlCost, action: "the full site crawl", resume: "analysis" })
@@ -532,7 +532,7 @@ export async function runDeepCrawlAnalysis(projectId: string, pipelineMode?: "le
       return
     }
 
-    // Charge credits upfront for deep crawl (500 for legacy, 1000 for heavy)
+    // Charge credits upfront for deep crawl at the configured cost.
     try {
       await chargeDeepCrawlCredits(project.userId, projectId, mode)
       await store.appendEvent(projectId, event("analyze", `Deep crawl credits charged (${deepCrawlCost})`))

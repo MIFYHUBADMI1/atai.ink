@@ -30,6 +30,8 @@ vi.mock("@/lib/billing/currency", () => ({
 vi.mock("@/lib/billing/checkout-return", () => ({
   checkoutReturnUrl: () => "https://atai.ink/settings/billing",
 }))
+
+vi.mock("@/lib/billing/runtime-config", () => ({ getPromotionalOffers: vi.fn(async () => []) }))
 vi.mock("@/lib/logging/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))

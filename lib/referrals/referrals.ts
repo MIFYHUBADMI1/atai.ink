@@ -14,38 +14,21 @@ import { isSmtpConfigured } from "@/lib/env"
  *
  * Business model:
  *   - The person who joins through a referral link gets a one-time signup
- *     bonus (+500 credits by default).
- *   - Referrer gets +500 credits when referred user verifies their account.
- *   - Referrer gets +1,500 credits when referred user reaches 75,000 eligible
- *     application-generation usage (successful builds only).
- *   - Max 2,000 credits per referred user for the referrer.
+ *     bonus.
+ *   - The referrer gets a verification reward when the referred user verifies
+ *     their account.
+ *   - The referrer gets a milestone reward when the referred user reaches the
+ *     configured eligible application-generation usage (successful builds only).
  */
 
 const REFERRAL_CODE_PREFIX = "ATAI"
 const REFERRAL_CODE_LENGTH = 6
 /** Custom codes: ATAI- plus a 3–30 char suffix of letters, numbers, and dashes. */
 const CUSTOM_REFERRAL_CODE_PATTERN = /^ATAI-[A-Z0-9](?:[A-Z0-9-]{1,28}[A-Z0-9])$/
-/** Legacy fallback constants — live values come from admin-configurable
- * runtime settings (lib/billing/runtime-config.ts) at grant time. */
-const VERIFICATION_REWARD = 500
-const SIGNUP_BONUS = 500
-const MILESTONE_REWARD = 1500
-const MILESTONE_THRESHOLD = 75_000
-
 /** Resolve the current admin-configured reward values. */
 async function getRuntimeRewards() {
   const { getRewardSettings } = await import("@/lib/billing/runtime-config")
-  try {
-    return await getRewardSettings()
-  } catch {
-    return {
-      welcomeBonus: 500,
-      referralSignupBonus: SIGNUP_BONUS,
-      referralVerificationReward: VERIFICATION_REWARD,
-      referralMilestoneReward: MILESTONE_REWARD,
-      referralMilestoneThreshold: MILESTONE_THRESHOLD,
-    }
-  }
+  return getRewardSettings()
 }
 
 // ─── Referral Code Generation ───────────────────────────────────────────────
@@ -469,5 +452,3 @@ export async function getAllReferrals(limit = 100, offset = 0) {
   const referrals = await col.find({}).sort({ createdAt: -1 }).skip(offset).limit(limit).toArray()
   return { referrals, total }
 }
-
-export { VERIFICATION_REWARD, MILESTONE_REWARD, MILESTONE_THRESHOLD }

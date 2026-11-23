@@ -276,6 +276,7 @@ export default async function PublicProjectPage({ params }: { params: Promise<{ 
               isOwner={isOwner}
               isLoggedIn={Boolean(currentUser)}
               forkCost={forkPricing.forkCost}
+              ownerRoyalty={forkPricing.ownerRoyalty}
               savingsPct={forkPricing.savingsPct}
               forkTier={forkTier}
             />
