@@ -3,6 +3,7 @@ import { AlertTriangle, Boxes, Database, ShieldCheck } from "lucide-react"
 import { AdminNav } from "@/components/admin-nav"
 import { Badge } from "@/components/ui/badge"
 import { CatalogManager } from "@/components/admin/catalog-manager"
+import { CatalogPublications } from "@/components/admin/catalog-publications"
 import { requireAdmin } from "@/lib/auth/session"
 import { listCatalogProducts } from "@/lib/billing/catalog/service"
 import type { CatalogProductView } from "@/lib/billing/catalog/types"
@@ -64,6 +65,7 @@ export default async function AdminCommercialCatalogPage() {
       ) : null}
 
       <CatalogManager initialProducts={products} />
+      <CatalogPublications />
     </div>
   )
 }

@@ -244,6 +244,15 @@ export const PERMANENT_CREDIT_PACKS: PermanentCreditPack[] = [
   { id: "perm_15m", credits: 15_000_000, priceUSD: 2_499, label: "15,000,000 Credits", dodoProductId: process.env.DODO_PRODUCT_PERM_15M },
 ]
 
+export function getPermanentCreditPacks(
+  env: NodeJS.ProcessEnv = process.env,
+): PermanentCreditPack[] {
+  return PERMANENT_CREDIT_PACKS.map((pack) => ({
+    ...pack,
+    dodoProductId: env[`DODO_PRODUCT_PERM_${pack.id.replace("perm_", "").toUpperCase()}`],
+  }))
+}
+
 export function getPackById(id: string): PermanentCreditPack | undefined {
   return PERMANENT_CREDIT_PACKS.find((p) => p.id === id)
 }

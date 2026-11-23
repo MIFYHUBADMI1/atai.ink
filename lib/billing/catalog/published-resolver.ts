@@ -2,6 +2,7 @@ import { AppError } from "@/lib/errors"
 import { logger } from "@/lib/logging/logger"
 import {
   PERMANENT_CREDIT_PACKS,
+  getPermanentCreditPacks,
   type PermanentCreditPack,
   type SubscriptionPlan,
 } from "@/lib/billing/config"
@@ -290,8 +291,8 @@ function resolveCodeCatalog(now: number, env: NodeJS.ProcessEnv): ResolvedCommer
     gated: false,
     publication: null,
     entries: codeEntries(now, env),
-    plans: getCommercialPlans(),
-    packs: PERMANENT_CREDIT_PACKS,
+    plans: getCommercialPlans(env),
+    packs: getPermanentCreditPacks(env),
     infrastructure: codeInfrastructure(),
     shadow: { compared: false, differences: [] },
   }
@@ -332,27 +333,21 @@ function validatePublication(
   }
 }
 
-async function resolveDatabaseCatalog(
-  store: CatalogSeedStore,
-  now: number,
-  requestedSource: CatalogSource,
-  publicReadsEnabled: boolean,
-): Promise<ResolvedCommercialCatalog> {
-  const [publications, products, versions] = await Promise.all([
-    store.listCatalogVersions(),
-    store.listProducts(),
-    store.listVersions(),
-  ])
-
-  const active = publications.filter((publication) => publication.status === "active")
-  if (active.length === 0) {
-    catalogFailure("NO_ACTIVE_PUBLICATION")
-  }
-  if (active.length > 1) {
-    catalogFailure("MULTIPLE_ACTIVE_PUBLICATIONS", { count: active.length })
-  }
-
-  const publication = active[0]
+/**
+ * Resolve one publication document against the product/version documents.
+ * Exported for admin preview and activation, which must use exactly the same
+ * validation and projection as the customer read path.
+ */
+export function resolvePublicationCatalog(input: {
+  publication: CommercialCatalogVersionDoc
+  products: CommercialProductDoc[]
+  versions: CommercialProductVersionDoc[]
+  now: number
+  requestedSource: CatalogSource
+  publicReadsEnabled: boolean
+  env?: NodeJS.ProcessEnv
+}): ResolvedCommercialCatalog {
+  const { publication, products, versions, now, requestedSource, publicReadsEnabled } = input
   validatePublication(publication, now)
 
   const productById = new Map(products.map((product) => [product.id, product]))
@@ -437,7 +432,7 @@ async function resolveDatabaseCatalog(
       return a.id.localeCompare(b.id)
     })
 
-  const differences = compareCatalogToCode({ plans, packs, infrastructure })
+  const differences = compareCatalogToCode({ plans, packs, infrastructure }, input.env)
   if (differences.length > 0) {
     logger.warn("billing.catalog.shadow", "published catalog differs from code catalog", {
       publication: publication.version,
@@ -460,6 +455,38 @@ async function resolveDatabaseCatalog(
   }
 }
 
+async function resolveDatabaseCatalog(
+  store: CatalogSeedStore,
+  now: number,
+  requestedSource: CatalogSource,
+  publicReadsEnabled: boolean,
+  env: NodeJS.ProcessEnv,
+): Promise<ResolvedCommercialCatalog> {
+  const [publications, products, versions] = await Promise.all([
+    store.listCatalogVersions(),
+    store.listProducts(),
+    store.listVersions(),
+  ])
+
+  const active = publications.filter((publication) => publication.status === "active")
+  if (active.length === 0) {
+    catalogFailure("NO_ACTIVE_PUBLICATION")
+  }
+  if (active.length > 1) {
+    catalogFailure("MULTIPLE_ACTIVE_PUBLICATIONS", { count: active.length })
+  }
+
+  return resolvePublicationCatalog({
+    publication: active[0],
+    products,
+    versions,
+    now,
+    requestedSource,
+    publicReadsEnabled,
+    env,
+  })
+}
+
 function diff(
   differences: CatalogDifference[],
   path: string,
@@ -474,13 +501,16 @@ function diff(
  * Measures database-vs-code drift without changing what a customer receives.
  * The caller owns the customer output; this function only returns differences.
  */
-export function compareCatalogToCode(input: {
-  plans: readonly SubscriptionPlan[]
-  packs: readonly PermanentCreditPack[]
-  infrastructure: readonly PublishedInfrastructureProduct[]
-}): CatalogDifference[] {
+export function compareCatalogToCode(
+  input: {
+    plans: readonly SubscriptionPlan[]
+    packs: readonly PermanentCreditPack[]
+    infrastructure: readonly PublishedInfrastructureProduct[]
+  },
+  env: NodeJS.ProcessEnv = process.env,
+): CatalogDifference[] {
   const differences: CatalogDifference[] = []
-  const codePlans = getCommercialPlans()
+  const codePlans = getCommercialPlans(env)
 
   for (const code of codePlans) {
     const plan = input.plans.find((candidate) => candidate.id === code.id)
@@ -520,7 +550,8 @@ export function compareCatalogToCode(input: {
     }
   }
 
-  for (const code of PERMANENT_CREDIT_PACKS) {
+  const codePacks = getPermanentCreditPacks(env)
+  for (const code of codePacks) {
     const pack = input.packs.find((candidate) => candidate.id === code.id)
     if (!pack) {
       diff(differences, `packs.${code.id}`, "present", "missing")
@@ -533,7 +564,7 @@ export function compareCatalogToCode(input: {
     diff(differences, `packs.${code.id}.dodoProductId`, code.dodoProductId ?? null, pack.dodoProductId ?? null)
   }
   for (const pack of input.packs) {
-    if (!PERMANENT_CREDIT_PACKS.some((code) => code.id === pack.id)) {
+    if (!codePacks.some((code) => code.id === pack.id)) {
       diff(differences, `packs.${pack.id}`, "missing", "present")
     }
   }
@@ -571,12 +602,15 @@ export function compareCatalogToCode(input: {
  * catalog with the same price and credit grant. A DB-only product or a changed
  * price fails closed; it is never displayed and then charged differently.
  */
-export function assertCheckoutCompatible(input: {
-  plans: readonly SubscriptionPlan[]
-  packs: readonly PermanentCreditPack[]
-  infrastructure: readonly PublishedInfrastructureProduct[]
-}): void {
-  const codePlans = getCommercialPlans()
+export function assertCheckoutCompatible(
+  input: {
+    plans: readonly SubscriptionPlan[]
+    packs: readonly PermanentCreditPack[]
+    infrastructure: readonly PublishedInfrastructureProduct[]
+  },
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  const codePlans = getCommercialPlans(env)
   for (const code of codePlans) {
     if (!input.plans.some((plan) => plan.id === code.id)) {
       catalogFailure("CHECKOUT_INCOMPATIBLE", {
@@ -599,6 +633,15 @@ export function assertCheckoutCompatible(input: {
     if (plan.mirrorCredits !== code.mirrorCredits) {
       catalogFailure("CHECKOUT_INCOMPATIBLE", { productId: plan.id, field: "mirrorCredits" })
     }
+    if ((plan.dodoProductId ?? null) !== (code.dodoProductId ?? null)) {
+      catalogFailure("CHECKOUT_INCOMPATIBLE", { productId: plan.id, field: "dodoProductId" })
+    }
+    if ((plan.annualDodoProductId ?? null) !== (code.annualDodoProductId ?? null)) {
+      catalogFailure("CHECKOUT_INCOMPATIBLE", {
+        productId: plan.id,
+        field: "annualDodoProductId",
+      })
+    }
     if (Boolean(plan.custom) !== Boolean(code.custom)) {
       catalogFailure("CHECKOUT_INCOMPATIBLE", { productId: plan.id, field: "custom" })
     }
@@ -613,7 +656,8 @@ export function assertCheckoutCompatible(input: {
     }
   }
 
-  for (const code of PERMANENT_CREDIT_PACKS) {
+  const codePacks = getPermanentCreditPacks(env)
+  for (const code of codePacks) {
     if (!input.packs.some((pack) => pack.id === code.id)) {
       catalogFailure("CHECKOUT_INCOMPATIBLE", {
         productId: code.id,
@@ -622,7 +666,7 @@ export function assertCheckoutCompatible(input: {
     }
   }
   for (const pack of input.packs) {
-    const code = PERMANENT_CREDIT_PACKS.find((candidate) => candidate.id === pack.id)
+    const code = codePacks.find((candidate) => candidate.id === pack.id)
     if (!code) {
       catalogFailure("CHECKOUT_INCOMPATIBLE", { productId: pack.id, reason: "not_in_checkout" })
     }
@@ -631,6 +675,9 @@ export function assertCheckoutCompatible(input: {
     }
     if (pack.credits !== code.credits) {
       catalogFailure("CHECKOUT_INCOMPATIBLE", { productId: pack.id, field: "credits" })
+    }
+    if ((pack.dodoProductId ?? null) !== (code.dodoProductId ?? null)) {
+      catalogFailure("CHECKOUT_INCOMPATIBLE", { productId: pack.id, field: "dodoProductId" })
     }
   }
 
@@ -700,8 +747,9 @@ export async function resolveCommercialCatalog(
       now,
       requestedSource,
       publicReadsEnabled,
+      env,
     )
-    if (audience === "public") assertCheckoutCompatible(resolved)
+    if (audience === "public") assertCheckoutCompatible(resolved, env)
     return resolved
   } catch (error) {
     if (error instanceof PublishedCatalogError) throw error
