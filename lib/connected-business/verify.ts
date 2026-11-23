@@ -16,7 +16,10 @@ export interface VerificationReport {
   applications: number
   memberships: number
   domains: number
+  /** States the data model forbids. A non-zero count must fail a deploy gate. */
   problems: string[]
+  /** States the model permits but a human should look at. Never gates. */
+  warnings: string[]
 }
 
 export async function verifyConnectedBusinesses(): Promise<VerificationReport> {
@@ -51,15 +54,32 @@ export async function verifyConnectedBusinesses(): Promise<VerificationReport> {
     if (!ownerRow) problems.push(`business ${business.id} owner ${business.ownerId} has no active owner row`)
   }
 
+  // Duplicate detection must mirror the unique index exactly: it covers
+  // (businessId, hostname, basePath) among non-archived rows only. An archived
+  // application and its replacement legitimately share an origin, and two
+  // different businesses may each claim the same one — that is a warning, not
+  // a broken invariant.
+  const warnings: string[] = []
   const origins = new Map<string, string>()
+  const businessesByOrigin = new Map<string, Set<string>>()
   for (const application of applications) {
     if (!businessIds.has(application.businessId)) {
       problems.push(`application ${application.id} points at missing business ${application.businessId}`)
     }
+    if (application.archivedAt !== undefined) continue
+
     const origin = `${application.hostname}${application.basePath}`
-    const previous = origins.get(origin)
-    if (previous) problems.push(`origin ${origin} is claimed by ${previous} and ${application.id}`)
-    else origins.set(origin, application.id)
+    const key = `${application.businessId}\u0000${origin}`
+    const previous = origins.get(key)
+    if (previous) problems.push(`origin ${origin} is claimed twice within ${application.businessId}: ${previous} and ${application.id}`)
+    else origins.set(key, application.id)
+
+    const claimants = businessesByOrigin.get(origin) ?? new Set<string>()
+    claimants.add(application.businessId)
+    businessesByOrigin.set(origin, claimants)
+  }
+  for (const [origin, claimants] of businessesByOrigin) {
+    if (claimants.size > 1) warnings.push(`origin ${origin} is claimed by ${claimants.size} businesses`)
   }
 
   for (const domain of domains) {
@@ -75,5 +95,6 @@ export async function verifyConnectedBusinesses(): Promise<VerificationReport> {
     memberships: memberships.length,
     domains: domains.length,
     problems,
+    warnings,
   }
 }
