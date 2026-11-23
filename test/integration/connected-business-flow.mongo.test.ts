@@ -55,10 +55,11 @@ const REPLICA_URI = process.env.MONGODB_REPLICA_URI
  * database.
  */
 function isolatedUri(uri: string): string {
-  const url = new URL(uri)
-  const name = url.pathname.replace(/^\//, "") || "atai"
-  url.pathname = `/${name}_flow`
-  return url.toString()
+  const [target, ...options] = uri.split("?")
+  const match = target.match(/^(mongodb(?:\+srv)?:\/\/[^/]+)(?:\/([^/]*))?$/)
+  if (!match) return uri
+  const [, authority, name] = match
+  return `${authority}/${name || "atai"}_flow${options.length > 0 ? `?${options.join("?")}` : ""}`
 }
 
 function json(body: unknown): Request {
