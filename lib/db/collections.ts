@@ -13,6 +13,8 @@ import type { CofounderConversationMongoDoc, PendingActionRecord } from "@/lib/c
 import type { CofounderModelTierDoc } from "@/lib/cofounder/models"
 import type { ProjectChatMongoDoc } from "@/lib/types/collab-chat"
 import type { CreditLedgerEntry, BuildAuthorization, PaymentRecord, SubscriptionRecord, EntitlementVersionRecord, PlanCatalogVersionRecord } from "@/lib/billing/billing-types"
+import type { CommercialProductDoc, CommercialProductVersionDoc, DodoProductMappingDoc, CommercialCatalogVersionDoc } from "@/lib/billing/catalog/types"
+import { ensureCommercialCatalogIndexes } from "@/lib/billing/catalog/indexes"
 import type { ResourceDoc } from "@/lib/resources/admin-types"
 import type { LessonDoc } from "@/lib/lessons/admin-types"
 import type { GeneratedLessonDoc } from "@/lib/lessons/types"
@@ -167,6 +169,26 @@ export async function entitlementVersionsCol() {
 /** Published price book versions (Phase A1). Immutable per version. */
 export async function planCatalogVersionsCol() {
   return (await getDbCached()).collection<PlanCatalogVersionRecord>("plan_catalog_versions")
+}
+
+/** A7.0 commercial catalog: stable product identities. */
+export async function commercialProductsCol() {
+  return (await getDbCached()).collection<CommercialProductDoc>("commercial_products")
+}
+
+/** A7.0 commercial catalog: immutable product versions. */
+export async function commercialProductVersionsCol() {
+  return (await getDbCached()).collection<CommercialProductVersionDoc>("commercial_product_versions")
+}
+
+/** A7.0 commercial catalog: ATAI version ↔ Dodo product mappings. */
+export async function dodoProductMappingsCol() {
+  return (await getDbCached()).collection<DodoProductMappingDoc>("dodo_product_mappings")
+}
+
+/** A7.0 commercial catalog: immutable publication snapshots. */
+export async function commercialCatalogVersionsCol() {
+  return (await getDbCached()).collection<CommercialCatalogVersionDoc>("commercial_catalog_versions")
 }
 
 export async function planningRunsCol() {
@@ -738,6 +760,19 @@ async function runEnsureIndexes(): Promise<void> {
   await batchedIndexCreation([
     planCatalogVersions.createIndex({ version: 1 }, { unique: true, name: "plan_catalog_versions_version_unique" }),
   ])
+
+  // A7.0 commercial catalog. Product identity is stable; versions are
+  // immutable; Dodo mappings are unique per environment and cycle.
+  const commercialProducts = await commercialProductsCol()
+  const commercialProductVersions = await commercialProductVersionsCol()
+  const dodoProductMappings = await dodoProductMappingsCol()
+  const commercialCatalogVersions = await commercialCatalogVersionsCol()
+  await ensureCommercialCatalogIndexes({
+    products: commercialProducts,
+    versions: commercialProductVersions,
+    mappings: dodoProductMappings,
+    catalogVersions: commercialCatalogVersions,
+  })
 
   // Planning run indexes
   const planningRuns = await planningRunsCol()

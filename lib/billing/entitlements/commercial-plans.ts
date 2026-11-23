@@ -59,8 +59,9 @@ function commercialProductEnvVar(id: CommercialPlanId, cycle: "monthly" | "annua
 export function getCommercialDodoProductId(
   id: CommercialPlanId,
   cycle: "monthly" | "annual" = "monthly",
+  env: NodeJS.ProcessEnv = process.env,
 ): string | undefined {
-  return process.env[commercialProductEnvVar(id, cycle)] || undefined
+  return env[commercialProductEnvVar(id, cycle)] || undefined
 }
 
 /** A commercial Dodo product id (monthly OR annual variant) → plan + cycle. */
@@ -195,7 +196,7 @@ const COMMERCIAL_AVAILABILITY: Record<CommercialPlanId, PlanAvailability> = {
 
 const PLAN_ORDER: CommercialPlanId[] = ["explorer", "starter", "growth", "scale", "enterprise"]
 
-const PLAN_NAMES: Record<CommercialPlanId, string> = {
+export const PLAN_NAMES: Record<CommercialPlanId, string> = {
   explorer: "Explorer",
   starter: "Starter",
   growth: "Growth",
@@ -203,7 +204,7 @@ const PLAN_NAMES: Record<CommercialPlanId, string> = {
   enterprise: "Enterprise",
 }
 
-const PLAN_TAGLINES: Record<CommercialPlanId, string> = {
+export const PLAN_TAGLINES: Record<CommercialPlanId, string> = {
   explorer: "Map out your business, free. No card, no launch yet.",
   starter: "Launch your first real business and start selling.",
   growth: "Run several businesses and grow them with ads.",
