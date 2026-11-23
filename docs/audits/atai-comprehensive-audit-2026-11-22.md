@@ -1,8 +1,8 @@
 # Atai comprehensive audit — 2026-11-22
 
-Status: audit and verification complete. M-22 architecture remains accepted but
-**M-22 sign-off is still pending**; this document is evidence for that review, not
-the sign-off itself.
+Status: audit and verification complete. **M-22 sign-off granted by the user on
+2026-11-22.** This document is the acceptance record for the audit and the M-22
+enforcement work.
 
 ## Scope and method
 
@@ -205,12 +205,14 @@ that contains versions effective in the future”.
    limit. A very large population of active storage holds can delay scanning a
    later-expiring slot hold. It is a latency issue, not a cap bypass; splitting
    the sweep into expired, slot, and storage passes would make it deterministic.
-3. **Referral debug logging.** `lib/referrals/referrals.ts` still contains
-   `console.log` statements that include referral codes and user ids. They are
-   not financial, but they are logging-hygiene debt and should move to the
-   structured logger or be removed.
-4. **M-22 sign-off.** The architecture remains accepted, but the formal sign-off
-   is still outstanding. This audit supplies test and code evidence only.
+3. **Referral debug logging.** Resolved: referral paths no longer contain
+   `console.*` statements; capture outcomes use the structured logger.
+
+## M-22 sign-off
+
+The user accepted the audit and granted M-22 sign-off on 2026-11-22. The
+sign-off covers the A6/M-22 entitlement-enforcement architecture and the audit
+fixes above. It does not waive residual risks 1 and 2.
 
 ## Files with audit changes
 
