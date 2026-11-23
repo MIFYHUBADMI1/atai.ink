@@ -1,4 +1,7 @@
+import { ListChecks } from "lucide-react"
+
 import { NotConnected } from "@/components/connected-business/not-connected"
+import { PageHero, SectionCard } from "@/components/connected-business/page-ui"
 import { PlanChat, type PlanMessage } from "@/components/connected-business/plan-chat"
 import { findBusinessConversation } from "@/lib/connected-business/cofounder"
 import { businessPageContext } from "@/lib/connected-business/page-context"
@@ -32,27 +35,27 @@ export default async function BusinessPlanPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <header>
-        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Plan</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">Plan the next move</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-          The co-founder reads the site you connected and the assessment built from it. It can propose marketing,
-          content, campaigns and growth tasks — never a build, a deploy or a change to your code.
-        </p>
-      </header>
+      <PageHero
+        eyebrow="Plan"
+        title="Plan the next move"
+        description="The co-founder reads the site you connected and the assessment built from it. It can propose marketing, content, campaigns and growth tasks — never a build, a deploy or a change to your code."
+      />
 
       {priorities.length > 0 ? (
-        <section className="rounded-2xl border border-border/80 bg-card p-5 sm:p-6">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Starting points</h2>
-          <ul className="mt-3 flex flex-col gap-2">
+        <SectionCard
+          icon={ListChecks}
+          title="Starting points"
+          description="What the assessment says to work on first — ask the co-founder to plan any of these."
+        >
+          <ul className="flex flex-col gap-2">
             {priorities.slice(0, 4).map((priority) => (
-              <li key={priority.title} className="text-sm">
-                <span className="font-medium">{priority.title}</span>
-                <span className="text-muted-foreground"> — {priority.expectedOutcome}</span>
+              <li key={priority.title} className="min-w-0 border-t border-border/60 pt-2 text-sm first:border-0 first:pt-0">
+                <span className="break-words font-medium">{priority.title}</span>
+                <span className="break-words text-muted-foreground"> — {priority.expectedOutcome}</span>
               </li>
             ))}
           </ul>
-        </section>
+        </SectionCard>
       ) : null}
 
       <PlanChat

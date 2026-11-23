@@ -29,11 +29,16 @@ export interface PublicDeploymentCosts {
   deployCost: number
 }
 
+export interface PublicSeoAuditCosts {
+  auditCost: number
+}
+
 export interface PublicBillingConfig {
   rewards: PublicRewards
   buildTierCosts: PublicBuildTierCosts
   mirrorPipelineCosts: PublicMirrorPipelineCosts
   deploymentCosts: PublicDeploymentCosts
+  seoAuditCosts: PublicSeoAuditCosts
   visualPricing: VisualPricingConfig
   offers: PublicPromotionalOffer[]
 }

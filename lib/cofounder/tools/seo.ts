@@ -127,7 +127,7 @@ async function executeAudit(ctx: ToolContext, target: AuditTarget): Promise<Tool
       return { success: false, error: { code: "FEATURE_DISABLED", message: "SEO visibility audits are switched off. The founder can turn them on in Settings → Feature switches.", fatal: true } }
     }
 
-    chargedAmount = getSeoAuditCost()
+    chargedAmount = await getSeoAuditCost()
     // The approved pending-action id is a stable, server-derived single-use
     // identifier — but still an identifier, not a scoped one. `scopedIntentKey`
     // binds it to the session user and the ownership-checked project so the
@@ -207,7 +207,7 @@ export const runSeoAuditTool: ToolDefinition = {
       ctx,
       "run_seo_audit",
       gate.target,
-      `Run an SEO visibility audit of ${gate.target.projectName}'s live site (${getSeoAuditCost()} credits).`,
+      `Run an SEO visibility audit of ${gate.target.projectName}'s live site (${await getSeoAuditCost()} credits).`,
     )
   },
   async executeApproved(input, ctx): Promise<ToolOutcome> {
@@ -238,7 +238,7 @@ export const runBusinessSeoAuditTool: ToolDefinition = {
       ctx,
       "run_business_seo_audit",
       gate.target,
-      `Run an SEO visibility audit of ${gate.target.projectName}'s site (${getSeoAuditCost()} credits).`,
+      `Run an SEO visibility audit of ${gate.target.projectName}'s site (${await getSeoAuditCost()} credits).`,
     )
   },
   async executeApproved(input, ctx): Promise<ToolOutcome> {

@@ -103,6 +103,18 @@ export const DEFAULT_EXISTING_BUSINESS_COSTS: ExistingBusinessCosts = {
   assessmentCost: 60,
 }
 
+const SeoAuditCostsSchema = z.object({
+  /** Credits charged for one bounded SEO audit (a crawl of the site plus the
+   *  on-page analysis). Admin-editable; never a code constant at the call site. */
+  auditCost: z.number().int().min(0).max(100_000),
+})
+export type SeoAuditCosts = z.infer<typeof SeoAuditCostsSchema>
+
+/** One audit is a real crawl and a real model read: 100 credits by default. */
+export const DEFAULT_SEO_AUDIT_COSTS: SeoAuditCosts = {
+  auditCost: 100,
+}
+
 const ForkPricingSchema = z.object({
   /** Credits charged to fork a simple-tier project. */
   simpleForkCost: z.number().int().min(0).max(10_000_000),
@@ -285,6 +297,7 @@ const BillingSettingsSchema = z.object({
   buildTiers: BuildTiersCostsSchema,
   mirrorPipeline: MirrorPipelineCostsSchema,
   existingBusiness: ExistingBusinessCostsSchema,
+  seoAudit: SeoAuditCostsSchema,
   deployment: DeploymentCostsSchema,
   visualPricing: VisualPricingSchema,
   forkPricing: ForkPricingSchema,
@@ -304,6 +317,7 @@ interface SettingsDoc {
   buildTiers?: Partial<BuildTierCosts>
   mirrorPipeline?: Partial<MirrorPipelineCosts>
   existingBusiness?: Partial<ExistingBusinessCosts>
+  seoAudit?: Partial<SeoAuditCosts>
   deployment?: Partial<DeploymentCosts>
   visualPricing?: Partial<VisualPricing>
   forkPricing?: Partial<ForkPricing>
@@ -334,6 +348,7 @@ async function loadSettings(): Promise<BillingSettings> {
     buildTiers: { ...DEFAULT_BUILD_TIER_COSTS },
     mirrorPipeline: { ...DEFAULT_MIRROR_PIPELINE_COSTS },
     existingBusiness: { ...DEFAULT_EXISTING_BUSINESS_COSTS },
+    seoAudit: { ...DEFAULT_SEO_AUDIT_COSTS },
     deployment: { ...DEFAULT_DEPLOYMENT_COSTS },
     visualPricing: { ...DEFAULT_VISUAL_PRICING_CONFIG },
     forkPricing: { ...DEFAULT_FORK_PRICING },
@@ -352,6 +367,7 @@ async function loadSettings(): Promise<BillingSettings> {
         buildTiers: { ...DEFAULT_BUILD_TIER_COSTS, ...(doc.buildTiers ?? {}) },
         mirrorPipeline: { ...DEFAULT_MIRROR_PIPELINE_COSTS, ...(doc.mirrorPipeline ?? {}) },
         existingBusiness: { ...DEFAULT_EXISTING_BUSINESS_COSTS, ...(doc.existingBusiness ?? {}) },
+        seoAudit: { ...DEFAULT_SEO_AUDIT_COSTS, ...(doc.seoAudit ?? {}) },
         deployment: { ...DEFAULT_DEPLOYMENT_COSTS, ...(doc.deployment ?? {}) },
         visualPricing: { ...DEFAULT_VISUAL_PRICING_CONFIG, ...(doc.visualPricing ?? {}) },
         forkPricing: { ...DEFAULT_FORK_PRICING, ...(doc.forkPricing ?? {}) },
@@ -409,6 +425,12 @@ export async function getExistingBusinessCosts(): Promise<ExistingBusinessCosts>
 }
 
 /** Current deployment cost (DB override layered over code defaults). */
+/** Credits charged for one SEO audit (DB override layered over the default). */
+export async function getSeoAuditCosts(): Promise<SeoAuditCosts> {
+  const settings = await loadSettings()
+  return settings.seoAudit
+}
+
 export async function getDeploymentCosts(): Promise<DeploymentCosts> {
   const settings = await loadSettings()
   return settings.deployment
@@ -514,6 +536,7 @@ export async function updateBillingSettings(
     buildTiers?: Partial<BuildTierCosts>
     mirrorPipeline?: Partial<MirrorPipelineCosts>
     existingBusiness?: Partial<ExistingBusinessCosts>
+    seoAudit?: Partial<SeoAuditCosts>
     deployment?: Partial<DeploymentCosts>
     visualPricing?: Partial<VisualPricing>
     forkPricing?: Partial<ForkPricing>
@@ -529,6 +552,7 @@ export async function updateBillingSettings(
     buildTiers: { ...current.buildTiers, ...(patch.buildTiers ?? {}) },
     mirrorPipeline: { ...current.mirrorPipeline, ...(patch.mirrorPipeline ?? {}) },
     existingBusiness: { ...current.existingBusiness, ...(patch.existingBusiness ?? {}) },
+    seoAudit: { ...current.seoAudit, ...(patch.seoAudit ?? {}) },
     deployment: { ...current.deployment, ...(patch.deployment ?? {}) },
     visualPricing: { ...current.visualPricing, ...(patch.visualPricing ?? {}) },
     forkPricing: { ...current.forkPricing, ...(patch.forkPricing ?? {}) },

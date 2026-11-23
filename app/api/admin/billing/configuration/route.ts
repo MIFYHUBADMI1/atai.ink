@@ -13,6 +13,8 @@ import {
   getBuildTierCosts,
   getMirrorPipelineCosts,
   getExistingBusinessCosts,
+  getSeoAuditCosts,
+  DEFAULT_SEO_AUDIT_COSTS,
   getDeploymentCosts,
   getVisualPricing,
   getForkPricing,
@@ -43,6 +45,7 @@ export async function GET() {
     const buildTierCosts = await getBuildTierCosts()
     const mirrorPipelineCosts = await getMirrorPipelineCosts()
     const existingBusinessCosts = await getExistingBusinessCosts()
+    const seoAuditCosts = await getSeoAuditCosts()
     const deploymentCosts = await getDeploymentCosts()
     const visualPricing = await getVisualPricing()
     const forkPricing = await getForkPricing()
@@ -121,6 +124,12 @@ export async function GET() {
         readCost: existingBusinessCosts.readCost,
         assessmentCost: existingBusinessCosts.assessmentCost,
         defaults: DEFAULT_EXISTING_BUSINESS_COSTS,
+      },
+
+      // ── SEO & site analysis (runtime-configurable) ──
+      seoAuditCosts: {
+        auditCost: seoAuditCosts.auditCost,
+        defaults: DEFAULT_SEO_AUDIT_COSTS,
       },
 
       // ── Deployment costs (runtime-configurable) ──
@@ -248,6 +257,11 @@ const PatchSchema = z.object({
       assessmentCost: z.number().int().min(0).max(100_000).optional(),
     })
     .optional(),
+  seoAudit: z
+    .object({
+      auditCost: z.number().int().min(0).max(100_000).optional(),
+    })
+    .optional(),
   deployment: z
     .object({
       deployCost: z.number().int().min(0).max(1_000_000).optional(),
@@ -309,7 +323,7 @@ export async function PATCH(req: Request) {
     }
     if (
       !parsed.data.collaborate && !parsed.data.buildTiers && !parsed.data.mirrorPipeline &&
-      !parsed.data.existingBusiness && !parsed.data.deployment && !parsed.data.visualPricing && !parsed.data.forkPricing && !parsed.data.infrastructurePrices &&
+      !parsed.data.existingBusiness && !parsed.data.seoAudit && !parsed.data.deployment && !parsed.data.visualPricing && !parsed.data.forkPricing && !parsed.data.infrastructurePrices &&
       !parsed.data.rewards && !parsed.data.runtimePricing
     ) {
       return fail("VALIDATION", "No configuration changes provided.", 422)
@@ -320,6 +334,7 @@ export async function PATCH(req: Request) {
       ...(parsed.data.buildTiers ? { buildTiers: parsed.data.buildTiers } : {}),
       ...(parsed.data.mirrorPipeline ? { mirrorPipeline: parsed.data.mirrorPipeline } : {}),
       ...(parsed.data.existingBusiness ? { existingBusiness: parsed.data.existingBusiness } : {}),
+      ...(parsed.data.seoAudit ? { seoAudit: parsed.data.seoAudit } : {}),
       ...(parsed.data.deployment ? { deployment: parsed.data.deployment } : {}),
       ...(parsed.data.visualPricing ? { visualPricing: parsed.data.visualPricing } : {}),
       ...(parsed.data.forkPricing ? { forkPricing: parsed.data.forkPricing } : {}),
@@ -335,6 +350,7 @@ export async function PATCH(req: Request) {
       buildTiers: updated.buildTiers,
       mirrorPipeline: updated.mirrorPipeline,
       existingBusiness: updated.existingBusiness,
+      seoAudit: updated.seoAudit,
       deployment: updated.deployment,
       visualPricing: updated.visualPricing,
       forkPricing: updated.forkPricing,
@@ -347,6 +363,7 @@ export async function PATCH(req: Request) {
       buildTierCosts: updated.buildTiers,
       mirrorPipelineCosts: updated.mirrorPipeline,
       existingBusinessCosts: updated.existingBusiness,
+      seoAuditCosts: updated.seoAudit,
       deploymentCosts: updated.deployment,
       visualPricing: updated.visualPricing,
       forkPricing: updated.forkPricing,

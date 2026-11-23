@@ -16,7 +16,16 @@ vi.mock("@/lib/billing/credit-service", () => ({
 
 vi.mock("@/lib/store/store", () => ({ cryptoId: () => "cid" }))
 
-import { refundSeoAuditCredits, chargeSeoAuditCredits } from "./credits"
+// Price is admin data: the default is 100 credits per audit.
+const { costMock } = vi.hoisted(() => ({ costMock: vi.fn(async () => ({ auditCost: 100 })) }))
+vi.mock("@/lib/billing/runtime-config", () => ({ getSeoAuditCosts: costMock }))
+
+import {
+  chargeSeoAuditCredits,
+  getSeoAuditAffordability,
+  getSeoAuditCost,
+  refundSeoAuditCredits,
+} from "./credits"
 
 /**
  * A refund must never throw (it would mask the audit error), but it must REPORT
@@ -73,5 +82,55 @@ describe("chargeSeoAuditCredits attribution", () => {
     expect(arg.referenceType).toBe("project")
     expect(arg.referenceId).toBe("p1")
     expect(arg.transactionType).toBe("ai_collaboration")
+  })
+})
+
+describe("the audit price is admin data", () => {
+  beforeEach(() => {
+    costMock.mockResolvedValue({ auditCost: 100 })
+    grantMock.mockReset()
+    consumeMock.mockReset()
+    availableMock.mockReset()
+  })
+
+  it("charges the configured 100 credits by default", async () => {
+    await expect(getSeoAuditCost()).resolves.toBe(100)
+  })
+
+  it("follows an admin repricing", async () => {
+    costMock.mockResolvedValue({ auditCost: 250 })
+
+    await expect(getSeoAuditCost()).resolves.toBe(250)
+  })
+
+  it("debits exactly the configured amount", async () => {
+    availableMock.mockResolvedValue(500)
+    consumeMock.mockResolvedValue({ success: true })
+
+    await expect(chargeSeoAuditCredits("u1", "p1", "intent-1")).resolves.toBe(true)
+
+    const arg = consumeMock.mock.calls[0][0] as Record<string, unknown>
+    expect(arg.amount).toBe(100)
+    expect(arg.idempotencyKey).toBe("seo_intent-1")
+  })
+
+  it("refuses when the balance is below the configured price", async () => {
+    availableMock.mockResolvedValue(99)
+
+    await expect(chargeSeoAuditCredits("u1", "p1")).resolves.toBe(false)
+    expect(consumeMock).not.toHaveBeenCalled()
+  })
+
+  it("quotes the configured price to the founder", async () => {
+    availableMock.mockResolvedValue(100)
+
+    await expect(getSeoAuditAffordability("u1")).resolves.toEqual({ cost: 100, available: 100, affordable: true })
+  })
+
+  it("treats a zero price as free without touching the ledger", async () => {
+    costMock.mockResolvedValue({ auditCost: 0 })
+
+    await expect(chargeSeoAuditCredits("u1", "p1")).resolves.toBe(true)
+    expect(consumeMock).not.toHaveBeenCalled()
   })
 })

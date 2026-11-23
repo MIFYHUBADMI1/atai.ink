@@ -7,7 +7,7 @@ import {
   Loader2, AlertTriangle, Shield, Settings, Coins, DollarSign, Package,
   RefreshCw, CreditCard, Webhook, Key, ArrowRight, CheckCircle2, XCircle,
   TrendingUp, Star, Zap, MessageSquare, Brain, Hammer, Globe, Rocket, GitFork, Database, Gift, Sparkles,
-  Building2,
+  Building2, SearchCheck,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -97,6 +97,10 @@ interface BillingConfig {
     readCost: number
     assessmentCost: number
     defaults: { readCost: number; assessmentCost: number }
+  }
+  seoAuditCosts: {
+    auditCost: number
+    defaults: { auditCost: number }
   }
   deploymentCosts: {
     deployCost: number
@@ -483,6 +487,80 @@ function MirrorPipelineCostsCard({
           </Button>
           {dirty && valid && <span className="text-[11px] text-amber-500">Unsaved changes</span>}
           {!valid && <span className="text-[11px] text-destructive">Costs must be whole numbers ≥ 0</span>}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ── SEO & site analysis — editable card ─────────────────────────────────────
+
+function SeoAuditCostsCard({
+  costs,
+  onSaved,
+}: {
+  costs: BillingConfig["seoAuditCosts"]
+  onSaved: () => void
+}) {
+  const [auditCost, setAuditCost] = useState(String(costs.auditCost))
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    setAuditCost(String(costs.auditCost))
+  }, [costs.auditCost])
+
+  const auditNum = Number(auditCost)
+  const valid = Number.isInteger(auditNum) && auditNum >= 0 && auditNum <= 100_000
+  const dirty = auditNum !== costs.auditCost
+
+  async function save() {
+    if (!valid || !dirty || saving) return
+    setSaving(true)
+    try {
+      await patchJson("/api/admin/billing/configuration", { seoAudit: { auditCost: auditNum } })
+      toast.success("SEO audit repriced.")
+      onSaved()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not update the SEO audit cost.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Card>
+      <CardContent className="py-5">
+        <div className="flex items-center gap-2 mb-1">
+          <SearchCheck className="size-4 text-primary" />
+          <p className="font-medium">SEO &amp; site analysis</p>
+          <Badge variant="secondary" className="ml-auto text-[10px]">Runtime-editable</Badge>
+        </div>
+        <p className="text-xs text-muted-foreground mb-4">
+          Charged once per audit, on both the build and the connected-business surface, before the crawl runs. A failed
+          crawl is refunded automatically. Default {costs.defaults.auditCost} credits.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <label htmlFor="seo-audit-cost" className="text-xs text-muted-foreground">Credits per audit</label>
+          <input
+            id="seo-audit-cost"
+            type="number"
+            min={0}
+            max={100000}
+            step={1}
+            value={auditCost}
+            onChange={(e) => setAuditCost(e.target.value)}
+            aria-invalid={!valid}
+            className="w-28 rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+          <span className="text-xs text-muted-foreground">credits</span>
+          {!valid ? <span className="text-xs text-red-500">Whole number, 0–100,000.</span> : null}
+          {dirty ? <span className="text-[10px] text-muted-foreground">Default: {costs.defaults.auditCost}</span> : null}
+        </div>
+        <div className="mt-4 flex items-center gap-2">
+          <Button size="sm" onClick={save} disabled={!valid || !dirty || saving}>
+            {saving ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+            Save
+          </Button>
         </div>
       </CardContent>
     </Card>
@@ -1151,6 +1229,7 @@ export default function AdminConfigurationPage() {
             ["#forks", "Marketplace forks"],
             ["#infrastructure", "Infrastructure"],
             ["#business", "Connecting a business"],
+            ["#seo-audit", "SEO & site analysis"],
             ["#deployment", "Deployment"],
             ["#visual-pricing", "Visual generation"],
             ["#collaborate", "AI collaboration"],
@@ -1309,6 +1388,13 @@ export default function AdminConfigurationPage() {
           <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-4">Connecting a Business</p>
           {config?.existingBusinessCosts && (
             <ExistingBusinessCostsCard costs={config.existingBusinessCosts} onSaved={() => mutate()} />
+          )}
+        </section>
+
+        <section id="seo-audit" className="mt-8 scroll-mt-24">
+          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-4">SEO &amp; Site Analysis</p>
+          {config?.seoAuditCosts && (
+            <SeoAuditCostsCard costs={config.seoAuditCosts} onSaved={() => mutate()} />
           )}
         </section>
 

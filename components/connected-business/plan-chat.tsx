@@ -1,8 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { MessagesSquare, Send, Sparkles, UserRound } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { SectionCard } from "@/components/connected-business/page-ui"
 import { cn } from "@/lib/utils"
 
 export interface PlanMessage {
@@ -17,6 +19,12 @@ export interface PlanPreparedAction {
   toolName: string
   description: string
 }
+
+const OPENERS = [
+  "What should I fix first on my site?",
+  "Write a homepage headline in my voice.",
+  "Where should I look for my first customers?",
+] as const
 
 /**
  * The growth planner.
@@ -41,9 +49,14 @@ export function PlanChat({
   const [draft, setDraft] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const endRef = useRef<HTMLDivElement | null>(null)
 
-  async function send() {
-    const message = draft.trim()
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ block: "end" })
+  }, [messages.length, actions.length, busy])
+
+  async function send(text?: string) {
+    const message = (text ?? draft).trim()
     if (!message || busy) return
     setBusy(true)
     setError(null)
@@ -92,33 +105,80 @@ export function PlanChat({
   }
 
   return (
-    <section className="rounded-2xl border border-border/80 bg-card p-5 sm:p-6">
-      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-        Plan with your co-founder
-      </p>
-      <h2 className="mt-1 text-lg font-semibold">What to do next, in your words</h2>
-
-      <div className="mt-4 flex max-h-[26rem] flex-col gap-3 overflow-auto">
+    <SectionCard
+      icon={MessagesSquare}
+      title="Plan with your co-founder"
+      description="It reads the site you connected, never your code. Anything it proposes needs your approval before it runs."
+    >
+      <div className="flex max-h-[26rem] min-h-[10rem] flex-col gap-3 overflow-y-auto pr-1">
         {messages.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Ask what to fix first, what to write, or where to find customers. The co-founder reads the site you
-            connected, never your code.
-          </p>
+          <div className="flex flex-col gap-3 rounded-2xl border border-dashed border-border bg-muted/20 p-4">
+            <p className="flex items-center gap-2 text-sm font-medium">
+              <Sparkles className="size-4 text-primary" aria-hidden />
+              Ask what to fix first, what to write, or where to find customers.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {OPENERS.map((opener) => (
+                <button
+                  key={opener}
+                  type="button"
+                  onClick={() => void send(opener)}
+                  disabled={busy}
+                  className="rounded-full border border-border bg-background px-3 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground disabled:opacity-50"
+                >
+                  {opener}
+                </button>
+              ))}
+            </div>
+          </div>
         ) : null}
+
         {messages.map((message) => (
           <div
             key={message.id}
             className={cn(
-              "max-w-[46rem] whitespace-pre-wrap rounded-xl px-3 py-2 text-sm",
-              message.role === "user" ? "self-end bg-primary/10" : "self-start bg-muted/50",
+              "flex max-w-[46rem] items-start gap-2",
+              message.role === "user" ? "self-end flex-row-reverse" : "self-start",
             )}
           >
-            {message.content}
+            <span
+              aria-hidden
+              className={cn(
+                "mt-0.5 grid size-7 shrink-0 place-items-center rounded-full",
+                message.role === "user" ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground",
+              )}
+            >
+              {message.role === "user" ? <UserRound className="size-3.5" /> : <Sparkles className="size-3.5" />}
+            </span>
+            <div
+              className={cn(
+                "min-w-0 whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-sm leading-6",
+                message.role === "user" ? "bg-primary/10" : "bg-muted/50",
+              )}
+            >
+              {message.content}
+            </div>
           </div>
         ))}
+
+        {busy ? (
+          <div className="flex items-center gap-2 self-start rounded-2xl bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+            <span className="flex gap-1" aria-hidden>
+              <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.3s]" />
+              <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.15s]" />
+              <span className="size-1.5 animate-bounce rounded-full bg-current" />
+            </span>
+            Thinking…
+          </div>
+        ) : null}
+
         {actions.map((action) => (
-          <div key={action.id} className="self-start rounded-xl border border-border bg-background px-3 py-2 text-sm">
+          <div
+            key={action.id}
+            className="self-start rounded-2xl border border-primary/20 bg-primary/5 px-3 py-2 text-sm"
+          >
             <p className="font-medium">{action.description}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">Nothing runs until you approve it.</p>
             <div className="mt-2 flex gap-2">
               <Button size="sm" onClick={() => resolve(action, "approve")}>
                 Approve
@@ -129,11 +189,12 @@ export function PlanChat({
             </div>
           </div>
         ))}
+        <div ref={endRef} />
       </div>
 
       {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
 
-      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-end">
         <textarea
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
@@ -144,13 +205,15 @@ export function PlanChat({
             }
           }}
           rows={2}
+          aria-label="Message your co-founder"
           placeholder="What should we work on next?"
           className="min-h-[2.75rem] w-full resize-y rounded-xl border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         />
-        <Button type="button" onClick={send} disabled={busy || draft.trim().length === 0}>
+        <Button type="button" onClick={() => void send()} disabled={busy || draft.trim().length === 0} className="shrink-0">
+          <Send className="mr-2 size-4" aria-hidden />
           {busy ? "Thinking…" : "Send"}
         </Button>
       </div>
-    </section>
+    </SectionCard>
   )
 }

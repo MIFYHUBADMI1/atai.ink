@@ -4,6 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   AppWindow,
+  ArrowLeft,
   Building2,
   LayoutDashboard,
   MessagesSquare,
@@ -43,8 +44,13 @@ const STATUS_LABEL: Record<BusinessStatus, string> = {
 const STATUS_CLASS: Record<BusinessStatus, string> = {
   draft: "bg-muted text-muted-foreground",
   active: "bg-success/15 text-success",
-  suspended: "bg-amber-500/10 text-amber-600",
+  suspended: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
   archived: "bg-muted text-muted-foreground",
+}
+
+function initialOf(name: string): string {
+  const letter = name.trim().charAt(0)
+  return letter ? letter.toUpperCase() : "B"
 }
 
 export function BusinessShell({
@@ -63,27 +69,47 @@ export function BusinessShell({
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-border">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 pt-5 pb-0 sm:px-6 lg:px-8">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-2">
-              <Building2 className="size-4 shrink-0 text-primary" aria-hidden />
-              <span className="truncate text-sm font-semibold">{businessName}</span>
+      <header className="sticky top-0 z-30 border-b border-border/80 bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+        <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between gap-3 py-3">
+            <div className="flex min-w-0 items-center gap-3">
               <span
-                className={cn(
-                  "shrink-0 rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em]",
-                  STATUS_CLASS[status],
-                )}
+                aria-hidden
+                className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-primary to-primary/60 text-sm font-semibold text-primary-foreground shadow-sm"
               >
-                {STATUS_LABEL[status]}
+                {initialOf(businessName)}
               </span>
+              <div className="flex min-w-0 flex-col">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="truncate text-sm font-semibold tracking-tight">{businessName}</span>
+                  <span
+                    className={cn(
+                      "shrink-0 rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em]",
+                      STATUS_CLASS[status],
+                    )}
+                  >
+                    {STATUS_LABEL[status]}
+                  </span>
+                </div>
+                <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                  <Building2 className="size-3" aria-hidden />
+                  Connected business
+                </span>
+              </div>
             </div>
-            <Link href="/projects" className="text-xs text-muted-foreground underline-offset-4 hover:underline">
-              ← All businesses
+            <Link
+              href="/projects"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
+            >
+              <ArrowLeft className="size-3.5" aria-hidden />
+              <span className="hidden sm:inline">All businesses</span>
             </Link>
           </div>
 
-          <nav aria-label="Business workspace" className="flex flex-wrap gap-1 border-b border-transparent">
+          <nav
+            aria-label="Business workspace"
+            className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
             {BUSINESS_NAV.map((item) => {
               const href = `${root}${item.href}`
               const active = item.href === "" ? pathname === root : pathname.startsWith(href)
@@ -95,10 +121,10 @@ export function BusinessShell({
                   data-atai-tour={item.tour}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-t-lg px-3 py-2 text-sm font-medium transition-colors",
+                    "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
                     active
-                      ? "border-b-2 border-primary text-foreground"
-                      : "border-b-2 border-transparent text-muted-foreground hover:text-foreground",
+                      ? "bg-primary/10 text-primary ring-1 ring-primary/20"
+                      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                   )}
                 >
                   <Icon className="size-4" aria-hidden />

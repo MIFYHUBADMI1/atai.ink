@@ -1,4 +1,7 @@
 import Link from "next/link"
+import { Eye, ShieldCheck } from "lucide-react"
+
+import { SectionCard } from "@/components/connected-business/page-ui"
 import { CofounderMarkdown } from "@/components/cofounder/markdown"
 import type { DeploymentSiteAvailability, GrowthOverview, NumberMetric } from "@/lib/marketing/growth-overview"
 import { projectBase, type WorkspaceBase } from "@/lib/connected-business/surface"
@@ -74,16 +77,16 @@ export function GrowthOverviewView({
     // pipeline to advise on, so the honest view is the absence itself — never
     // a grid of zeroes, which reads as "nobody visited".
     return (
-      <div className="flex min-w-0 flex-col gap-6 sm:gap-8">
-        <section className="flex flex-col gap-3">
-          <h2 className="text-lg font-semibold tracking-tight">What Atai can see</h2>
-          <p className="rounded-2xl border border-border bg-card p-4 text-sm leading-6 text-muted-foreground sm:p-5">
-            {overview.measurementNote}
-          </p>
-        </section>
+      <div className="flex min-w-0 flex-col gap-6">
+        <SectionCard icon={Eye} title="What Atai can see">
+          <p className="text-sm leading-6 text-muted-foreground">{overview.measurementNote}</p>
+        </SectionCard>
 
-        <section className="flex flex-col gap-2">
-          <h2 className="text-lg font-semibold tracking-tight">How to read what Atai tells you</h2>
+        <SectionCard
+          icon={ShieldCheck}
+          title="How to read what Atai tells you"
+          description="These rules hold on every number and sentence the co-founder writes about this business."
+        >
           <ul className="flex flex-col gap-2">
             {overview.trustNotes.map((note) => (
               <li key={note} className="flex min-w-0 gap-2 text-xs leading-5 text-muted-foreground">
@@ -92,7 +95,7 @@ export function GrowthOverviewView({
               </li>
             ))}
           </ul>
-        </section>
+        </SectionCard>
       </div>
     )
   }

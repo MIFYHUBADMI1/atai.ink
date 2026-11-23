@@ -78,6 +78,7 @@ export function BusinessProfile({
   initialView,
   base,
   apiBase,
+  headingLevel = "h1",
 }: {
   projectId: string
   initialView: IntakeView
@@ -88,6 +89,8 @@ export function BusinessProfile({
    *  connected business addresses the same operations by business id, so the
    *  anchor project id never appears in the browser. */
   apiBase?: string
+  /** "h2" when the host page already owns the page title (one h1 per page). */
+  headingLevel?: "h1" | "h2"
 }) {
   const routeBase = base ?? projectBase(projectId)
   const api = apiBase ?? `/api/projects/${projectId}`
@@ -257,9 +260,15 @@ export function BusinessProfile({
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <h1 className="text-2xl font-semibold tracking-tight text-balance sm:text-3xl">
-            {view.displayName || "Your existing business"}
-          </h1>
+          {headingLevel === "h1" ? (
+            <h1 className="text-2xl font-semibold tracking-tight text-balance sm:text-3xl">
+              {view.displayName || "Your existing business"}
+            </h1>
+          ) : (
+            <h2 className="text-2xl font-semibold tracking-tight text-balance sm:text-3xl">
+              {view.displayName || "Your existing business"}
+            </h2>
+          )}
           <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
             {allDone
               ? "All three steps are done. Your co-founder can see this business now — ask it anything, or pick the section that matches your goal."

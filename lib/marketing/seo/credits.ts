@@ -12,25 +12,22 @@ import "server-only"
  */
 
 import { consumeCredits, grantCredits, getAvailableCredits } from "@/lib/billing/credit-service"
+import { getSeoAuditCosts } from "@/lib/billing/runtime-config"
 import { cryptoId } from "@/lib/store/store"
 import { logger } from "@/lib/logging/logger"
 
 /**
- * Default credit cost for one bounded SEO audit. Overridable via
- * SEO_AUDIT_CREDIT_COST (integer ≥ 0; 0 makes the feature free and skips the
- * ledger entirely). Kept as a local knob rather than editing the shared billing
- * settings schema, so this phase touches no unrelated billing logic.
+ * Credit cost for one bounded SEO audit — a crawl of the site plus the on-page
+ * analysis. It is admin data (`/admin/billing/configuration` → "SEO & site
+ * analysis"), defaulting to 100, so repricing never needs a deploy. A cost of 0
+ * makes the feature free and skips the ledger entirely.
  */
-export function getSeoAuditCost(): number {
-  const raw = process.env.SEO_AUDIT_CREDIT_COST
-  if (raw === undefined) return 15
-  const parsed = Number.parseInt(raw, 10)
-  if (!Number.isFinite(parsed) || parsed < 0) return 15
-  return parsed
+export async function getSeoAuditCost(): Promise<number> {
+  return (await getSeoAuditCosts()).auditCost
 }
 
 export async function getSeoAuditAffordability(userId: string): Promise<{ cost: number; available: number; affordable: boolean }> {
-  const cost = getSeoAuditCost()
+  const cost = await getSeoAuditCost()
   const available = await getAvailableCredits(userId)
   return { cost, available, affordable: cost <= 0 || available >= cost }
 }
@@ -49,7 +46,7 @@ export async function getSeoAuditAffordability(userId: string): Promise<{ cost: 
  * `chargeStudioCredits`. NEVER derived from a raw client guess alone.
  */
 export async function chargeSeoAuditCredits(userId: string, projectId: string, intentKey?: string): Promise<boolean> {
-  const amount = getSeoAuditCost()
+  const amount = await getSeoAuditCost()
   if (amount <= 0) {
     logger.info("credits.seo", "charge skipped (zero cost configured)", { userId, projectId })
     return true
@@ -88,9 +85,8 @@ export type SeoRefundOutcome = "refunded" | "not_charged" | "failed"
  * refund must not mask the original crawl error — but it REPORTS the outcome
  * so the caller can record it on the failed audit.
  *
- * `amount` defaults to the current configured cost; callers that already know
- * what was charged pass it explicitly so an env change between charge and
- * refund cannot refund the wrong number.
+ * `amount` is what was actually charged: an admin repricing between charge and
+ * refund must not refund the new price.
  *
  * `intentKey` — pass the SAME stable identifier used to charge and the refund
  * key becomes deterministic (`seo_${intentKey}_refund`), so a retried failure
@@ -100,7 +96,7 @@ export type SeoRefundOutcome = "refunded" | "not_charged" | "failed"
 export async function refundSeoAuditCredits(
   userId: string,
   projectId: string,
-  amount: number = getSeoAuditCost(),
+  amount: number,
   intentKey?: string,
 ): Promise<SeoRefundOutcome> {
   if (amount <= 0) return "not_charged"

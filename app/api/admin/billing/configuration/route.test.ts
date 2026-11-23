@@ -24,6 +24,7 @@ vi.mock("@/lib/billing/runtime-config", () => ({
   getBuildTierCosts: mocks.getBuildTierCosts,
   getMirrorPipelineCosts: mocks.getMirrorPipelineCosts,
   getExistingBusinessCosts: mocks.getExistingBusinessCosts,
+  getSeoAuditCosts: vi.fn(async () => ({ auditCost: 100 })),
   getDeploymentCosts: mocks.getDeploymentCosts,
   getVisualPricing: mocks.getVisualPricing,
   getForkPricing: mocks.getForkPricing,
@@ -38,6 +39,7 @@ vi.mock("@/lib/billing/runtime-config", () => ({
     scrapeCost: 1, heavyScrapeCost: 2, planCost: 3, heavyPlanCost: 4, deepCrawlCost: 5, heavyDeepCrawlCost: 6,
   },
   DEFAULT_EXISTING_BUSINESS_COSTS: { readCost: 1, assessmentCost: 2 },
+  DEFAULT_SEO_AUDIT_COSTS: { auditCost: 100 },
   DEFAULT_DEPLOYMENT_COSTS: { deployCost: 1 },
   DEFAULT_VISUAL_PRICING_CONFIG: {
     markup: 1.45, creditsPerUsd: 4000, fallbackCredits: 1600, estimatedCredits: 1000,

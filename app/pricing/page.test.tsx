@@ -37,6 +37,7 @@ vi.mock("@/lib/billing/runtime-config", () => ({
     heavyDeepCrawlCost: 1_000,
   })),
   getDeploymentCosts: vi.fn(async () => ({ deployCost: 10_000 })),
+  getSeoAuditCosts: vi.fn(async () => ({ auditCost: 100 })),
   getRewardSettings: vi.fn(async () => ({
     welcomeBonus: 500,
     referralSignupBonus: 500,

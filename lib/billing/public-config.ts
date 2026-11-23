@@ -6,6 +6,7 @@ import {
   getMirrorPipelineCosts,
   getPromotionalOffers,
   getRewardSettings,
+  getSeoAuditCosts,
   getVisualPricing,
 } from "./runtime-config"
 import { publicPromotionalOffers } from "./offers"
@@ -16,12 +17,13 @@ import type { PublicBillingConfig } from "./public-config-types"
  * Every number is admin-configurable; pages must not repeat these values.
  */
 export async function getPublicBillingConfig(): Promise<PublicBillingConfig> {
-  const [rewards, buildTierCosts, mirrorPipelineCosts, deploymentCosts, visualPricing, offers] = await Promise.all([
+  const [rewards, buildTierCosts, mirrorPipelineCosts, deploymentCosts, visualPricing, seoAuditCosts, offers] = await Promise.all([
     getRewardSettings(),
     getBuildTierCosts(),
     getMirrorPipelineCosts(),
     getDeploymentCosts(),
     getVisualPricing(),
+    getSeoAuditCosts(),
     getPromotionalOffers(),
   ])
 
@@ -30,6 +32,7 @@ export async function getPublicBillingConfig(): Promise<PublicBillingConfig> {
     buildTierCosts,
     mirrorPipelineCosts,
     deploymentCosts,
+    seoAuditCosts,
     visualPricing,
     offers: publicPromotionalOffers(offers),
   }
