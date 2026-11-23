@@ -114,6 +114,19 @@ describe("BusinessProfile", () => {
     expect(html).not.toContain('href="/project/p1/market"')
   })
 
+  it("sends the founder to its own keys, never into the build workspace", () => {
+    const html = renderToStaticMarkup(
+      createElement(BusinessProfile, {
+        projectId: "p1",
+        initialView: view({ domain: { records: [], verified: true, hostname: "bakery.example" } }),
+        base: businessBaseRef("biz_1"),
+      }),
+    )
+
+    expect(html).toContain('href="/business/biz_1/settings"')
+    expect(html).not.toContain('href="/project/p1/')
+  })
+
   it("tells the founder what the connection is for, and what Atai will not do", () => {
     const html = render(view({ domain: { records: [], verified: true, hostname: "bakery.example" } }))
 

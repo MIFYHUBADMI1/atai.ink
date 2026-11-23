@@ -376,6 +376,11 @@ export function BusinessProfile({
                   connection={view.connection}
                   domainVerified={view.domain.verified}
                   hostname={view.domain.hostname}
+                  runtimeLink={
+                    routeBase.mode === "operate"
+                      ? { href: routeBase.href("settings"), label: "Keys & usage" }
+                      : undefined
+                  }
                   onChanged={refresh}
                 />
               ) : null}
