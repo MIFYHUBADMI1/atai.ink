@@ -11,15 +11,21 @@
  * `--allow-in-use` is the separately authorised recovery procedure: it proceeds
  * after printing what it will orphan. Read the dry-run first.
  */
+import { CliUsageError, parseMode, requireRunId } from "@/lib/connected-business/cli"
 import { rollbackMigration } from "@/lib/connected-business/rollback"
 
 async function main() {
-  const mode = process.argv[2] === "apply" ? "apply" : "dry-run"
-  const runId = process.argv.find((argument) => argument.startsWith("--run-id="))?.slice(9)
-  if (!runId) {
-    console.error("A run id is required: --run-id=<id>")
-    process.exitCode = 1
-    return
+  const mode = parseMode(process.argv)
+  let runId: string
+  try {
+    runId = requireRunId(process.argv)
+  } catch (error) {
+    if (error instanceof CliUsageError) {
+      console.error(error.message)
+      process.exitCode = 1
+      return
+    }
+    throw error
   }
 
   const allowInUse = process.argv.includes("--allow-in-use")
