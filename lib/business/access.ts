@@ -3,13 +3,7 @@ import "server-only"
 import { AppError } from "@/lib/errors"
 import { businessMembersCol, businessesCol, connectedApplicationsCol } from "@/lib/db/collections"
 import type { BusinessDoc, BusinessMemberDoc, BusinessRole } from "@/lib/types/business"
-import {
-  type Actor,
-  type Permission,
-  SYSTEM_PERMISSIONS,
-  isWritePermission,
-  permissionsForRole,
-} from "./permissions"
+import { type Actor, type Permission, isWritePermission, permissionsForRole } from "./permissions"
 
 /**
  * The only authorisation entry point for a connected business.
@@ -45,9 +39,10 @@ export async function requireBusinessAccess(input: RequireBusinessAccessInput): 
   if (!business) throw new AppError("BUSINESS_NOT_FOUND")
 
   if (input.actor.kind === "system") {
-    if (!SYSTEM_PERMISSIONS.has(input.permission)) throw new AppError("BUSINESS_FORBIDDEN")
-    if (input.applicationId) await assertApplicationInBusiness(business.id, input.applicationId)
-    return { business, member: null, role: null, permissions: SYSTEM_PERMISSIONS }
+    throw new AppError(
+      "BUSINESS_FORBIDDEN",
+      "A system actor holds no business-scoped permission. Internal jobs use dedicated functions.",
+    )
   }
 
   const member = await (await businessMembersCol()).findOne({

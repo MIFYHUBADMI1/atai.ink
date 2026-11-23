@@ -91,4 +91,10 @@ export function roleHasPermission(role: BusinessRole, permission: Permission): b
  * A system actor is not a member. It may run exactly the operations the
  * migration and verification need, and nothing else.
  */
-export const SYSTEM_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>(["business.manage"])
+/**
+ * Internal jobs hold no business-scoped permission. Creation, migration and
+ * verification run through dedicated functions that enforce their own rules;
+ * they never act through the member gate, so a system actor cannot rename,
+ * archive or read a customer's business.
+ */
+export const SYSTEM_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>()

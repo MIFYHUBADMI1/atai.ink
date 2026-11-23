@@ -5,11 +5,20 @@
  * collection boundary (`@/lib/db/collections`) so the real business logic runs
  * against real documents; nothing here stubs the logic under test.
  *
- * Uniqueness is modelled the way the indexes are declared, including partial
- * predicates, so an archived row does not block its origin.
+ * Two properties are modelled deliberately, because both have already hidden a
+ * real defect:
+ *
+ * 1. Uniqueness follows the declared indexes, including partial predicates, so
+ *    an archived row does not block its origin.
+ * 2. A transaction is a visibility boundary. While `withTransaction` is open,
+ *    any call without `{ session }` throws. The driver behaves the same way: an
+ *    operation outside the session cannot see the transaction's own writes.
  */
 
 type Filter = Record<string, unknown>
+interface FakeOptions {
+  session?: unknown
+}
 
 export interface FakeUpdate {
   $set?: Record<string, unknown>
@@ -20,12 +29,27 @@ type UniqueRule<T> = string[] | { keys: string[]; when?: (doc: T) => boolean }
 
 export interface FakeCollection<T extends object> {
   docs: T[]
-  insertOne: (doc: T, options?: unknown) => Promise<{ insertedId: string }>
-  findOne: (filter?: Filter) => Promise<T | null>
-  find: (filter?: Filter) => { toArray: () => Promise<T[]> }
-  updateOne: (filter: Filter, update: FakeUpdate) => Promise<{ matchedCount: number; modifiedCount: number }>
-  countDocuments: (filter?: Filter) => Promise<number>
-  deleteMany: (filter?: Filter) => Promise<{ deletedCount: number }>
+  insertOne: (doc: T, options?: FakeOptions) => Promise<{ insertedId: string }>
+  findOne: (filter?: Filter, options?: FakeOptions) => Promise<T | null>
+  find: (filter?: Filter, options?: FakeOptions) => { toArray: () => Promise<T[]> }
+  updateOne: (
+    filter: Filter,
+    update: FakeUpdate,
+    options?: FakeOptions,
+  ) => Promise<{ matchedCount: number; modifiedCount: number }>
+  countDocuments: (filter?: Filter, options?: FakeOptions) => Promise<number>
+  deleteMany: (filter?: Filter, options?: FakeOptions) => Promise<{ deletedCount: number }>
+}
+
+let transactionDepth = 0
+
+function assertSession(options: FakeOptions | undefined, operation: string): void {
+  if (transactionDepth > 0 && !options?.session) {
+    throw new Error(
+      `${operation} ran inside a transaction without { session }. ` +
+        "An operation outside the session cannot see uncommitted writes.",
+    )
+  }
 }
 
 function field(doc: object, key: string): unknown {
@@ -64,20 +88,24 @@ export function fakeCollection<T extends object>(
 
   return {
     docs,
-    async insertOne(doc) {
+    async insertOne(doc, options) {
+      assertSession(options, "insertOne")
       if (violatesUnique(doc)) {
         throw Object.assign(new Error("E11000 duplicate key error"), { code: 11000 })
       }
       docs.push(doc)
       return { insertedId: String(field(doc, "id") ?? docs.length) }
     },
-    async findOne(filter = {}) {
+    async findOne(filter = {}, options) {
+      assertSession(options, "findOne")
       return docs.find((doc) => matches(doc, filter)) ?? null
     },
-    find(filter = {}) {
+    find(filter = {}, options) {
+      assertSession(options, "find")
       return { toArray: async () => docs.filter((doc) => matches(doc, filter)) }
     },
-    async updateOne(filter, update) {
+    async updateOne(filter, update, options) {
+      assertSession(options, "updateOne")
       const doc = docs.find((candidate) => matches(candidate, filter))
       if (!doc) return { matchedCount: 0, modifiedCount: 0 }
       if (update.$set) Object.assign(doc, update.$set)
@@ -86,10 +114,12 @@ export function fakeCollection<T extends object>(
       }
       return { matchedCount: 1, modifiedCount: 1 }
     },
-    async countDocuments(filter = {}) {
+    async countDocuments(filter = {}, options) {
+      assertSession(options, "countDocuments")
       return docs.filter((doc) => matches(doc, filter)).length
     },
-    async deleteMany(filter = {}) {
+    async deleteMany(filter = {}, options) {
+      assertSession(options, "deleteMany")
       const keep = docs.filter((doc) => !matches(doc, filter))
       const deletedCount = docs.length - keep.length
       docs.length = 0
@@ -99,10 +129,17 @@ export function fakeCollection<T extends object>(
   }
 }
 
-/** A transaction that runs its callback once. Enough to prove the write path is atomic. */
+/** Runs its callback once, with the session-visibility rule enforced. */
 export function fakeSession() {
   return {
-    withTransaction: async <R>(fn: () => Promise<R>): Promise<R> => fn(),
+    withTransaction: async <R>(fn: () => Promise<R>): Promise<R> => {
+      transactionDepth += 1
+      try {
+        return await fn()
+      } finally {
+        transactionDepth -= 1
+      }
+    },
     endSession: async () => {},
   }
 }

@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, statSync } from "node:fs"
-import { join, relative } from "node:path"
+import { dirname, join, relative, resolve } from "node:path"
 import { describe, expect, it } from "vitest"
 
 const ROOT = process.cwd()
@@ -24,24 +24,32 @@ function importedSpecifiers(file: string): string[] {
   return [...source.matchAll(/(?:from|import)\s*\(?\s*["']([^"']+)["']/g)].map((match) => match[1])
 }
 
-const PROJECT_SIDE = ["lib/projects", "lib/marketing", "lib/cofounder", "lib/runtime", "app/project"]
-
-function underPrefix(specifier: string, prefix: string): boolean {
-  return specifier === prefix || specifier.startsWith(`${prefix}/`)
+/** `@/x` and `./x` both become absolute paths, so a relative import cannot slip past. */
+function resolveSpecifier(specifier: string, fromFile: string): string {
+  if (specifier.startsWith("@/")) return join(ROOT, specifier.slice(2))
+  if (specifier.startsWith(".")) return resolve(dirname(fromFile), specifier)
+  return specifier
 }
+
+function underPrefix(target: string, prefix: string): boolean {
+  return target === prefix || target.startsWith(`${prefix}/`)
+}
+
+const PROJECT_SIDE = ["lib/projects", "lib/marketing", "lib/cofounder", "lib/runtime", "app/project"]
 
 describe("business and project stay separate", () => {
   it("keeps lib/business free of project, marketing, cofounder and runtime imports", () => {
     const forbidden = [
-      ...PROJECT_SIDE.map((tree) => `@/${tree}`),
-      "@/lib/types/project",
-      "@/lib/dashboard",
-      "@/components/dashboard",
+      ...PROJECT_SIDE.map((tree) => join(ROOT, tree)),
+      join(ROOT, "lib/types/project"),
+      join(ROOT, "lib/dashboard"),
+      join(ROOT, "components/dashboard"),
     ]
     const offenders: string[] = []
     for (const file of sourceFiles(join(ROOT, "lib/business"))) {
       for (const specifier of importedSpecifiers(file)) {
-        if (forbidden.some((prefix) => underPrefix(specifier, prefix))) {
+        const target = resolveSpecifier(specifier, file)
+        if (forbidden.some((prefix) => underPrefix(target, prefix))) {
           offenders.push(`${relative(ROOT, file)} → ${specifier}`)
         }
       }
@@ -50,16 +58,23 @@ describe("business and project stay separate", () => {
   })
 
   it("keeps the project side free of business imports", () => {
+    const business = join(ROOT, "lib/business")
     const offenders: string[] = []
     for (const tree of PROJECT_SIDE) {
       for (const file of sourceFiles(join(ROOT, tree))) {
         for (const specifier of importedSpecifiers(file)) {
-          if (underPrefix(specifier, "@/lib/business")) {
+          if (underPrefix(resolveSpecifier(specifier, file), business)) {
             offenders.push(`${relative(ROOT, file)} → ${specifier}`)
           }
         }
       }
     }
     expect(offenders).toEqual([])
+  })
+
+  it("catches a relative import that crosses the boundary", () => {
+    const from = join(ROOT, "lib/business/access.ts")
+    expect(underPrefix(resolveSpecifier("../../lib/projects/foo", from), join(ROOT, "lib/projects"))).toBe(true)
+    expect(underPrefix(resolveSpecifier("./members", from), join(ROOT, "lib/projects"))).toBe(false)
   })
 })

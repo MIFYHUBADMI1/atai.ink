@@ -944,8 +944,9 @@ async function runEnsureIndexes(): Promise<void> {
   ])
 
   // Connected businesses (ADR-8). One business per hostname stays enforced on
-  // business_domains; these indexes enforce the model's own invariants. Each is
-  // additive, so a failed build never blocks the rest of the bootstrap.
+  // business_domains; these indexes enforce the model's own invariants. A
+  // failure here is logged and retried on a later call, but it does prevent
+  // __mirrorIndexesReady from being set for that attempt.
   const [businesses, applications, members, domains] = await Promise.all([
     businessesCol(), connectedApplicationsCol(), businessMembersCol(), businessDomainsCol(),
   ])
@@ -977,6 +978,16 @@ async function runEnsureIndexes(): Promise<void> {
       },
     ),
     members.createIndex({ businessId: 1, userId: 1 }, { unique: true, name: "business_members_unique" }),
+    // One active owner per business. Ownership is seated once, at creation, so
+    // a concurrent second call fails here rather than producing two owners.
+    members.createIndex(
+      { businessId: 1 },
+      {
+        unique: true,
+        partialFilterExpression: { role: "owner", status: "active" },
+        name: "business_members_one_owner",
+      },
+    ),
     members.createIndex({ userId: 1, status: 1 }),
     domains.createIndex({ businessId: 1, createdAt: -1 }),
   ])

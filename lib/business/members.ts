@@ -66,15 +66,19 @@ export async function addOwner(input: {
     throw new AppError("BUSINESS_FORBIDDEN", "Ownership is seated only by business creation.")
   }
 
-  const business = await (await businessesCol()).findOne({ id: input.businessId })
+  const options = input.session ? { session: input.session } : undefined
+  const business = await (await businessesCol()).findOne({ id: input.businessId }, options)
   if (!business) throw new AppError("BUSINESS_NOT_FOUND")
 
-  const existing = await (await businessMembersCol()).countDocuments({ businessId: input.businessId })
+  const existing = await (await businessMembersCol()).countDocuments({ businessId: input.businessId }, options)
   if (existing > 0) {
     throw new AppError("VALIDATION", "Ownership is not changed once a business has members.")
   }
 
-  return createMember({ ...input, role: "owner", scope: { kind: "all" } })
+  return createMember(
+    { ...input, role: "owner", scope: { kind: "all" } },
+    new AppError("VALIDATION", "This business already has an owner."),
+  )
 }
 
 export async function addMember(input: {
@@ -237,19 +241,23 @@ async function validateScope(businessId: string, scope: MemberScope): Promise<Me
   return { kind: "applications", applicationIds: ids }
 }
 
-async function createMember(input: {
-  businessId: string
-  userId: string
-  role: BusinessRole
-  scope: MemberScope
-  invitedBy?: string
-  now?: number
-  migration?: MigrationStamp
-  session?: ClientSession
-}): Promise<BusinessMemberDoc> {
+async function createMember(
+  input: {
+    businessId: string
+    userId: string
+    role: BusinessRole
+    scope: MemberScope
+    invitedBy?: string
+    now?: number
+    migration?: MigrationStamp
+    session?: ClientSession
+  },
+  duplicate?: AppError,
+): Promise<BusinessMemberDoc> {
   const now = input.now ?? Date.now()
+  const options = input.session ? { session: input.session } : undefined
   const col = await businessMembersCol()
-  const existing = await col.findOne({ businessId: input.businessId, userId: input.userId })
+  const existing = await col.findOne({ businessId: input.businessId, userId: input.userId }, options)
 
   if (existing) {
     throw new AppError(
@@ -274,10 +282,10 @@ async function createMember(input: {
   if (input.migration) member.migration = input.migration
 
   try {
-    await col.insertOne(member, input.session ? { session: input.session } : undefined)
+    await col.insertOne(member, options)
   } catch (error) {
     if (isDuplicateKey(error)) {
-      throw new AppError("VALIDATION", "That person is already a member of this business.")
+      throw duplicate ?? new AppError("VALIDATION", "That person is already a member of this business.")
     }
     throw error
   }

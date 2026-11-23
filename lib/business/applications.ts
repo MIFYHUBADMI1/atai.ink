@@ -58,7 +58,7 @@ export async function createApplication(input: CreateApplicationInput): Promise<
   const name = input.name.trim()
   if (!name) throw new AppError("VALIDATION", "Give the application a name.")
 
-  const { hostname, basePath } = splitAddress(input.url, input.basePath)
+  const { hostname, basePath, primaryUrl } = splitAddress(input.url, input.basePath)
   const col = await connectedApplicationsCol()
 
   const existing = await col.findOne({
@@ -75,7 +75,7 @@ export async function createApplication(input: CreateApplicationInput): Promise<
     businessId: input.businessId,
     name,
     kind: input.kind,
-    primaryUrl: input.url.trim(),
+    primaryUrl,
     hostname,
     basePath,
     trustDomain: hostname,
@@ -147,7 +147,7 @@ export async function listApplications(input: {
   actor: Actor
   includeArchived?: boolean
 }): Promise<ConnectedApplicationDoc[]> {
-  await requireBusinessAccess({
+  const access = await requireBusinessAccess({
     businessId: input.businessId,
     actor: input.actor,
     permission: "apps.read",
@@ -156,7 +156,12 @@ export async function listApplications(input: {
   const filter: Record<string, unknown> = { businessId: input.businessId }
   if (!input.includeArchived) filter.archivedAt = { $exists: false }
   const rows = await (await connectedApplicationsCol()).find(filter).toArray()
-  return rows.sort((a, b) => a.createdAt - b.createdAt)
+
+  const scope = access.member?.scope
+  const scoped = scope && scope.kind === "applications" ? new Set(scope.applicationIds) : null
+  return rows
+    .filter((row) => !scoped || scoped.has(row.id))
+    .sort((a, b) => a.createdAt - b.createdAt)
 }
 
 /** Display/log form: "example.com/shop". Never a uniqueness key. */
@@ -164,7 +169,18 @@ export function applicationAddress(application: Pick<ConnectedApplicationDoc, "h
   return applicationOrigin(application)
 }
 
-function splitAddress(url: string, explicitBasePath?: string): { hostname: string; basePath: string } {
+const ALLOWED_PROTOCOLS = new Set(["http:", "https:"])
+
+/**
+ * Returns the stored address alongside the identity, derived from the same
+ * parse. `primaryUrl` is rebuilt from the normalised parts rather than keeping
+ * the typed string, so it can never carry credentials or a scheme the rest of
+ * the model does not support. Ports are not part of application identity.
+ */
+function splitAddress(
+  url: string,
+  explicitBasePath?: string,
+): { hostname: string; basePath: string; primaryUrl: string } {
   const value = (url ?? "").trim()
   if (!value) throw new AppError("VALIDATION", "Enter the application's address.")
 
@@ -174,6 +190,13 @@ function splitAddress(url: string, explicitBasePath?: string): { hostname: strin
     parsed = new URL(candidate)
   } catch {
     throw new AppError("VALIDATION", "That doesn't look like a website address.")
+  }
+
+  if (!ALLOWED_PROTOCOLS.has(parsed.protocol)) {
+    throw new AppError("VALIDATION", "Use an http:// or https:// address.")
+  }
+  if (parsed.username || parsed.password) {
+    throw new AppError("VALIDATION", "Remove the username and password from the address.")
   }
 
   let hostname: string
@@ -192,7 +215,7 @@ function splitAddress(url: string, explicitBasePath?: string): { hostname: strin
       error instanceof PathInputError ? error.message : "That path can't be used.",
     )
   }
-  return { hostname, basePath }
+  return { hostname, basePath, primaryUrl: `${parsed.protocol}//${hostname}${basePath}` }
 }
 
 function duplicateOrigin(): AppError {

@@ -3,7 +3,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 vi.mock("@/lib/db/collections", async () => {
   const { fakeCollection } = await import("@/lib/business/testing/fake-collections")
   const businesses = fakeCollection()
-  const members = fakeCollection({ unique: [["businessId", "userId"]] })
+  const members = fakeCollection({
+    unique: [
+      ["businessId", "userId"],
+      {
+        keys: ["businessId"],
+        when: (doc: { role?: string; status?: string }) => doc.role === "owner" && doc.status === "active",
+      },
+    ],
+  })
   const applications = fakeCollection({
     unique: [
       {
@@ -178,6 +186,41 @@ describe("connected applications", () => {
     expect(fakes.applications.docs[0].archivedAt).toBeUndefined()
   })
 
+  it("stores a canonical address instead of the typed string", async () => {
+    const app = await createApplication({
+      businessId: "biz_1",
+      actor: OWNER,
+      name: "Shop",
+      kind: "storefront",
+      url: "HTTPS://Example.COM/shop/",
+      now: NOW,
+    })
+    expect(app.primaryUrl).toBe("https://example.com/shop")
+  })
+
+  it("refuses an address carrying credentials", async () => {
+    await expect(
+      createApplication({
+        businessId: "biz_1",
+        actor: OWNER,
+        name: "Shop",
+        kind: "storefront",
+        url: "https://user:secret@example.com/shop",
+        now: NOW,
+      }),
+    ).rejects.toMatchObject({ code: "VALIDATION" })
+    expect(fakes.applications.docs).toHaveLength(0)
+  })
+
+  it("refuses a scheme other than http or https", async () => {
+    for (const url of ["ftp://example.com", "data://example.com/x"]) {
+      await expect(
+        createApplication({ businessId: "biz_1", actor: OWNER, name: "A", kind: "other", url, now: NOW }),
+      ).rejects.toMatchObject({ code: "VALIDATION" })
+    }
+    expect(fakes.applications.docs).toHaveLength(0)
+  })
+
   it("rejects an unusable address or path", async () => {
     await expect(
       createApplication({ businessId: "biz_1", actor: OWNER, name: "A", kind: "other", url: "not a url", now: NOW }),
@@ -243,6 +286,20 @@ describe("application authorisation", () => {
       now: NOW,
     })
     expect(archived.archivedAt).toBe(NOW)
+  })
+
+  it("lists only the applications inside a member's scope", async () => {
+    const shop = await createApplication({ businessId: "biz_1", actor: OWNER, name: "Shop", kind: "storefront", url: "example.com/shop", now: NOW })
+    const dash = await createApplication({ businessId: "biz_1", actor: OWNER, name: "Dash", kind: "saas_app", url: "example.com/dashboard", now: NOW })
+    seedMember({
+      userId: "u_scoped",
+      role: "developer",
+      scope: { kind: "applications", applicationIds: [shop.id] },
+    })
+
+    const listed = await listApplications({ businessId: "biz_1", actor: userActor("u_scoped") })
+    expect(listed.map((app) => app.id)).toEqual([shop.id])
+    expect(listed.map((app) => app.id)).not.toContain(dash.id)
   })
 
   it("refuses to act on an archived application", async () => {

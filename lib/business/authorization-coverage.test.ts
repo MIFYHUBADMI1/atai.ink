@@ -1,13 +1,17 @@
 import { readFileSync, readdirSync } from "node:fs"
-import { join, relative } from "node:path"
+import { basename, join, relative, sep } from "node:path"
 import { describe, expect, it } from "vitest"
 
 /**
  * Structural guard: every exported business operation either authorises itself
  * or sits on a short, justified allowlist.
  *
- * This is deliberately source-based rather than behavioural. A new mutating
- * service added without a gate fails here even if nobody writes a test for it.
+ * The check is deliberately source-based, because a behavioural test can only
+ * cover the operations someone remembered to test. It is also deliberately
+ * narrow about what it proves: a gate call must appear before the first write
+ * in the same function body. It cannot tell that the gate's business id matches
+ * the row being written — that remains a review responsibility, and every
+ * operation keeps its own behavioural test for the refusal paths.
  */
 
 const ROOT = process.cwd()
@@ -15,6 +19,9 @@ const BUSINESS_DIR = join(ROOT, "lib/business")
 
 /** Modules that hold no business data: constants, pure helpers, env reads. */
 const PURE_MODULES = new Set(["paths.ts", "permissions.ts", "flags.ts"])
+
+/** Test-support modules, not service operations. */
+const TEST_SUPPORT_DIRS = new Set(["testing"])
 
 /**
  * Operations that legitimately do not call the gate, with the rule that
@@ -39,21 +46,43 @@ interface Operation {
   file: string
 }
 
+const FUNCTION_EXPORT = /\nexport (?:async )?function (\w+)/g
+const ARROW_EXPORT = /\nexport const (\w+)\s*(?::[^=]+)?=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*(?::[^=]+)?=>/g
+
 function operationsIn(source: string, file: string): Operation[] {
-  return source
-    .split(/\nexport (?:async )?function /)
-    .slice(1)
-    .map((part) => ({ name: part.slice(0, part.indexOf("(")), body: part, file }))
+  const found: { name: string; start: number }[] = []
+  for (const match of source.matchAll(FUNCTION_EXPORT)) {
+    found.push({ name: match[1], start: match.index ?? 0 })
+  }
+  for (const match of source.matchAll(ARROW_EXPORT)) {
+    found.push({ name: match[1], start: match.index ?? 0 })
+  }
+  found.sort((a, b) => a.start - b.start)
+  return found.map((entry, index) => ({
+    name: entry.name,
+    body: source.slice(entry.start, index + 1 < found.length ? found[index + 1].start : source.length),
+    file,
+  }))
+}
+
+function walkSourceFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = join(dir, entry.name)
+    if (entry.isDirectory()) return walkSourceFiles(full)
+    return entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts") ? [full] : []
+  })
+}
+
+function collectSourceFiles(dir: string): string[] {
+  return walkSourceFiles(dir).filter(
+    (file) => !relative(dir, file).split(sep).some((part) => TEST_SUPPORT_DIRS.has(part)),
+  )
 }
 
 function serviceOperations(): Operation[] {
-  return readdirSync(BUSINESS_DIR)
-    .filter((entry) => entry.endsWith(".ts") && !entry.endsWith(".test.ts"))
-    .filter((entry) => !PURE_MODULES.has(entry))
-    .flatMap((entry) => {
-      const file = join(BUSINESS_DIR, entry)
-      return operationsIn(readFileSync(file, "utf8"), relative(ROOT, file))
-    })
+  return collectSourceFiles(BUSINESS_DIR)
+    .filter((file) => !PURE_MODULES.has(basename(file)))
+    .flatMap((file) => operationsIn(readFileSync(file, "utf8"), relative(ROOT, file)))
 }
 
 function ungated(operations: Operation[]): string[] {
@@ -109,12 +138,28 @@ describe("service-boundary authorization", () => {
     }
   })
 
-  it("fails when a new ungated mutating operation is introduced", () => {
+  it("fails when a new ungated function export is introduced", () => {
     const synthetic = `
 export async function deleteBusiness(input: { businessId: string }) {
   await (await businessesCol()).deleteOne({ id: input.businessId })
 }
 `
     expect(ungated(operationsIn(synthetic, "synthetic.ts"))).toEqual(["synthetic.ts:deleteBusiness"])
+  })
+
+  it("fails when a new ungated arrow export is introduced", () => {
+    const synthetic = `
+export const deleteBusiness = async (input: { businessId: string }) => {
+  await (await businessesCol()).deleteOne({ id: input.businessId })
+}
+`
+    expect(ungated(operationsIn(synthetic, "synthetic.ts"))).toEqual(["synthetic.ts:deleteBusiness"])
+  })
+
+  it("walks nested modules, so a new subpackage cannot hide", () => {
+    const walked = walkSourceFiles(BUSINESS_DIR).map((file) => relative(ROOT, file))
+    const collected = collectSourceFiles(BUSINESS_DIR).map((file) => relative(ROOT, file))
+    expect(walked.some((file) => file.includes("/testing/"))).toBe(true)
+    expect(collected.some((file) => file.includes("/testing/"))).toBe(false)
   })
 })

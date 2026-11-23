@@ -18,7 +18,15 @@ vi.mock("@/lib/db/collections", async () => {
       },
     ],
   })
-  const members = fakeCollection({ unique: [["businessId", "userId"]] })
+  const members = fakeCollection({
+    unique: [
+      ["businessId", "userId"],
+      {
+        keys: ["businessId"],
+        when: (doc: { role?: string; status?: string }) => doc.role === "owner" && doc.status === "active",
+      },
+    ],
+  })
   return {
     ensureIndexes: async () => {},
     businessesCol: async () => businesses,
@@ -219,17 +227,12 @@ describe("requireBusinessAccess", () => {
     ).rejects.toMatchObject({ code: "BUSINESS_SUSPENDED" })
   })
 
-  it("limits a system actor to its single permission", async () => {
-    const access = await requireBusinessAccess({
-      businessId: "biz_1",
-      actor: systemActor("migration"),
-      permission: "business.manage",
-    })
-    expect(access.member).toBeNull()
-
-    await expect(
-      requireBusinessAccess({ businessId: "biz_1", actor: systemActor("migration"), permission: "apps.manage" }),
-    ).rejects.toMatchObject({ code: "BUSINESS_FORBIDDEN" })
+  it("refuses a system actor every business-scoped permission", async () => {
+    for (const permission of ["business.read", "business.manage", "apps.manage", "members.manage"] as const) {
+      await expect(
+        requireBusinessAccess({ businessId: "biz_1", actor: systemActor("migration"), permission }),
+      ).rejects.toMatchObject({ code: "BUSINESS_FORBIDDEN" })
+    }
   })
 
   it("keeps one response contract for every failure mode", async () => {

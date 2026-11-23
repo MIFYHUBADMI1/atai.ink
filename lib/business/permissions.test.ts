@@ -63,7 +63,7 @@ describe("role → permission matrix", () => {
     expect(isWritePermission("members.manage")).toBe(true)
   })
 
-  it("limits a system actor to the one permission internal callers need", () => {
-    expect([...SYSTEM_PERMISSIONS]).toEqual(["business.manage"])
+  it("grants a system actor no business-scoped permission", () => {
+    expect([...SYSTEM_PERMISSIONS]).toEqual([])
   })
 })

@@ -10,7 +10,15 @@ vi.mock("@/lib/db/collections", async () => {
       },
     ],
   })
-  const members = fakeCollection({ unique: [["businessId", "userId"]] })
+  const members = fakeCollection({
+    unique: [
+      ["businessId", "userId"],
+      {
+        keys: ["businessId"],
+        when: (doc: { role?: string; status?: string }) => doc.role === "owner" && doc.status === "active",
+      },
+    ],
+  })
   const applications = fakeCollection()
   return {
     ensureIndexes: async () => {},
