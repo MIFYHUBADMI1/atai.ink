@@ -56,7 +56,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     const hasExistingSubdomain =
       project.deployment?.status === "success" ||
       Boolean(project.deployment?.productionUrl) ||
-      project.state === "deployed"
+      project.state === "deployed" ||
+      (project.deploymentHistory ?? []).some((entry) => entry.status === "success")
     const planDenied = await authorizeProductionWork(user.id, "deploy", { hasExistingSubdomain })
     if (planDenied) {
       return fail(
@@ -204,7 +205,15 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       } catch (err) {
         console.error("[deploy] failed to update publish analytics (non-fatal)", err)
       }
-      await store.updateProject(id, { state: "ready" })
+      await store.updateProject(id, {
+        state: "ready",
+        deployment: {
+          ...(project.deployment ?? { id: cryptoId(), status: "idle", updatedAt: Date.now() }),
+          status: "failed",
+          error: userMessage,
+          updatedAt: Date.now(),
+        },
+      })
       await store.appendEvent(id, event("deploy", `Deployment failed: ${userMessage}`, "error"))
 
       throw new Error(userMessage)
@@ -234,13 +243,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         getProject(project.totalumProjectId),
       ])
 
-      // Sync deployment state back to Atai
-      // The actual deployment has resolved; the real project state now counts
-      // the slot, so the pending hold can be released.
-      if (deployStatus.status === "success" || deployStatus.status === "error") {
-        await releaseSubdomainSlot(project.userId, id)
-      }
-
+      // Sync deployment state back to Atai. The pending hold is released only
+      // after the resolved state is persisted: a project still in `deploying`
+      // must keep its hold, otherwise a concurrent reservation can count it
+      // twice or miss it during the state transition.
       if (deployStatus.status === "success" && project.state === "deploying") {
         const productionUrl = totalumProject.productionProjectUrl
         // Update deployment history (best-effort)
@@ -269,6 +275,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         await store.updateProject(id, {
           state: "ready",
           developmentUrl: productionUrl || project.developmentUrl,
+          deployment: {
+            ...(project.deployment ?? { id: cryptoId(), status: "idle", updatedAt: Date.now() }),
+            status: "success",
+            productionUrl,
+            updatedAt: Date.now(),
+          },
         })
         await store.appendEvent(id, event("deploy", `Deployed to production${productionUrl ? `: ${productionUrl}` : ""}`))
 
@@ -332,8 +344,20 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
             console.error("[deploy] failed to update publish analytics (non-fatal)", err)
           }
         }
-        await store.updateProject(id, { state: "ready" })
+        await store.updateProject(id, {
+          state: "ready",
+          deployment: {
+            ...(project.deployment ?? { id: cryptoId(), status: "idle", updatedAt: Date.now() }),
+            status: "failed",
+            error: "Deployment failed",
+            updatedAt: Date.now(),
+          },
+        })
         await store.appendEvent(id, event("deploy", refundAmount > 0 ? "Deployment failed. Credits were refunded." : "Deployment failed.", "error"))
+      }
+
+      if (deployStatus.status === "success" || deployStatus.status === "error") {
+        await releaseSubdomainSlot(project.userId, id)
       }
 
       return ok({
@@ -387,8 +411,17 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
               console.error("[deploy] failed to update publish analytics (non-fatal)", e)
             }
           }
-          await store.updateProject(id, { state: "ready" })
+          await store.updateProject(id, {
+            state: "ready",
+            deployment: {
+              ...(project.deployment ?? { id: cryptoId(), status: "idle", updatedAt: Date.now() }),
+              status: "failed",
+              error: "Project not found in deployment service",
+              updatedAt: Date.now(),
+            },
+          })
           await store.appendEvent(id, event("deploy", refundAmount > 0 ? "Deployment failed: Project not found in deployment service. Credits were refunded." : "Deployment failed: Project not found in deployment service.", "error"))
+          await releaseSubdomainSlot(project.userId, id)
         }
         const latest = [...(project.deploymentHistory || [])].reverse().find((d) => d.productionUrl || d.customDomain)
         return ok({

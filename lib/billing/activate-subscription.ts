@@ -1,7 +1,7 @@
 import { ObjectId } from "mongodb"
 import { subscriptionRecordsCol } from "@/lib/db/collections"
 import { grantSubscriptionCredits } from "@/lib/billing/credit-service"
-import { LEGACY_SUBSCRIPTION_PLANS } from "@/lib/billing/config"
+import { getLegacySubscriptionPlans } from "@/lib/billing/config"
 import { getDodoClient } from "@/lib/billing/dodo-service"
 import { resolveCommercialProduct, getCommercialPlanById } from "@/lib/billing/entitlements/commercial-plans"
 import { addMonths } from "@/lib/billing/entitlements/annual-scheduler"
@@ -67,16 +67,20 @@ export async function activatePaidSubscription(input: ActivateInput): Promise<Ac
   const status = (input.status === "trialing" ? "trialing" : "active") as SubscriptionStatus
   const col = await subscriptionRecordsCol()
   const existing = await col.findOne({ dodoSubscriptionId: subscriptionId })
+  if (existing && existing.userId !== userId) {
+    return { ok: false, reason: "user_mismatch" }
+  }
 
+  const metadataCycle = stringMeta(input.metadata, "billingCycle")
+  const legacyByProduct = getLegacySubscriptionPlans().find(
+    (plan) => plan.dodoProductId && plan.dodoProductId === input.productId,
+  )
   const catalogProduct = await resolveRuntimeCatalogProduct({
     dodoProductId: input.productId,
     planId: stringMeta(input.metadata, "planId"),
-    billingCycle:
-      stringMeta(input.metadata, "billingCycle") === "annual"
-        ? "annual"
-        : stringMeta(input.metadata, "billingCycle") === "monthly"
-          ? "monthly"
-          : undefined,
+    billingCycle: metadataCycle === "annual" ? "annual" : metadataCycle === "monthly" ? "monthly" : undefined,
+    allowPlanFallback:
+      !legacyByProduct && (metadataCycle === "annual" || metadataCycle === "monthly"),
   })
 
   // ── Commercial-first attribution ──────────────────────────────────────────
@@ -84,8 +88,9 @@ export async function activatePaidSubscription(input: ActivateInput): Promise<Ac
   // the decisive signal: it can never be a legacy purchase. Resolving legacy
   // first here would attribute a commercial Starter to the legacy $79 starter
   // (same plan id, different price/credits) and fail Growth/Scale entirely.
-  const commercialMatch =
-    resolveCommercialProduct(input.productId) ??
+  const commercialMatch = legacyByProduct
+    ? undefined
+    : resolveCommercialProduct(input.productId) ??
     (() => {
       // Checkout writes `billingCycle` metadata for commercial plans ONLY. If
       // the product id didn't resolve but that marker is present, attribute by
@@ -201,8 +206,11 @@ export async function activatePaidSubscription(input: ActivateInput): Promise<Ac
     // Legacy catalog — the authority for every pre-existing subscription.
     const planId = stringMeta(input.metadata, "planId") ?? stringMeta(input.metadata, "plan_id")
     const plan =
-      (planId ? LEGACY_SUBSCRIPTION_PLANS.find((item) => item.id === planId) : undefined) ??
-      LEGACY_SUBSCRIPTION_PLANS.find((item) => item.dodoProductId && item.dodoProductId === input.productId)
+      legacyByProduct ??
+      (planId ? getLegacySubscriptionPlans().find((item) => item.id === planId) : undefined) ??
+      getLegacySubscriptionPlans().find(
+        (item) => item.dodoProductId && item.dodoProductId === input.productId,
+      )
     const credits = plan?.mirrorCredits ?? Number(stringMeta(input.metadata, "credits") ?? 0)
     if (!plan || !credits) return { ok: false, reason: "missing_plan" }
     grantAmount = credits

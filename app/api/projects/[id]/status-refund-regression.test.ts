@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   user: vi.fn(), project: vi.fn(), runs: vi.fn(), updateRun: vi.fn(), updateProject: vi.fn(), append: vi.fn(), release: vi.fn(), status: vi.fn(),
-  deployStatus: vi.fn(), updateDeploy: vi.fn(),
+  deployStatus: vi.fn(), updateDeploy: vi.fn(), totalumProject: vi.fn(), releaseSubdomain: vi.fn(),
 }))
 vi.mock("@/lib/auth/session", () => ({ requireUser: mocks.user }))
 vi.mock("@/lib/store/store", () => ({
@@ -12,7 +12,8 @@ vi.mock("@/lib/store/store", () => ({
 vi.mock("@/lib/billing/credit-service", () => ({ releaseReservation: mocks.release }))
 vi.mock("@/lib/credits/credits", () => ({ reconcileCredits: vi.fn() }))
 vi.mock("@/lib/referrals/referrals", () => ({ processMilestoneCheck: vi.fn() }))
-vi.mock("@/lib/integrations/totalum/service", () => ({ getAgentStatus: mocks.status, getProject: vi.fn(), resolveDevelopmentUrl: vi.fn(), getDeploymentStatus: mocks.deployStatus, getFullConversation: vi.fn(), isTotalumConfigured: () => true }))
+vi.mock("@/lib/integrations/totalum/service", () => ({ getAgentStatus: mocks.status, getProject: mocks.totalumProject, resolveDevelopmentUrl: vi.fn(), getDeploymentStatus: mocks.deployStatus, getFullConversation: vi.fn(), isTotalumConfigured: () => true }))
+vi.mock("@/lib/billing/entitlements/require", () => ({ releaseSubdomainSlot: mocks.releaseSubdomain }))
 vi.mock("@/lib/db/collections", () => ({ publishEventsCol: vi.fn(), projectGitHubCol: vi.fn(), usersCol: vi.fn() }))
 vi.mock("@/lib/screenshots/capture-app-preview", () => ({ captureAppPreview: vi.fn() }))
 vi.mock("@/lib/integrations/github/push", () => ({ pushProjectToGitHub: vi.fn() }))
@@ -38,6 +39,7 @@ beforeEach(() => {
   mocks.updateProject.mockImplementation(async (_id, update) => { Object.assign(project, update) })
   mocks.append.mockImplementation(async (_id, event) => { project.events.push(event) })
   mocks.status.mockResolvedValue({ status: "failed", error: "Build stopped" })
+  mocks.totalumProject.mockResolvedValue({ productionProjectUrl: "https://app.example.com" })
   mocks.release.mockImplementation(async (params) => {
     const key = `release_${params.buildId}`
     if (!ledger.has(key)) {
@@ -110,6 +112,14 @@ describe("asynchronous deployment refund recovery (modeled ledger)", () => {
     })
   })
 
+  it("releases the subdomain hold when an orphaned deployment has no provider project", async () => {
+    project.totalumProjectId = ""
+    expect((await poll()).status).toBe(200)
+    expect(project.state).toBe("specification_ready")
+    expect(mocks.deployStatus).not.toHaveBeenCalled()
+    expect(mocks.releaseSubdomain).toHaveBeenCalledWith("owner", "project-1")
+  })
+
   it("refunds the deploy reservation before finalizing the failed deployment", async () => {
     expect((await poll()).status).toBe(200)
     expect(mocks.release).toHaveBeenCalledWith({ userId: "owner", amount: 500, buildId: "deploy-1", reason: "Deployment failed", projectId: "project-1" })
@@ -117,6 +127,14 @@ describe("asynchronous deployment refund recovery (modeled ledger)", () => {
     expect(balance).toBe(500)
     expect(project.deploymentHistory![0].status).toBe("failed")
     expect(project.state).toBe("ready")
+    expect((project as { deployment?: { status?: string; error?: string } }).deployment).toMatchObject({
+      status: "failed",
+      error: "Deployment failed",
+    })
+    expect(mocks.releaseSubdomain).toHaveBeenCalledWith("owner", "project-1")
+    expect(mocks.updateProject.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.releaseSubdomain.mock.invocationCallOrder[0],
+    )
     expect(JSON.stringify(project.events)).toContain("Credits were refunded")
 
     await poll() // no longer deploying — the refund must not run again
@@ -133,6 +151,7 @@ describe("asynchronous deployment refund recovery (modeled ledger)", () => {
     expect(project.state).toBe("deploying")
     expect(project.deploymentHistory![0].status).toBe("deploying")
     expect(balance).toBe(0)
+    expect(mocks.releaseSubdomain).not.toHaveBeenCalled()
     expect(mocks.updateDeploy).not.toHaveBeenCalled()
     expect(JSON.stringify(project.events)).not.toContain("refunded")
 
@@ -149,6 +168,26 @@ describe("asynchronous deployment refund recovery (modeled ledger)", () => {
     expect(mocks.release).not.toHaveBeenCalled()
     expect(project.deploymentHistory![0].status).toBe("failed")
     expect(project.state).toBe("ready")
+    expect((project as { deployment?: { status?: string; error?: string } }).deployment).toMatchObject({
+      status: "failed",
+      error: "Deployment failed",
+    })
+    expect(mocks.releaseSubdomain).toHaveBeenCalledWith("owner", "project-1")
+  })
+
+  it("releases the subdomain hold after a successful deployment is persisted", async () => {
+    mocks.deployStatus.mockResolvedValue({ status: "success" })
+
+    expect((await poll()).status).toBe(200)
+    expect(project.state).toBe("ready")
+    expect((project as { deployment?: { status?: string; productionUrl?: string } }).deployment).toMatchObject({
+      status: "success",
+      productionUrl: "https://app.example.com",
+    })
+    expect(mocks.releaseSubdomain).toHaveBeenCalledWith("owner", "project-1")
+    expect(mocks.updateProject.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.releaseSubdomain.mock.invocationCallOrder[0],
+    )
   })
 })
 

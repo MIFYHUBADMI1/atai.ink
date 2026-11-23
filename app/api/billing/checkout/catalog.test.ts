@@ -126,6 +126,28 @@ describe("POST /api/billing/checkout — active database catalog", () => {
     })
   })
 
+  it("refuses a credit pack that is not self-serve", async () => {
+    const current = catalog()
+    current.packs = [{ ...current.packs[0], saleMode: "contact" }]
+    resolvePublicCommercialCatalog.mockResolvedValue(current)
+
+    const response = await POST(post({ type: "permanent", productId: "perm_500k" }))
+    expect(response.status).toBe(400)
+    expect((await response.json()).error.code).toBe("PLAN_UNAVAILABLE")
+    expect(createSession).not.toHaveBeenCalled()
+  })
+
+  it("refuses a plan whose purchase state is not available", async () => {
+    const current = catalog()
+    current.plans = [{ ...current.plans[0], purchaseState: "soon" }]
+    resolvePublicCommercialCatalog.mockResolvedValue(current)
+
+    const response = await POST(post({ type: "subscription", productId: "growth" }))
+    expect(response.status).toBe(400)
+    expect((await response.json()).error.code).toBe("PLAN_UNAVAILABLE")
+    expect(createSession).not.toHaveBeenCalled()
+  })
+
   it("refuses a plan that the active database catalog does not sell", async () => {
     resolvePublicCommercialCatalog.mockResolvedValue(catalog({ plans: [] }))
     const response = await POST(post({ type: "subscription", productId: "growth" }))

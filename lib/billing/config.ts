@@ -8,6 +8,7 @@
  */
 
 import type { RuntimeLedgerTransactionType } from "@/runtime/contracts/billing"
+import type { CatalogSaleMode } from "@/lib/billing/catalog/types"
 
 // ─── Currency ────────────────────────────────────────────────────────────────
 
@@ -230,10 +231,21 @@ export interface PermanentCreditPack {
   priceUSD: number
   label: string
   popular?: boolean
+  /** Sale mode from the published catalog; code packs are self-serve. */
+  saleMode?: CatalogSaleMode
   /** Dodo product ID — set in environment or database */
   dodoProductId?: string
   /** Dodo price ID — set in environment or database */
   dodoPriceId?: string
+}
+
+export function getLegacySubscriptionPlans(
+  env: NodeJS.ProcessEnv = process.env,
+): SubscriptionPlan[] {
+  return LEGACY_SUBSCRIPTION_PLANS.map((plan) => ({
+    ...plan,
+    dodoProductId: env[`DODO_PRODUCT_${plan.id.toUpperCase()}`],
+  }))
 }
 
 export const PERMANENT_CREDIT_PACKS: PermanentCreditPack[] = [

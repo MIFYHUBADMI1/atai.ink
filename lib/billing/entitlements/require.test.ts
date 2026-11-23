@@ -5,6 +5,7 @@ const h = vi.hoisted(() => ({
   operations: vi.fn(),
   resolveScope: vi.fn(),
   deploying: vi.fn(),
+  subdomainsAmong: vi.fn(),
   locks: null as unknown,
   holds: null as unknown,
 }))
@@ -14,6 +15,7 @@ vi.mock("./service", () => ({
   authorizeOperations: h.operations,
   resolveScope: h.resolveScope,
   countDeployingProjectsForScope: h.deploying,
+  countSubdomainsAmongProjects: h.subdomainsAmong,
   scopeKey: ({ kind, userId }: { kind: string; userId: string }) => `${kind[0]}:${userId}`,
 }))
 
@@ -111,6 +113,7 @@ beforeEach(() => {
     buildEntitlementSet("growth", { businesses: 1, productionApps: 1, subdomains: 0, customDomainsConsumed: 0 }),
   )
   h.deploying.mockResolvedValue(0)
+  h.subdomainsAmong.mockResolvedValue(0)
 })
 
 describe("authorizeProductionWork — compound operations", () => {

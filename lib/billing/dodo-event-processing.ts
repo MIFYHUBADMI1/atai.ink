@@ -8,7 +8,7 @@ import {
   expireSubscriptionCredits,
   reverseCredits,
 } from "@/lib/billing/credit-service"
-import { LEGACY_SUBSCRIPTION_PLANS } from "@/lib/billing/config"
+import { getLegacySubscriptionPlans } from "@/lib/billing/config"
 import { resolveCommercialProduct } from "@/lib/billing/entitlements/commercial-plans"
 import { addMonths } from "@/lib/billing/entitlements/annual-scheduler"
 import { activatePaidSubscription } from "@/lib/billing/activate-subscription"
@@ -422,15 +422,20 @@ async function handleSubscriptionRenewed(data: Record<string, unknown> | undefin
   // allocation, then the resolved purchased product (only when no record
   // exists). Metadata `credits` is deliberately not a source of truth.
   const metadataPlanId = typeof metadata?.planId === "string" ? metadata.planId : undefined
+  const legacyProduct = getLegacySubscriptionPlans().find(
+    (p) => p.dodoProductId && p.dodoProductId === productId,
+  )
   const runtimeProduct = await resolveRuntimeCatalogProduct({
     dodoProductId: productId,
     planId: metadataPlanId,
     billingCycle: metadata?.billingCycle === "annual" ? "annual" : "monthly",
+    allowPlanFallback:
+      !legacyProduct &&
+      (metadata?.billingCycle === "annual" || metadata?.billingCycle === "monthly"),
   })
   const commercialMatch = resolveCommercialProduct(productId)
-  const legacyProduct = LEGACY_SUBSCRIPTION_PLANS.find((p) => p.dodoProductId && p.dodoProductId === productId)
   const legacyPlan = metadataPlanId
-    ? LEGACY_SUBSCRIPTION_PLANS.find((p) => p.id === metadataPlanId)
+    ? getLegacySubscriptionPlans().find((p) => p.id === metadataPlanId)
     : undefined
   const catalogAllocation =
     runtimeProduct && runtimeProduct.productType === "subscription"
@@ -656,7 +661,9 @@ async function handleSubscriptionPlanChanged(data: Record<string, unknown> | und
   const productId = data.product_id as string
   const runtimeProduct = await resolveRuntimeCatalogProduct({ dodoProductId: productId })
   const commercial = resolveCommercialProduct(productId)
-  const legacyPlan = LEGACY_SUBSCRIPTION_PLANS.find((p) => p.dodoProductId === productId)
+  const legacyPlan = getLegacySubscriptionPlans().find(
+    (p) => p.dodoProductId === productId,
+  )
   const dbPlan =
     runtimeProduct && runtimeProduct.productType === "subscription" ? runtimeProduct : undefined
   const newPlan = dbPlan

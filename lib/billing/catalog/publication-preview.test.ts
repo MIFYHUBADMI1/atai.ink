@@ -217,6 +217,18 @@ describe("A7.3 catalog publication preview", () => {
     )
   })
 
+  it("blocks a candidate that contains versions effective in the future", async () => {
+    const { store, next } = await storeWithCandidate("Starter Preview")
+    const stored = store.versions.get(`${next.productId}:${next.version}`)
+    if (!stored) throw new Error("missing candidate version")
+    stored.effectiveAt = BASE + 60_000
+
+    const preview = await previewCatalogPublication({ store, now: BASE, env: ENV })
+
+    expect(preview.ready).toBe(false)
+    expect(preview.warnings.join(" ")).toContain("Activation is blocked until they are due")
+  })
+
   it("returns a non-ready preview when no candidate exists", async () => {
     const store = await seededStore()
     const preview = await previewCatalogPublication({ store, now: BASE, env: ENV })

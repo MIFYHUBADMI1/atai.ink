@@ -383,7 +383,8 @@ export async function startProjectDeploy(userId: string, projectId: string): Pro
   const hasExistingSubdomain =
     project.deployment?.status === "success" ||
     Boolean(project.deployment?.productionUrl) ||
-    project.state === "deployed"
+    project.state === "deployed" ||
+    (project.deploymentHistory ?? []).some((entry) => entry.status === "success")
   const deployDenied = await authorizeProductionWork(userId, "deploy", { hasExistingSubdomain })
   if (deployDenied) {
     return {
@@ -501,7 +502,15 @@ export async function startProjectDeploy(userId: string, projectId: string): Pro
     } catch {
       // non-fatal
     }
-    await store.updateProject(projectId, { state: "ready" })
+    await store.updateProject(projectId, {
+      state: "ready",
+      deployment: {
+        ...(project.deployment ?? { id: cryptoId(), status: "idle", updatedAt: Date.now() }),
+        status: "failed",
+        error: userMessage,
+        updatedAt: Date.now(),
+      },
+    })
     await store.appendEvent(projectId, event("deploy", `Deployment failed: ${userMessage}`, "error"))
     throw providerError
   }

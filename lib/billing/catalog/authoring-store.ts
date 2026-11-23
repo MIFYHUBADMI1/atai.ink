@@ -15,7 +15,7 @@ import type {
 export type CreateProductOutcome = "inserted" | "duplicate"
 export type ReplaceDraftOutcome = "ok" | "conflict" | "duplicate_version"
 export type PublishOutcome = "ok" | "conflict" | "duplicate_publication"
-export type ActivatePublicationOutcome = "ok" | "conflict"
+export type ActivatePublicationOutcome = "conflict" | { superseded: string[] }
 
 export interface ProductPatch {
   status?: CommercialProductDoc["status"]
@@ -230,7 +230,15 @@ export async function mongoCatalogAuthoringStore(): Promise<
     },
 
     async activatePublication(input) {
+      let superseded: string[] = []
       const outcome = await inTransaction<"conflict">(async (session) => {
+        const active = await catalogVersions
+          .find(
+            { status: "active", version: { $ne: input.version } },
+            { projection: { version: 1 }, session },
+          )
+          .toArray()
+        superseded = active.map((publication) => publication.version).sort()
         await catalogVersions.updateMany(
           { status: "active", version: { $ne: input.version } },
           {
@@ -259,7 +267,7 @@ export async function mongoCatalogAuthoringStore(): Promise<
         )
         if (result.matchedCount === 0) throw new AbortWrite("conflict")
       })
-      return outcome ?? "ok"
+      return outcome ?? { superseded }
     },
   }
 }

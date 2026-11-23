@@ -146,6 +146,14 @@ export async function POST(req: Request) {
           )
         }
 
+        const purchaseState = cycle === "annual" ? plan.annualPurchaseState : plan.purchaseState
+        if (purchaseState && purchaseState !== "available") {
+          return NextResponse.json(
+            { ok: false, error: { code: "PLAN_UNAVAILABLE", message: `${plan.name} is not available for checkout yet.` } },
+            { status: 400 },
+          )
+        }
+
         if (plan.priceUSD === 0) {
           return NextResponse.json(
             { ok: false, error: { code: "INVALID_REQUEST", message: `${plan.name} is free and is applied to every account — there is nothing to purchase.` } },
@@ -208,6 +216,12 @@ export async function POST(req: Request) {
         if (!pack) {
           return NextResponse.json(
             { ok: false, error: { code: "INVALID_REQUEST", message: "Unknown credit pack ID" } },
+            { status: 400 },
+          )
+        }
+        if (pack.saleMode && pack.saleMode !== "self_serve") {
+          return NextResponse.json(
+            { ok: false, error: { code: "PLAN_UNAVAILABLE", message: "That credit pack is not available for self-serve checkout." } },
             { status: 400 },
           )
         }

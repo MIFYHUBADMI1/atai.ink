@@ -550,6 +550,29 @@ describe("A7.1 published catalog resolver", () => {
   })
 
 
+  it("refuses a credit pack that is not self-serve", async () => {
+    const store = await activeStore()
+    const version = getVersion(store, "prod_pack_perm_500k_v1")
+    version.saleMode = "contact"
+    refreshVersion(store, version)
+
+    await expect(
+      resolvePublicCommercialCatalog({ env: PUBLIC_DB_ENV, store, now: BASE }),
+    ).rejects.toMatchObject({ reason: "CHECKOUT_INCOMPATIBLE" })
+  })
+
+  it("refuses infrastructure terms that differ from the code purchase path", async () => {
+    const store = await activeStore()
+    const version = getVersion(store, "prod_infra_testing_v1")
+    if (!version.infrastructure) throw new Error("missing infrastructure terms")
+    version.infrastructure.durationDays = 60
+    refreshVersion(store, version)
+
+    await expect(
+      resolvePublicCommercialCatalog({ env: PUBLIC_DB_ENV, store, now: BASE }),
+    ).rejects.toMatchObject({ reason: "CHECKOUT_INCOMPATIBLE" })
+  })
+
   it("refuses a public publication that hides a code-checkout plan", async () => {
     const store = await activeStore()
     const publication = await store.getCatalogVersion("CATALOG_ACTIVE_V1")

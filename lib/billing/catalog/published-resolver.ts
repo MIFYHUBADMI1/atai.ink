@@ -214,6 +214,7 @@ function toCreditPack(
     priceUSD: minorToUsd(version.priceMinor),
     label: version.name,
     popular: codePack?.popular,
+    saleMode: version.saleMode,
     dodoProductId: version.dodo?.oneTimeProductId,
   }
 }
@@ -561,6 +562,7 @@ export function compareCatalogToCode(
     diff(differences, `packs.${code.id}.credits`, code.credits, pack.credits)
     diff(differences, `packs.${code.id}.priceMinor`, usdToMinor(code.priceUSD), usdToMinor(pack.priceUSD))
     diff(differences, `packs.${code.id}.popular`, Boolean(code.popular), Boolean(pack.popular))
+    diff(differences, `packs.${code.id}.saleMode`, "self_serve", pack.saleMode ?? "self_serve")
     diff(differences, `packs.${code.id}.dodoProductId`, code.dodoProductId ?? null, pack.dodoProductId ?? null)
   }
   for (const pack of input.packs) {
@@ -586,6 +588,10 @@ export function compareCatalogToCode(
       item.totalumInfrastructureCredits,
     )
     diff(differences, `infrastructure.${code.id}.creditCharge`, code.creditCharge, item.creditCharge)
+    diff(differences, `infrastructure.${code.id}.purchaseModel`, code.purchaseModel, item.purchaseModel)
+    diff(differences, `infrastructure.${code.id}.durationDays`, code.durationDays, item.durationDays)
+    diff(differences, `infrastructure.${code.id}.renewal`, code.renewal, item.renewal)
+    diff(differences, `infrastructure.${code.id}.saleMode`, code.saleMode, item.saleMode)
   }
   for (const item of input.infrastructure) {
     if (!codeInfra.some((code) => code.id === item.id)) {
@@ -676,6 +682,9 @@ export function assertCheckoutCompatible(
     if (pack.credits !== code.credits) {
       catalogFailure("CHECKOUT_INCOMPATIBLE", { productId: pack.id, field: "credits" })
     }
+    if ((pack.saleMode ?? "self_serve") !== "self_serve") {
+      catalogFailure("CHECKOUT_INCOMPATIBLE", { productId: pack.id, field: "saleMode" })
+    }
     if ((pack.dodoProductId ?? null) !== (code.dodoProductId ?? null)) {
       catalogFailure("CHECKOUT_INCOMPATIBLE", { productId: pack.id, field: "dodoProductId" })
     }
@@ -706,6 +715,9 @@ export function assertCheckoutCompatible(
     }
     if (item.renewal !== code.renewal) {
       catalogFailure("CHECKOUT_INCOMPATIBLE", { productId: item.id, field: "renewal" })
+    }
+    if (item.saleMode !== code.saleMode) {
+      catalogFailure("CHECKOUT_INCOMPATIBLE", { productId: item.id, field: "saleMode" })
     }
   }
 }

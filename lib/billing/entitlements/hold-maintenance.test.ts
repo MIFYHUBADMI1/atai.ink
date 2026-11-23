@@ -18,7 +18,10 @@ function matchesExpiry(row: Record<string, unknown>, filter: Record<string, unkn
 
 vi.mock("@/lib/db/collections", () => ({
   billingResourceHoldsCol: async () => ({
-    find: () => ({ toArray: async () => [...h.holds] }),
+    find: () => {
+      const rows = [...h.holds].sort((a, b) => (a.expiresAt as number) - (b.expiresAt as number))
+      return { sort: () => ({ toArray: async () => rows }) }
+    },
     deleteOne: async ({ _id }: { _id: string }) => {
       h.deleted.push(_id)
       h.holds = h.holds.filter((row) => row._id !== _id)
@@ -70,6 +73,7 @@ beforeEach(() => {
     { id: "p-domain", deployment: { customDomain: "shop.example.com" } },
     { id: "p-sub", state: "deployed", deployment: { status: "success" } },
     { id: "p-live", state: "building" },
+    { id: "p-history", state: "ready", deploymentHistory: [{ id: "d1", status: "success" }] },
   ]
   h.holds = [
     hold({ _id: "h-expired", resourceId: "p-live", expiresAt: 900 }),
@@ -77,6 +81,7 @@ beforeEach(() => {
     hold({ _id: "h-domain", resourceId: "p-domain" }),
     hold({ _id: "h-sub", kind: "subdomain", resourceId: "p-sub" }),
     hold({ _id: "h-storage", kind: "storage", resourceId: "p-live", bytes: 50 }),
+    hold({ _id: "h-history", kind: "subdomain", resourceId: "p-history" }),
   ]
 })
 
@@ -86,14 +91,14 @@ describe("resource hold reconciliation", () => {
 
     expect(report).toMatchObject({
       dryRun: false,
-      scanned: 5,
+      scanned: 6,
       expiredLocks: 1,
       expiredHolds: 1,
       orphanedHolds: 1,
-      realizedHolds: 2,
+      realizedHolds: 3,
       remainingActiveHolds: 1,
     })
-    expect(h.deleted.sort()).toEqual(["h-domain", "h-expired", "h-orphan", "h-sub"])
+    expect(h.deleted.sort()).toEqual(["h-domain", "h-expired", "h-history", "h-orphan", "h-sub"])
     expect(h.holds.map((row) => row._id)).toEqual(["h-storage"])
   })
 
@@ -105,11 +110,11 @@ describe("resource hold reconciliation", () => {
       expiredLocks: 1,
       expiredHolds: 1,
       orphanedHolds: 1,
-      realizedHolds: 2,
+      realizedHolds: 3,
       remainingActiveHolds: 1,
     })
     expect(report.actions.every((action) => action.applied === false)).toBe(true)
     expect(h.deleted).toEqual([])
-    expect(h.holds).toHaveLength(5)
+    expect(h.holds).toHaveLength(6)
   })
 })

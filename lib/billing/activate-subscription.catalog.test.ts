@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { buildEntitlementSet } from "@/lib/billing/entitlements/catalog"
 
 vi.mock("server-only", () => ({}))
@@ -91,6 +91,31 @@ describe("activatePaidSubscription — active database catalog", () => {
       pricingVersion: "PRICE_BOOK_DB",
     })
     expect(record.purchasedTerms.entitlementSnapshot.commercialPlanId).toBe("starter")
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it("keeps a legacy Dodo product on its legacy allocation", async () => {
+    vi.stubEnv("DODO_PRODUCT_STARTER", "dodo_legacy_starter")
+    resolveRuntimeCatalogProduct.mockResolvedValue(null)
+
+    const result = await activatePaidSubscription({
+      subscriptionId: "dodo_sub_legacy",
+      productId: "dodo_legacy_starter",
+      metadata: { userId: "u1", planId: "starter", billingCycle: "monthly" },
+      nextBillingDate: new Date(Date.now() + 30 * DAY_MS).toISOString(),
+    })
+
+    expect(result).toEqual({ ok: true, planId: "starter" })
+    expect(resolveRuntimeCatalogProduct).toHaveBeenCalledWith(
+      expect.objectContaining({ allowPlanFallback: false }),
+    )
+    expect(grantSubscriptionCredits).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 300_000, planId: "starter" }),
+    )
+    expect(subInsertOne.mock.calls[0][0]).toMatchObject({ priceUSD: 79, mirrorCredits: 300_000 })
   })
 
   it("does not use the database catalog for a non-subscription product", async () => {

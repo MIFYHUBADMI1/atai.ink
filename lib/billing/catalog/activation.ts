@@ -90,11 +90,6 @@ export async function activateCatalogPublication(input: {
     throw error
   }
 
-  const superseded = publications
-    .filter((publication) => publication.status === "active")
-    .map((publication) => publication.version)
-    .sort()
-
   const outcome = await store.activatePublication({
     version: candidate.version,
     expectedChecksum: parsed.expectedChecksum,
@@ -104,6 +99,7 @@ export async function activateCatalogPublication(input: {
   if (outcome === "conflict") {
     conflict("The publication changed while it was being activated. Preview and try again.")
   }
+  const superseded = outcome.superseded
 
   await logAuditAction({
     adminUserId: input.actor.id,

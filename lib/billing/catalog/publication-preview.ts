@@ -222,7 +222,7 @@ export async function previewCatalogPublication(input: {
   )
   if (futureVersions.length > 0) {
     warnings.push(
-      `${futureVersions.length} candidate version(s) are effective in the future and will not be publicly visible yet.`,
+      `${futureVersions.length} candidate version(s) are effective in the future. Activation is blocked until they are due.`,
     )
   }
 
@@ -263,11 +263,11 @@ export async function previewCatalogPublication(input: {
   const compatible = checkoutCompatibility(candidate, products, versions, now, env)
   if (!compatible) {
     warnings.push(
-      "The candidate is not checkout-compatible with the code catalog. Activation is blocked until prices, credits, Dodo product ids and entitlements are aligned.",
+      "The candidate is not checkout-compatible with the code catalog. Activation is blocked until prices, credits and Dodo product ids are aligned.",
     )
   }
 
-  const ready = errors.length === 0 && compatible
+  const ready = errors.length === 0 && compatible && futureVersions.length === 0
 
   return {
     candidate: summary(candidate),

@@ -19,7 +19,9 @@
  * @module lib/billing/entitlements/service
  */
 
+import type { Filter } from "mongodb"
 import { subscriptionRecordsCol, projectsCol } from "@/lib/db/collections"
+import type { MirrorProject } from "@/lib/types/project"
 import { buildEntitlementSet, ENTITLEMENT_VERSION } from "./catalog"
 import { resolveCommercialPlan, isCommercialPlanId } from "./migration-map"
 import { checkEntitlement } from "./catalog"
@@ -96,19 +98,40 @@ function scopeFilter(scope: EntitlementScope): Record<string, string> {
  * successfully. A failed later deploy must not free the slot: the live URL
  * still exists.
  */
+const SUBDOMAIN_COUNT_FILTER: Filter<MirrorProject> = {
+  $or: [
+    { "deployment.status": "success" },
+    { "deployment.productionUrl": { $exists: true, $ne: "" } },
+    { state: "deployed" },
+    { "deploymentHistory.status": "success" },
+    // A first deploy in flight has already claimed its slot; the hold is
+    // released only when the deployment fails or resolves.
+    { state: "deploying" },
+  ],
+}
+
 async function countSubdomainsForScope(scope: EntitlementScope): Promise<number> {
+  try {
+    const col = await projectsCol()
+    return await col.countDocuments({ ...scopeFilter(scope), ...SUBDOMAIN_COUNT_FILTER })
+  } catch {
+    return 0
+  }
+}
+
+/** How many of the given projects already count as a subdomain. Used to avoid
+ * counting a live hold twice when its project is already in `current`. */
+export async function countSubdomainsAmongProjects(
+  scope: EntitlementScope,
+  projectIds: readonly string[],
+): Promise<number> {
+  if (projectIds.length === 0) return 0
   try {
     const col = await projectsCol()
     return await col.countDocuments({
       ...scopeFilter(scope),
-      $or: [
-        { "deployment.status": "success" },
-        { "deployment.productionUrl": { $exists: true, $ne: "" } },
-        { state: "deployed" },
-        // A first deploy in flight has already claimed its slot; the hold is
-        // released only when the deployment fails or resolves.
-        { state: "deploying" },
-      ],
+      id: { $in: [...projectIds] },
+      ...SUBDOMAIN_COUNT_FILTER,
     })
   } catch {
     return 0

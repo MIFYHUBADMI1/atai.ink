@@ -21,7 +21,8 @@ function hasExistingSubdomain(project: MirrorProject): boolean {
   return (
     project.deployment?.status === "success" ||
     Boolean(project.deployment?.productionUrl) ||
-    project.state === "deployed"
+    project.state === "deployed" ||
+    (project.deploymentHistory ?? []).some((entry) => entry.status === "success")
   )
 }
 

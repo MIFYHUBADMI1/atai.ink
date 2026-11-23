@@ -5,6 +5,7 @@ const h = vi.hoisted(() => ({
   set: vi.fn(),
   operations: vi.fn(),
   deploying: vi.fn(),
+  subdomainsAmong: vi.fn(),
   usage: vi.fn(),
   locks: null as unknown,
   holds: null as unknown,
@@ -87,6 +88,7 @@ vi.mock("./service", () => ({
   authorize: vi.fn(),
   authorizeOperations: h.operations,
   countDeployingProjectsForScope: h.deploying,
+  countSubdomainsAmongProjects: h.subdomainsAmong,
   scopeKey: ({ userId }: { userId: string }) => `u:${userId}`,
 }))
 vi.mock("@/lib/infrastructure/service", () => ({ getProjectStorageUsage: h.usage }))
@@ -130,6 +132,7 @@ beforeEach(() => {
   h.holds = new FakeCollection()
   h.operations.mockResolvedValue([allow])
   h.deploying.mockResolvedValue(0)
+  h.subdomainsAmong.mockResolvedValue(0)
   h.scope.mockResolvedValue(buildEntitlementSet("growth", zero))
   h.set.mockResolvedValue(buildEntitlementSet("growth", zero))
   h.usage.mockResolvedValue({ usedBytes: 10, limitBytes: 100, withinLimit: true })

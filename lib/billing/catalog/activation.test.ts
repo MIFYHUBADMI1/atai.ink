@@ -99,16 +99,18 @@ class MemoryStore implements CatalogActivationStore {
     ) {
       return "conflict" as const
     }
+    const superseded: string[] = []
     for (const publication of this.catalogVersions.values()) {
       if (publication.status !== "active") continue
       publication.status = "superseded"
       publication.supersededBy = input.actorId
       publication.supersededAt = input.now
+      superseded.push(publication.version)
     }
     candidate.status = "active"
     candidate.activatedBy = input.actorId
     candidate.activatedAt = input.now
-    return "ok" as const
+    return { superseded: superseded.sort() }
   }
 }
 

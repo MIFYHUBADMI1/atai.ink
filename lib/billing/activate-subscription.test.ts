@@ -103,6 +103,19 @@ describe("activatePaidSubscription — commercial attribution", () => {
     })
   })
 
+  it("refuses to reassign an existing subscription to another user", async () => {
+    subFindOne.mockResolvedValueOnce({ id: "sub_existing", userId: "u_other", dodoSubscriptionId: "dodo_sub_x" })
+    const activate = await loadActivate()
+    const result = await activate({
+      subscriptionId: "dodo_sub_x",
+      productId: "pdt_growth_m",
+      metadata: { userId: "u1", planId: "growth", billingCycle: "monthly" },
+    })
+    expect(result).toEqual({ ok: false, reason: "user_mismatch" })
+    expect(grantSubscriptionCredits).not.toHaveBeenCalled()
+    expect(subUpdateOne).not.toHaveBeenCalled()
+  })
+
   it("does NOT mis-attribute commercial Starter to the legacy $79 starter", async () => {
     const activate = await loadActivate()
     const result = await activate({

@@ -11,7 +11,7 @@ import { DodoPayments } from "dodopayments"
 import { getDodoConfig } from "@/lib/env"
 import { logger } from "@/lib/logging/logger"
 import { checkRateLimit } from "@/lib/auth/rate-limit"
-import { productCreationLocks, checkoutSessionLocks } from "@/lib/cache/locks"
+import { productCreationLocks } from "@/lib/cache/locks"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

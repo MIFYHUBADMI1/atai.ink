@@ -127,5 +127,12 @@ describe("startProjectDeploy — atomic subdomain capacity", () => {
 
     expect(h.releaseSlot).toHaveBeenCalledWith("u1", "p1")
     expect(h.releaseReservation).toHaveBeenCalledWith(expect.objectContaining({ amount: 500, projectId: "p1" }))
+    expect(h.updateProject).toHaveBeenCalledWith(
+      "p1",
+      expect.objectContaining({
+        state: "ready",
+        deployment: expect.objectContaining({ status: "failed" }),
+      }),
+    )
   })
 })

@@ -178,6 +178,34 @@ describe("A7.5 runtime catalog product resolution", () => {
     })
   })
 
+  it("does not guess an unmatched Dodo id into a commercial plan", async () => {
+    const store = await activeStore()
+    const product = await resolveRuntimeCatalogProduct({
+      dodoProductId: "dodo_legacy_starter",
+      planId: "starter",
+      env: DB_ENV,
+      store,
+      now: BASE,
+    })
+
+    expect(product).toBeNull()
+  })
+
+  it("allows an explicit commercial caller to fall back to the plan alias", async () => {
+    const store = await activeStore()
+    const product = await resolveRuntimeCatalogProduct({
+      dodoProductId: "dodo_auto_created_commercial",
+      planId: "starter",
+      billingCycle: "monthly",
+      allowPlanFallback: true,
+      env: DB_ENV,
+      store,
+      now: BASE,
+    })
+
+    expect(product).toMatchObject({ planId: "starter", billingCycle: "monthly" })
+  })
+
   it("falls back to the plan alias when the Dodo id is not mapped", async () => {
     const store = await activeStore()
     const product = await resolveRuntimeCatalogProduct({

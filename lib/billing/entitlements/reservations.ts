@@ -161,6 +161,15 @@ export async function releaseResourceHold(holdId: string): Promise<void> {
   await col.deleteOne({ _id: holdId })
 }
 
+export async function listActiveSlotHolds(
+  scopeKey: string,
+  kind: BillingResourceKind,
+  now = Date.now(),
+): Promise<BillingResourceHoldDoc[]> {
+  const col = await billingResourceHoldsCol()
+  return col.find({ scopeKey, kind, expiresAt: { $gt: now } }).toArray()
+}
+
 export async function countActiveSlotHolds(
   scopeKey: string,
   kind: BillingResourceKind,

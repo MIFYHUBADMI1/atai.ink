@@ -32,7 +32,8 @@ function hasSubdomain(project: MirrorProject): boolean {
   return (
     project.deployment?.status === "success" ||
     Boolean(project.deployment?.productionUrl) ||
-    project.state === "deployed"
+    project.state === "deployed" ||
+    (project.deploymentHistory ?? []).some((entry) => entry.status === "success")
   )
 }
 
@@ -64,7 +65,7 @@ export async function sweepResourceHolds(opts: {
     ? (await locks.deleteMany({ expiresAt: { $lte: now } })).deletedCount
     : await locks.countDocuments({ expiresAt: { $lte: now } })
 
-  const rows = await holds.find({}, { limit }).toArray()
+  const rows = await holds.find({}, { limit }).sort({ expiresAt: 1 }).toArray()
   const projectIds = [...new Set(rows.map((hold) => hold.resourceId))]
   const projects = projectIds.length
     ? await (await projectsCol()).find({ id: { $in: projectIds } }).toArray()

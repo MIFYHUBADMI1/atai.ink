@@ -99,6 +99,10 @@ export async function resolveRuntimeCatalogProduct(input: {
   dodoProductId?: string
   planId?: string
   billingCycle?: RuntimeCatalogCycle
+  /** Only a caller with a trustworthy commercial marker may fall back from an
+   * unmatched Dodo id to a plan alias. Legacy Dodo ids must never be guessed
+   * into a commercial plan. */
+  allowPlanFallback?: boolean
   env?: NodeJS.ProcessEnv
   now?: number
   store?: CatalogSeedStore
@@ -119,6 +123,7 @@ export async function resolveRuntimeCatalogProduct(input: {
       if (match && catalog.publication) {
         return toRuntimeProduct(match.entry, match.cycle, catalog.publication)
       }
+      if (!input.allowPlanFallback) return null
     }
 
     if (input.planId) {

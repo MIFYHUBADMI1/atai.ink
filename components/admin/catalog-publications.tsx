@@ -159,8 +159,8 @@ export function CatalogPublications() {
                 <AlertTriangle className="size-4" /> Activate {data.candidate.version}?
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                This supersedes the current active publication. Customer reads still stay on the code
-                catalog until the database read gates are enabled.
+                This supersedes the current active publication. It does not change the database read
+                gates; checkout and customer reads follow the environment flags.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button type="button" size="sm" onClick={activate} disabled={activating}>

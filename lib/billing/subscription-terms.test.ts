@@ -1152,7 +1152,7 @@ describe("pinned snapshots keep live domain and subdomain usage", () => {
 
     const set = await resolveScope({ kind: "user", userId: "u1" }, { fresh: true })
     expect(set.subdomains.max).toBe(1)
-    expect(set.subdomains.current).toBe(1)
+    expect(set.subdomains.current).toBe(2)
     expect(set.customDomainsIncluded.max).toBe(1)
     expect(set.customDomainsIncluded.consumed).toBe(2)
     expect(checkEntitlement(set, "connectSubdomain").allowed).toBe(false)

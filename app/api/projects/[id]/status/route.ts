@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/auth/session"
 import { store, cryptoId } from "@/lib/store/store"
 import { ok, fail, handleRouteError } from "@/lib/api/respond"
 import { reconcileCredits } from "@/lib/credits/credits"
+import { releaseSubdomainSlot } from "@/lib/billing/entitlements/require"
 import { processMilestoneCheck } from "@/lib/referrals/referrals"
 import { getAgentStatus, getProject, resolveDevelopmentUrl, getDeploymentStatus, getFullConversation, isTotalumConfigured } from "@/lib/integrations/totalum/service"
 import { publishEventsCol } from "@/lib/db/collections"
@@ -128,6 +129,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       if (!project.totalumProjectId) {
         logger.warn("api.projects.status", "orphaned build state — no totalumProjectId, resetting", { id, state: project.state })
         await store.updateProject(id, { state: "specification_ready" })
+        if (project.state === "deploying") await releaseSubdomainSlot(project.userId, id)
         await store.appendEvent(id, event("build", "Build lost its connection to the builder. Please try building again.", "warn"))
         return ok({
           state: "specification_ready",
@@ -182,8 +184,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
             await store.updateProject(id, {
               state: "ready",
               developmentUrl: productionUrl || project.developmentUrl,
+              deployment: {
+                ...(project.deployment ?? { id: cryptoId(), status: "idle", updatedAt: Date.now() }),
+                status: "success",
+                productionUrl,
+                updatedAt: Date.now(),
+              },
             })
             await store.appendEvent(id, event("deploy", `Deployed to production${productionUrl ? `: ${productionUrl}` : ""}`))
+            await releaseSubdomainSlot(project.userId, id)
             if (resumedFromGap) {
               await store.appendEvent(id, event("deploy", "Launch finished while you were away — welcome back!"))
             }
@@ -281,8 +290,17 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
                 logger.error("api.projects.status", "failed to update publish analytics on error (non-fatal)", { id, error: (err as Error).message })
               }
             }
-            await store.updateProject(id, { state: "ready" })
+            await store.updateProject(id, {
+              state: "ready",
+              deployment: {
+                ...(project.deployment ?? { id: cryptoId(), status: "idle", updatedAt: Date.now() }),
+                status: "failed",
+                error: "Deployment failed",
+                updatedAt: Date.now(),
+              },
+            })
             await store.appendEvent(id, event("deploy", refundAmount > 0 ? "Deployment failed. Credits were refunded." : "Deployment failed.", "error"))
+            await releaseSubdomainSlot(project.userId, id)
             const updated = await store.getProject(id)
             return ok({
               state: "ready",

@@ -11,7 +11,7 @@
 import {
   authorize,
   authorizeOperations,
-  countDeployingProjectsForScope,
+  countSubdomainsAmongProjects,
   resolveScope,
   scopeKey,
 } from "./service"
@@ -20,9 +20,9 @@ import {
   DOMAIN_HOLD_TTL_MS,
   SUBDOMAIN_HOLD_TTL_MS,
   ResourceLockBusyError,
-  countActiveSlotHolds,
   createResourceHold,
   findActiveResourceHold,
+  listActiveSlotHolds,
   releaseResourceHold,
   slotHoldId,
   withResourceLock,
@@ -182,13 +182,18 @@ async function reserveSlot(
       }
 
       const set = await resolveScope({ kind: "user", userId }, { fresh: true })
-      const held = await countActiveSlotHolds(scope, kind)
-      // A deploying project is already counted in `current`; its own hold must
-      // not count a second time. The overlap is bounded by the number of
-      // deploying projects and the number of active holds.
-      const overlap = kind === "subdomain"
-        ? Math.min(held, await countDeployingProjectsForScope({ kind: "user", userId }))
-        : 0
+      const holds = await listActiveSlotHolds(scope, kind)
+      const held = holds.length
+      // A project that already counts as a subdomain is in `current`; its hold
+      // must not count a second time. A hold whose project failed or has not
+      // persisted yet is not in `current`, so it must count until released.
+      const overlap =
+        kind === "subdomain"
+          ? await countSubdomainsAmongProjects(
+              { kind: "user", userId },
+              holds.map((hold) => hold.resourceId),
+            )
+          : 0
       const check = kind === "customDomain"
         ? checkEntitlement(
             { ...set, customDomainsIncluded: { ...set.customDomainsIncluded, consumed: set.customDomainsIncluded.consumed + held } },

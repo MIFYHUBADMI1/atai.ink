@@ -198,6 +198,19 @@ describe("POST /api/projects/:id/deploy — atomic claim", () => {
     expect(mockReserveSubdomainSlot).not.toHaveBeenCalled()
   })
 
+  it("treats a successful deployment in history as an existing subdomain", async () => {
+    mockGetProject.mockResolvedValue({
+      ...project,
+      state: "ready",
+      deploymentHistory: [{ id: "d-old", startedAt: 1, status: "success", productionUrl: "shop.example.com" }],
+    } as never)
+    mockClaimBuildSlot.mockResolvedValue({ ...project, state: "deploying" })
+
+    expect((await post()).status).toBe(200)
+    expect(mockAuthorizeProductionWork).toHaveBeenCalledWith("u_dep", "deploy", { hasExistingSubdomain: true })
+    expect(mockReserveSubdomainSlot).not.toHaveBeenCalled()
+  })
+
   it("rejects with 409 when the atomic claim loses to a concurrent op, without touching credits", async () => {
     mockClaimBuildSlot.mockResolvedValue(null) // another request holds the slot
 
@@ -256,7 +269,14 @@ describe("GET /api/projects/:id/deploy — failed deployments return the reserva
     expect(mockRelease.mock.invocationCallOrder[0]).toBeLessThan(mockUpdateDeploy.mock.invocationCallOrder[0])
     expect(current.deploymentHistory[0].status).toBe("failed")
     expect(current.state).toBe("ready")
+    expect((current as { deployment?: { status?: string; error?: string } }).deployment).toMatchObject({
+      status: "failed",
+      error: "Deployment failed",
+    })
     expect(mockReleaseSubdomainSlot).toHaveBeenCalledWith("u_dep", "p_dep")
+    expect(mockUpdateProject.mock.invocationCallOrder[0]).toBeLessThan(
+      mockReleaseSubdomainSlot.mock.invocationCallOrder[0],
+    )
     expect(JSON.stringify(current.events)).toContain("Credits were refunded")
 
     await get() // state is now ready — the error branch must not run again
@@ -270,6 +290,7 @@ describe("GET /api/projects/:id/deploy — failed deployments return the reserva
     expect(current.state).toBe("deploying")
     expect(current.deploymentHistory[0].status).toBe("deploying")
     expect(mockUpdateDeploy).not.toHaveBeenCalled()
+    expect(mockReleaseSubdomainSlot).not.toHaveBeenCalled()
 
     expect((await get()).status).toBe(200)
     expect(mockRelease).toHaveBeenCalledTimes(2)
@@ -285,6 +306,22 @@ describe("GET /api/projects/:id/deploy — failed deployments return the reserva
     expect(mockRelease).toHaveBeenCalledWith(expect.objectContaining({ amount: 500, buildId: "deploy-1" }))
     expect(current.deploymentHistory[0].status).toBe("failed")
     expect(current.state).toBe("ready")
+  })
+
+  it("persists a successful deployment and releases the hold after the state write", async () => {
+    mockDeployStatus.mockResolvedValue({ status: "success" })
+    mockTotalumProject.mockResolvedValue({ id: "tp_1", productionProjectUrl: "https://shop.example.com" })
+
+    expect((await get()).status).toBe(200)
+    expect(current.state).toBe("ready")
+    expect((current as { deployment?: { status?: string; productionUrl?: string } }).deployment).toMatchObject({
+      status: "success",
+      productionUrl: "https://shop.example.com",
+    })
+    expect(mockReleaseSubdomainSlot).toHaveBeenCalledWith("u_dep", "p_dep")
+    expect(mockUpdateProject.mock.invocationCallOrder[0]).toBeLessThan(
+      mockReleaseSubdomainSlot.mock.invocationCallOrder[0],
+    )
   })
 
   it("finalizes legacy records without a recorded charge without calling the credit service", async () => {
