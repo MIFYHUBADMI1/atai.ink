@@ -83,6 +83,11 @@ export function applicationIdentityFrom(
   }
 }
 
+/**
+ * A migrated business is `active`, not `draft`: it already exists and is in use
+ * outside Atai, which is the opposite of the empty draft `createBusiness`
+ * makes. The two creation paths differ on purpose (A′.5 F-11).
+ */
 export function businessDocFor(project: MirrorProject, stamp: MigrationStamp, now: number): BusinessDoc {
   const name = project.name?.trim() || "Untitled business"
   return {
@@ -233,9 +238,11 @@ export async function migrateConnectedBusinesses(options: MigrationOptions): Pro
 }
 
 async function loadProjects(options: MigrationOptions): Promise<MirrorProject[]> {
+  // Both filters narrow the run when both are given. Choosing one silently
+  // would migrate projects the operator did not name.
   const filter: Record<string, unknown> = {}
   if (options.projectIds?.length) filter.id = { $in: options.projectIds }
-  else if (options.userIds?.length) filter.userId = { $in: options.userIds }
+  if (options.userIds?.length) filter.userId = { $in: options.userIds }
   const rows = await (await projectsCol()).find(filter).toArray()
   const sorted = rows.sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))
   return options.limit ? sorted.slice(0, options.limit) : sorted

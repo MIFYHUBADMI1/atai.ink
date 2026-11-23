@@ -78,6 +78,27 @@ describe("business creation", () => {
     })
   })
 
+  it("never records a name source without the suggestion it describes", async () => {
+    const withSource = await createBusiness({
+      actor: userActor("u1"),
+      name: "Acme",
+      suggestedNameSource: "hostname",
+      now: 100,
+    })
+    expect(withSource.suggestedName).toBeUndefined()
+    expect(withSource.suggestedNameSource).toBeUndefined()
+
+    const withSuggestion = await createBusiness({
+      actor: userActor("u1"),
+      name: "Acme",
+      suggestedName: "acme.com",
+      suggestedNameSource: "hostname",
+      now: 100,
+    })
+    expect(withSuggestion.suggestedName).toBe("acme.com")
+    expect(withSuggestion.suggestedNameSource).toBe("hostname")
+  })
+
   it("refuses a system actor", async () => {
     await expect(
       createBusiness({ actor: systemActor("migration"), name: "Acme", now: 100 }),

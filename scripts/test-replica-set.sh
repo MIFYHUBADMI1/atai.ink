@@ -15,12 +15,23 @@ RS="${MONGO_TEST_RS:-rs0}"
 VERSION="${MONGO_TEST_VERSION:-8.0.4}"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CACHE="$ROOT/.cache/mongo-test"
+# One data directory per port: a set initiated on 27019 will never elect a
+# primary when it is later started on 27018, because the member address is
+# stored in the data directory.
+CACHE="$ROOT/.cache/mongo-test/$PORT"
 DATA="$CACHE/data"
 LOG="$CACHE/mongod.log"
 PIDFILE="$CACHE/mongod.pid"
 URI="mongodb://127.0.0.1:${PORT}/atai_integration?replicaSet=${RS}"
 cd "$ROOT"
+
+# `kill -0` succeeds for a zombie, which made `start` report "already running"
+# and then fail to connect.
+is_running() {
+  local pid="$1"
+  [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null || return 1
+  [[ "$(ps -p "$pid" -o stat= 2>/dev/null)" != *Z* ]]
+}
 
 resolve_mongod() {
   if [[ -n "${MONGOD_BIN:-}" ]]; then echo "$MONGOD_BIN"; return; fi
@@ -61,7 +72,7 @@ const { MongoClient } = require('mongodb');
 case "${1:-start}" in
   start)
     mkdir -p "$DATA"
-    if [[ -f "$PIDFILE" ]] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+    if is_running "$(cat "$PIDFILE" 2>/dev/null)"; then
       echo "already running (pid $(cat "$PIDFILE"))"
     else
       "$(resolve_mongod)" --replSet "$RS" --port "$PORT" --bind_ip 127.0.0.1 \
@@ -72,14 +83,14 @@ case "${1:-start}" in
     echo "MONGODB_REPLICA_URI='$URI'"
     ;;
   status)
-    if [[ -f "$PIDFILE" ]] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+    if is_running "$(cat "$PIDFILE" 2>/dev/null)"; then
       echo "running (pid $(cat "$PIDFILE"))"; echo "MONGODB_REPLICA_URI='$URI'"
     else
       echo "not running"; exit 1
     fi
     ;;
   stop)
-    if [[ -f "$PIDFILE" ]] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+    if is_running "$(cat "$PIDFILE" 2>/dev/null)"; then
       kill "$(cat "$PIDFILE")" && echo "stopped"
     else
       echo "not running"

@@ -86,8 +86,3 @@ export function permissionsForRole(role: BusinessRole): ReadonlySet<Permission> 
 export function roleHasPermission(role: BusinessRole, permission: Permission): boolean {
   return ROLE_PERMISSIONS[role].has(permission)
 }
-
-/**
- * A system actor is not a member. It may run exactly the operations the
- * migration and verification need, and nothing else.
- */

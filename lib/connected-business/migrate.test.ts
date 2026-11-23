@@ -173,4 +173,27 @@ describe("migration", () => {
     expect(report.total).toBe(1)
     expect(report.items[0].projectId).toBe("p2")
   })
+
+  it("narrows by project and user together when both are given", async () => {
+    fakes.projects.docs.push(project({ id: "p1", userId: "u1" }), project({ id: "p2", userId: "u2" }))
+
+    const onlyBoth = await migrateConnectedBusinesses({
+      mode: "apply",
+      runId: "run-1",
+      projectIds: ["p1"],
+      userIds: ["u2"],
+      now: 100,
+    })
+    expect(onlyBoth.total).toBe(0)
+
+    const matching = await migrateConnectedBusinesses({
+      mode: "apply",
+      runId: "run-2",
+      projectIds: ["p2"],
+      userIds: ["u2"],
+      now: 100,
+    })
+    expect(matching.total).toBe(1)
+    expect(matching.items[0].projectId).toBe("p2")
+  })
 })

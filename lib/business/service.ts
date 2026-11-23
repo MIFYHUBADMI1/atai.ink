@@ -63,8 +63,6 @@ export async function createBusiness(input: CreateBusinessInput): Promise<Busine
   if (suggested) {
     business.suggestedName = suggested
     business.suggestedNameSource = input.suggestedNameSource ?? "hostname"
-  } else if (input.suggestedNameSource) {
-    business.suggestedNameSource = input.suggestedNameSource
   }
   if (input.migration) business.migration = input.migration
 
