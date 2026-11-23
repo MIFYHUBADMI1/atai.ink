@@ -4,7 +4,7 @@ import { ProjectComingSoon } from "@/components/workspace/project-coming-soon"
 import { getCurrentUser } from "@/lib/auth/session"
 import { isGrowthTasksEnabledForUser } from "@/lib/marketing/feature-flags"
 import { listTasks } from "@/lib/marketing/tasks/service"
-import { getGrowthOverview } from "@/lib/marketing/growth-overview"
+import { getGrowthOverview, runtimeNextSteps } from "@/lib/marketing/growth-overview"
 import { requireOwnedProject } from "@/lib/workspace/require-owned-project"
 
 /**
@@ -52,7 +52,7 @@ export default async function ProjectTasksPage({ params }: { params: Promise<{ p
     completedAt: d.completedAt,
   }))
   const overview = await getGrowthOverview({ user, project })
-  const nextSteps: NextStepSeed[] = overview.nextSteps.map((s) => ({
+  const nextSteps: NextStepSeed[] = runtimeNextSteps(overview).map((s) => ({
     id: s.id,
     kind: s.kind,
     title: s.title,

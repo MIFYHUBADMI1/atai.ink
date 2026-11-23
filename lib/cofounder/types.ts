@@ -167,6 +167,8 @@ export interface ToolContext {
   user: { id: string; name: string; email: string; emailVerified: boolean }
   credits: { available: number; balance: number; reserved: number }
   activeProjectId?: string
+  /** The business whose workspace this turn belongs to (operate surface only). */
+  activeBusinessId?: string
   currentRoute?: string
   currentSurface?: string
   /** Workspace conversation this turn belongs to — recorded on pending

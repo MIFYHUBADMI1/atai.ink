@@ -1,14 +1,12 @@
 import { requireUser } from "@/lib/auth/session"
 import { checkRateLimit } from "@/lib/auth/rate-limit"
-import { fail, failInsufficientCredits, handleRouteError, ok } from "@/lib/api/respond"
+import { fail, handleRouteError, ok } from "@/lib/api/respond"
 import { store } from "@/lib/store/store"
 import { checkProjectOwnership } from "@/lib/runtime/ownership"
 import { isSeoAuditEnabledForUser } from "@/lib/marketing/feature-flags"
 import { isFirecrawlConfigured } from "@/lib/integrations/firecrawl/client"
-import { getSeoAuditAffordability, chargeSeoAuditCredits, refundSeoAuditCredits } from "@/lib/marketing/seo/credits"
-import { scopedIntentKey } from "@/lib/billing/operation-identity"
-import { runSeoAudit, getLatestSeoAudit, markSeoAuditRefund } from "@/lib/marketing/seo/service"
-import { logger } from "@/lib/logging/logger"
+import { getLatestSeoAudit } from "@/lib/marketing/seo/service"
+import { runSeoAuditRequest } from "@/lib/marketing/seo/request"
 import { z } from "zod"
 
 /**
@@ -78,17 +76,9 @@ import { withAiProtection } from "@/lib/api/ai-protection"
 export const POST = withAiProtection("analysis", post)
 
 async function post(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  let charged = false
-  let chargedAmount = 0
-  let failedAuditId: string | null = null
-  let intentKey: string | undefined
-  let userId = ""
-  let projectId = ""
   try {
     const user = await requireUser()
-    userId = user.id
     const { id } = await params
-    projectId = id
 
     await checkRateLimit({ action: "seo_audit_run", identifier: user.id, limit: 10, windowMs: 60 * 60 * 1000 })
 
@@ -111,59 +101,15 @@ async function post(req: Request, { params }: { params: Promise<{ id: string }> 
     const parsed = BodySchema.safeParse(await req.json().catch(() => ({})))
     if (!parsed.success) return fail("VALIDATION", "Invalid request.", 422)
 
-    // Stable operation identity when the client supplies one; otherwise the
-    // previous per-attempt behavior is preserved.
-    intentKey = scopedIntentKey(parsed.data.requestId, { userId: user.id, operation: "seo_audit", projectId: id })
-
-    const { cost, available, affordable } = await getSeoAuditAffordability(user.id)
-    if (!affordable)
-      return failInsufficientCredits({
-        required: cost,
-        available,
-        message: `This audit costs ${cost} credits and you have ${available}.`,
-      })
-
-    charged = await chargeSeoAuditCredits(user.id, id, intentKey)
-    if (!charged)
-      return failInsufficientCredits({
-        required: cost,
-        available,
-        message: "You don't have enough credits for this audit.",
-      })
-    chargedAmount = cost
-
-    const outcome = await runSeoAudit({
+    return await runSeoAuditRequest({
       userId: user.id,
       projectId: id,
-      url,
-      creditsCharged: cost,
       projectName: project.name,
-      onFailedAuditPersisted: (auditId) => {
-        failedAuditId = auditId
-      },
-    })
-
-    return ok({
-      auditId: outcome.auditId,
-      url: outcome.url,
-      score: outcome.score,
-      auditScore: outcome.auditScore,
-      pagesCrawled: outcome.pagesCrawled,
-      findings: outcome.findings,
-      recommendations: outcome.recommendations,
-      recommendationsMeta: outcome.recommendationsMeta,
-      completedAt: outcome.completedAt,
-      creditsCharged: cost,
+      url,
+      ...(parsed.data.requestId ? { requestId: parsed.data.requestId } : {}),
+      logTag: "api.projects.seoAudit.post",
     })
   } catch (e) {
-    if (charged && userId && projectId) {
-      // Reverse exactly what was charged, then record the real outcome on the
-      // failed history row (if it was stored) so the history is truthful.
-      const refundStatus = await refundSeoAuditCredits(userId, projectId, chargedAmount, intentKey)
-      if (failedAuditId) {
-        await markSeoAuditRefund(projectId, failedAuditId, refundStatus, chargedAmount)
-      }
-    }
     return handleRouteError("api.projects.seoAudit.post", e)
   }
 }

@@ -73,6 +73,7 @@ describe("tool registry — allow-list invariants", () => {
       "autocomplete_plan",
       "create_project",
       "run_seo_audit",
+      "run_business_seo_audit",
       "generate_marketing_copy",
       "search_marketing_content",
       "refine_marketing_content",
@@ -166,6 +167,26 @@ describe("tool registry — schema hygiene", () => {
       // the parse valid for every tool while still exercising the strip.
       const parsed = tool.inputSchema.partial().parse({ rogue: "key" })
       expect(parsed, `${tool.name} strips unknown keys`).not.toHaveProperty("rogue")
+    }
+  })
+})
+
+describe("tool registry — surfaces", () => {
+  it("offers exactly one SEO audit tool per surface", () => {
+    const build = new Set([...immediateTools("build"), ...confirmationTools("build")].map((t) => t.name))
+    const operate = new Set([...immediateTools("operate"), ...confirmationTools("operate")].map((t) => t.name))
+
+    expect(build.has("run_seo_audit")).toBe(true)
+    expect(build.has("run_business_seo_audit")).toBe(false)
+    expect(operate.has("run_business_seo_audit")).toBe(true)
+    expect(operate.has("run_seo_audit")).toBe(false)
+  })
+
+  it("hides every build-only tool from the operate surface", () => {
+    const operate = new Set([...immediateTools("operate"), ...confirmationTools("operate")].map((t) => t.name))
+
+    for (const name of ["request_build", "request_deploy", "request_followup_edit", "create_project", "delete_project", "get_plan", "propose_plan_update"]) {
+      expect(operate.has(name), `${name} must not be offered on the operate surface`).toBe(false)
     }
   })
 })

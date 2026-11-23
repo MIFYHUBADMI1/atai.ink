@@ -24,6 +24,7 @@ interface ReadingPayload {
  */
 export function ReadingPreviewDialog({
   projectId,
+  apiBase,
   /** The address the founder submitted, so the dialog has a title before the
    * fetch lands instead of flashing "your website". */
   submittedUrl,
@@ -31,6 +32,7 @@ export function ReadingPreviewDialog({
   onOpenChange,
 }: {
   projectId: string
+  apiBase?: string
   submittedUrl?: string
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -51,7 +53,7 @@ export function ReadingPreviewDialog({
     let cancelled = false
     setLoading(true)
     setError(null)
-    jsonFetcher<ReadingPayload>(`/api/projects/${projectId}/intake/reading`)
+    jsonFetcher<ReadingPayload>(`${apiBase ?? `/api/projects/${projectId}`}/intake/reading`)
       .then((data) => {
         if (!cancelled) setPayload(data)
       })
@@ -64,7 +66,7 @@ export function ReadingPreviewDialog({
     return () => {
       cancelled = true
     }
-  }, [open, projectId, attempt])
+  }, [open, projectId, apiBase, attempt])
 
   const reading = payload?.reading ?? null
   const state = readingPreviewState(payload, error)

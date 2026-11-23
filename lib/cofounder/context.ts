@@ -157,6 +157,7 @@ async function buildExistingBusinessBrief(project: {
 export async function buildActiveProjectBrief(
   projectId: string,
   userId: string,
+  options: { operate?: boolean } = {},
 ): Promise<{
   id: string
   name: string
@@ -185,6 +186,17 @@ export async function buildActiveProjectBrief(
     businessStartingPointOf(project) === "existing_business"
       ? await buildExistingBusinessBrief(project)
       : undefined
+  if (options.operate) {
+    // A connected business has no plan, build or deployment. Shipping those
+    // fields would describe a pipeline that does not exist for it.
+    return {
+      id: project.id,
+      name: project.name,
+      mode: project.mode,
+      state: project.state,
+      ...(existingBusiness ? { existingBusiness } : {}),
+    }
+  }
   return {
     id: project.id,
     name: project.name,

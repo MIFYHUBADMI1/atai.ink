@@ -30,11 +30,14 @@ export interface SeoAuditView {
 
 export interface SeoPanelState {
   enabled: boolean
-  deployed: boolean
+  /** True when the server has an address it is allowed to audit for this surface. */
+  ready: boolean
+  /** What to do when it does not — surface-specific, never assumed. */
+  notReadyMessage: string
   cost: number
   available: number
-  /** Destination of the full SEO & Visibility workspace. */
-  href: string
+  /** Destination of the full SEO & Visibility workspace, when one exists. */
+  href?: string
   latest: SeoAuditView | null
 }
 
@@ -44,7 +47,7 @@ function statusIcon(status: SeoFinding["status"]) {
   return <CircleDashed className="h-4 w-4 text-muted-foreground" aria-label="not observed" />
 }
 
-export function SeoAuditPanel({ projectId, state }: { projectId: string; state: SeoPanelState }) {
+export function SeoAuditPanel({ apiBase, state }: { apiBase: string; state: SeoPanelState }) {
   const router = useRouter()
   const [running, setRunning] = useState(false)
   const [latest, setLatest] = useState<SeoAuditView | null>(state.latest)
@@ -82,7 +85,7 @@ export function SeoAuditPanel({ projectId, state }: { projectId: string; state: 
       intentRef.current = randomId
     }
     try {
-      const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/seo-audit`, {
+      const response = await fetch(`${apiBase}/seo-audit`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ requestId: intentRef.current }),
@@ -124,17 +127,19 @@ export function SeoAuditPanel({ projectId, state }: { projectId: string; state: 
           <SearchCheck className="h-5 w-5 shrink-0 text-primary" /> SEO visibility
         </h2>
         <div className="flex min-w-0 flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-          <Link
-            href={state.href}
-            className="text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-          >
-            Open SEO &amp; Visibility →
-          </Link>
+          {state.href ? (
+            <Link
+              href={state.href}
+              className="text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            >
+              Open SEO &amp; Visibility →
+            </Link>
+          ) : null}
           <Button
             size="sm"
             variant={latest ? "outline" : "default"}
             onClick={runAudit}
-            disabled={running || !state.deployed}
+            disabled={running || !state.ready}
             className="w-full sm:w-auto"
           >
             {running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -143,9 +148,9 @@ export function SeoAuditPanel({ projectId, state }: { projectId: string; state: 
         </div>
       </div>
 
-      {!state.deployed ? (
+      {!state.ready ? (
         <p className="rounded-2xl border border-border bg-card p-4 text-sm leading-6 text-muted-foreground sm:p-5">
-          Deploy your project to a live URL first — the audit reads only your own deployed site.
+          {state.notReadyMessage}
         </p>
       ) : !latest ? (
         <p className="rounded-2xl border border-border bg-card p-4 text-sm leading-6 text-muted-foreground sm:p-5">

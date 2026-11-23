@@ -12,7 +12,7 @@ import {
   isGrowthTaskStatus,
 } from "@/lib/marketing/tasks/service"
 import type { GrowthTaskDoc } from "@/lib/types/db"
-import { getGrowthOverview } from "@/lib/marketing/growth-overview"
+import { getGrowthOverview, runtimeNextSteps, type GrowthNextStep } from "@/lib/marketing/growth-overview"
 import { z } from "zod"
 
 /**
@@ -72,7 +72,7 @@ function present(doc: Awaited<ReturnType<typeof listTasks>>[number]) {
 }
 
 /** Compact next-step seed the panel can offer as a one-click task. */
-function presentNextStep(step: Awaited<ReturnType<typeof getGrowthOverview>>["nextSteps"][number]) {
+function presentNextStep(step: GrowthNextStep) {
   return {
     id: step.id,
     kind: step.kind,
@@ -99,7 +99,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
     const tasks = await listTasks(id)
     const overview = await getGrowthOverview({ user, project })
-    return ok({ enabled: true, tasks: tasks.map(present), nextSteps: overview.nextSteps.map(presentNextStep) })
+    return ok({ enabled: true, tasks: tasks.map(present), nextSteps: runtimeNextSteps(overview).map(presentNextStep) })
   } catch (e) {
     return handleRouteError("api.projects.tasks.get", e)
   }

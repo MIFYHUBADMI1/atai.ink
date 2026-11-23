@@ -46,7 +46,12 @@ export default async function BusinessOverviewPage({
         </p>
       </section>
 
-      <BusinessProfile projectId={anchor.projectId} initialView={view} base={businessBase(business.id)} />
+      <BusinessProfile
+        projectId={anchor.projectId}
+        initialView={view}
+        base={businessBase(business.id)}
+        apiBase={`/api/businesses/${business.id}`}
+      />
     </div>
   )
 }

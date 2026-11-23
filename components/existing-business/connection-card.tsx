@@ -24,12 +24,14 @@ interface GuideResponse {
  */
 export function ConnectionCard({
   projectId,
+  apiBase,
   connection,
   domainVerified,
   hostname,
   onChanged,
 }: {
   projectId: string
+  apiBase?: string
   connection: IntakeView["connection"]
   domainVerified: boolean
   hostname?: string
@@ -59,7 +61,7 @@ export function ConnectionCard({
     setBusy("download")
     setError(null)
     try {
-      const data = await postJson<GuideResponse>(`/api/projects/${projectId}/integration-guide`)
+      const data = await postJson<GuideResponse>(`${apiBase ?? `/api/projects/${projectId}`}/integration-guide`)
       const blob = new Blob([data.markdown], { type: "text/markdown" })
       const url = URL.createObjectURL(blob)
       const link = document.createElement("a")
@@ -94,7 +96,7 @@ export function ConnectionCard({
     setBusy("disconnect")
     setError(null)
     try {
-      await deleteJson(`/api/projects/${projectId}/integration-guide`)
+      await deleteJson(`${apiBase ?? `/api/projects/${projectId}`}/integration-guide`)
       onChanged()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not disconnect this business.")

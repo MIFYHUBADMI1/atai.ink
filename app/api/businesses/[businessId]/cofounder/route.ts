@@ -55,6 +55,7 @@ async function post(req: Request, context: { params: Promise<{ businessId: strin
       conversationId: conversation.id,
       history: conversation.messages,
       activeProjectId: anchor.projectId,
+      activeBusinessId: businessId,
       currentRoute: `/business/${businessId}/plan`,
       currentSurface: "business",
     })

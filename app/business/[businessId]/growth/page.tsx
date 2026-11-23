@@ -1,12 +1,19 @@
 import Link from "next/link"
 
 import { NotConnected } from "@/components/connected-business/not-connected"
+import { GrowthOverviewView } from "@/components/marketing/growth-overview-view"
 import { SiteReadingCard } from "@/components/connected-business/site-reading-card"
+import { SeoAuditPanel } from "@/components/marketing/seo-audit-panel"
 import { buttonVariants } from "@/components/ui/button"
 import { verifiedHostnameForBusiness } from "@/lib/connected-business/anchor"
 import { businessPageContext } from "@/lib/connected-business/page-context"
 import { businessNextMoves, businessPriorities } from "@/lib/connected-business/growth"
-import { isStudioWorkspaceEnabled } from "@/lib/marketing/feature-flags"
+import { auditableSiteUrl } from "@/lib/connected-business/site-url"
+import { businessBase } from "@/lib/connected-business/surface"
+import { getGrowthOverview } from "@/lib/marketing/growth-overview"
+import { isSeoAuditEnabledForUser, isStudioWorkspaceEnabled } from "@/lib/marketing/feature-flags"
+import { getSeoAuditAffordability } from "@/lib/marketing/seo/credits"
+import { getLatestSeoAudit } from "@/lib/marketing/seo/service"
 
 export const dynamic = "force-dynamic"
 
@@ -23,9 +30,10 @@ function hostnameOf(url?: string | null): string | null {
  * Growth for a connected business.
  *
  * It reuses the read the founder already paid for and the objective engine that
- * already maps objectives to screens. It does not show the deployment-based
- * growth overview: that engine describes a site Atai hosts, and telling a
- * founder whose site is live that it was "never deployed" would be a lie.
+ * already maps objectives to screens. The growth overview engine runs here too,
+ * but against the proved address (`externalSite`): its result is the
+ * unmeasured variant, which states what Atai cannot see instead of rendering a
+ * grid of zeroes for a site it does not host.
  */
 export default async function BusinessGrowthPage({
   params,
@@ -47,6 +55,19 @@ export default async function BusinessGrowthPage({
   const moves = businessNextMoves({ project, userId: user.id, businessId: business.id })
   const studioEnabled = isStudioWorkspaceEnabled(user.id)
 
+  // The audit reads the proved hostname, never a typed URL, so an unproved
+  // business is told what to do instead of being offered an audit that will
+  // refuse. Credits are charged to the acting member.
+  const site = await auditableSiteUrl(project)
+  const overview = await getGrowthOverview({
+    user,
+    project,
+    externalSite: site ? { url: site.url } : {},
+  })
+  const seoEnabled = isSeoAuditEnabledForUser(user.id, user.featurePreferences)
+  const seoAffordability = seoEnabled ? await getSeoAuditAffordability(user.id) : null
+  const seoLatest = seoEnabled ? await getLatestSeoAudit(project.id) : null
+
   return (
     <div className="flex flex-col gap-6">
       <header>
@@ -56,6 +77,8 @@ export default async function BusinessGrowthPage({
           Everything below comes from what Atai read on {hostname ?? "your site"}. No numbers are invented.
         </p>
       </header>
+
+      <GrowthOverviewView overview={overview} base={businessBase(business.id)} />
 
       <SiteReadingCard businessId={business.id} reading={reading} hostname={hostname} verified={verified} />
 
@@ -101,6 +124,30 @@ export default async function BusinessGrowthPage({
           </ul>
         </section>
       ) : null}
+
+      <SeoAuditPanel
+        apiBase={`/api/businesses/${business.id}`}
+        state={{
+          enabled: seoEnabled,
+          ready: Boolean(site),
+          notReadyMessage:
+            "Prove your domain first — the audit reads only an address you have proved you own. Finish the domain step in Overview.",
+          cost: seoAffordability?.cost ?? 0,
+          available: seoAffordability?.available ?? 0,
+          latest: seoLatest
+            ? {
+                url: seoLatest.url,
+                status: seoLatest.status,
+                score: seoLatest.score,
+                auditScore: seoLatest.auditScore ?? null,
+                pagesCrawled: seoLatest.pagesCrawled,
+                findings: seoLatest.findings,
+                fromCache: seoLatest.fromCache,
+                createdAt: seoLatest.createdAt,
+              }
+            : null,
+        }}
+      />
 
       <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/80 bg-card p-5 sm:p-6">
         <div>

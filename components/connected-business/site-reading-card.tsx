@@ -29,19 +29,20 @@ export function SiteReadingCard({
   async function reread() {
     setBusy(true)
     try {
-      const response = await fetch(`/api/businesses/${businessId}/read`, {
+      const response = await fetch(`/api/businesses/${businessId}/intake`, {
         method: "POST",
-        headers: { accept: "application/json" },
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({ action: "reassess" }),
       })
       const body = (await response.json().catch(() => null)) as
-        | { data?: { started?: boolean; message?: string }; error?: { message?: string } }
+        | { data?: { started?: boolean }; error?: { message?: string } }
         | null
       if (!response.ok) {
         toast.error(body?.error?.message ?? "The read could not start.")
         return
       }
       if (body?.data?.started === false) {
-        toast.message(body.data.message ?? "A read is already running.")
+        toast.message("A read is already running — this page updates when it finishes.")
       } else {
         toast.success("Reading your site again. This page will update when it finishes.")
       }

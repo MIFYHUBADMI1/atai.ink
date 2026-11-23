@@ -86,7 +86,7 @@ function notInstrumented(reason: string, def: Pick<NumberMetric, "definition" | 
 
 // ─── View model ─────────────────────────────────────────────────────────────
 
-export interface SiteAvailability {
+export interface DeploymentSiteAvailability {
   /**
    * Deployment state ONLY. `live` means the platform has a recorded
    * successful deployment with a URL — it says nothing about visitors.
@@ -97,6 +97,22 @@ export interface SiteAvailability {
   error?: string
   caveat: string
 }
+
+/**
+ * A site Atai does not host. It exists, the founder proved it, and Atai can
+ * read and audit it — but Atai hosts and measures nothing on it. Keeping this
+ * a separate variant (rather than calling it `live`) is what stops an external
+ * site from being described as a deployment.
+ */
+export interface ExternalSiteAvailability {
+  state: "external"
+  /** The proved address, when the business has one. The absence of a deployment
+   *  is the point of this variant, not the presence of a URL. */
+  url?: string
+  caveat: string
+}
+
+export type SiteAvailability = DeploymentSiteAvailability | ExternalSiteAvailability
 
 export interface AiPlanDocument {
   id: "seoPlan" | "marketingPlan" | "designDirection"
@@ -171,14 +187,21 @@ export type MetricKey =
   | "ownerAccountReferrals"
   | "projectLevelReferrals"
 
-export interface GrowthOverview {
+interface GrowthOverviewBase {
   projectId: string
   projectName: string
   projectState: string
   projectStateLabel: string
   generatedAt: number
   window: { from: number; to: number }
-  site: SiteAvailability
+  /** Fixed trust statements rendered with the metrics (spec section 6). */
+  trustNotes: string[]
+}
+
+/** A project Atai hosts: its runtime, credits and deployment are observable. */
+export interface RuntimeGrowthOverview extends GrowthOverviewBase {
+  measurement: "runtime"
+  site: DeploymentSiteAvailability
   whatAtaiKnows: {
     plan: PlanKnowledge
     ownerGoals: OwnerGoals | null
@@ -186,15 +209,33 @@ export interface GrowthOverview {
   }
   metrics: Record<MetricKey, NumberMetric>
   nextSteps: GrowthNextStep[]
-  /** Fixed trust statements rendered with the metrics (spec section 6). */
-  trustNotes: string[]
 }
+
+/**
+ * A business Atai does not host. There are no metrics and no build next steps
+ * because there is nothing to measure and no pipeline to advise on — the
+ * absence is stated, never rendered as zero.
+ */
+export interface UnmeasuredGrowthOverview extends GrowthOverviewBase {
+  measurement: "none"
+  site: ExternalSiteAvailability
+  /** Why nothing is measured, in the founder's words. */
+  measurementNote: string
+}
+
+export type GrowthOverview = RuntimeGrowthOverview | UnmeasuredGrowthOverview
 
 export interface GrowthOverviewInput {
   /** Server-resolved session user (never a client-provided id). */
   user: Pick<UserDoc, "id"> & { onboarding?: UserDoc["onboarding"] }
   /** Project already ownership-checked by the caller. */
   project: MirrorProject
+  /**
+   * Set for a connected business: the address the founder proved. Its presence
+   * is what makes the result unmeasured — Atai reads that site, it does not
+   * host it.
+   */
+  externalSite?: { url?: string }
 }
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -314,7 +355,28 @@ async function readOwnerReferrals(user: GrowthOverviewInput["user"]): Promise<Nu
 
 // ─── Deterministic projections (no AI calls, no new writes) ────────────────
 
-export function readSiteAvailability(project: MirrorProject): SiteAvailability {
+/**
+ * Build next steps, or none. A business Atai does not host has no build
+ * pipeline to advise on, so its overview carries no next steps at all.
+ */
+export function runtimeNextSteps(overview: GrowthOverview): GrowthNextStep[] {
+  return overview.measurement === "runtime" ? overview.nextSteps : []
+}
+
+export const EXTERNAL_MEASUREMENT_NOTE =
+  "This site runs outside Atai. Atai read it and can audit it, but it does not host it, so it cannot see its visitors, signups, payments or revenue. Nothing here is a zero — these things are simply not measured."
+
+export function readSiteAvailability(
+  project: MirrorProject,
+  externalSite?: { url?: string },
+): SiteAvailability {
+  if (externalSite) {
+    return {
+      state: "external",
+      ...(externalSite.url ? { url: externalSite.url } : {}),
+      caveat: "The site runs outside Atai. Atai reads it; it does not host or measure it.",
+    }
+  }
   const deployment = project.deployment
   const caveat = "Deployment state only. A live site does not imply visitors, signups, or sales."
   if (!deployment || deployment.status === "idle") {
@@ -494,11 +556,28 @@ export function deriveNextSteps(input: {
 
 // ─── Assembly ───────────────────────────────────────────────────────────────
 
-export async function getGrowthOverview({ user, project }: GrowthOverviewInput): Promise<GrowthOverview> {
+export async function getGrowthOverview({ user, project, externalSite }: GrowthOverviewInput): Promise<GrowthOverview> {
   const now = Date.now()
   const window = clampRange(now - WINDOW_MS, now)
 
-  const site = readSiteAvailability(project)
+  const site = readSiteAvailability(project, externalSite)
+  if (site.state === "external") {
+    // No metric query runs: there is nothing to query, and a query that
+    // returned zeroes would be read as "nobody visited".
+    return {
+      measurement: "none",
+      site,
+      measurementNote: EXTERNAL_MEASUREMENT_NOTE,
+      projectId: project.id,
+      projectName: project.name,
+      projectState: project.state,
+      projectStateLabel: STATE_LABELS[project.state] ?? project.state,
+      generatedAt: now,
+      window,
+      trustNotes: TRUST_NOTES,
+    }
+  }
+
   const plan = readPlanKnowledge(project)
   const aiPlanDocuments = readAiPlanDocuments(project)
   const ownerGoals = readOwnerGoals(user)
@@ -553,6 +632,7 @@ export async function getGrowthOverview({ user, project }: GrowthOverviewInput):
   }
 
   return {
+    measurement: "runtime",
     projectId: project.id,
     projectName: project.name,
     projectState: project.state,

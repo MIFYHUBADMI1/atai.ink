@@ -77,14 +77,20 @@ export function BusinessProfile({
   projectId,
   initialView,
   base,
+  apiBase,
 }: {
   projectId: string
   initialView: IntakeView
   /** Where this stepper's links point. Defaults to the project workspace; a
    *  connected business passes its own base so nothing leaks into /project. */
   base?: WorkspaceBase
+  /** Which API the stepper talks to. Defaults to the project routes; a
+   *  connected business addresses the same operations by business id, so the
+   *  anchor project id never appears in the browser. */
+  apiBase?: string
 }) {
   const routeBase = base ?? projectBase(projectId)
+  const api = apiBase ?? `/api/projects/${projectId}`
   const [readingOpen, setReadingOpen] = useState(false)
   const [view, setView] = useState<IntakeView>(initialView)
   const [busy, setBusy] = useState<"retry" | "reassess" | null>(null)
@@ -101,12 +107,12 @@ export function BusinessProfile({
 
   const refresh = useCallback(async () => {
     try {
-      const next = await jsonFetcher<IntakeView>(`/api/projects/${projectId}/intake`)
+      const next = await jsonFetcher<IntakeView>(api)
       setView(next)
     } catch {
       // A failed poll is not a failed intake — keep the last honest state.
     }
-  }, [projectId])
+  }, [api])
 
   const running = view.overall === "pending" || view.overall === "processing"
   // A run started from this page is accepted by the server before it does any
@@ -173,7 +179,7 @@ export function BusinessProfile({
     setError(null)
     try {
       const data = await postJson<{ started: boolean; view: IntakeView }>(
-        `/api/projects/${projectId}/intake`,
+        api,
         action ? { action } : {},
       )
       setView(data.view)
@@ -345,6 +351,7 @@ export function BusinessProfile({
                 ) : (
                   <DomainVerification
                     projectId={projectId}
+                    apiBase={api}
                     initialDomains={view.domain.records}
                     defaultUrl={view.website.url}
                     onChanged={refresh}
@@ -354,6 +361,7 @@ export function BusinessProfile({
               {active.id === "connection" ? (
                 <ConnectionCard
                   projectId={projectId}
+                  apiBase={api}
                   connection={view.connection}
                   domainVerified={view.domain.verified}
                   hostname={view.domain.hostname}
@@ -401,6 +409,7 @@ export function BusinessProfile({
 
         <ReadingPreviewDialog
           projectId={projectId}
+          apiBase={api}
           submittedUrl={view.website.url}
           open={readingOpen}
           onOpenChange={setReadingOpen}

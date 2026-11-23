@@ -220,7 +220,7 @@ export async function getGrowthCenterOverview(input: {
       body: latestRecommendation.body,
       createdAt: latestRecommendation.createdAt,
     }
-  } else if (growth && growth.nextSteps.length > 0) {
+  } else if (growth && growth.measurement === "runtime" && growth.nextSteps.length > 0) {
     recommendation = { kind: "rule", title: growth.nextSteps[0].title, body: growth.nextSteps[0].detail }
   }
 

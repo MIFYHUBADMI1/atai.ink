@@ -33,7 +33,7 @@ import {
   readSiteAvailability,
   readPlanKnowledge,
   type PlanKnowledge,
-  type SiteAvailability,
+  type DeploymentSiteAvailability,
 } from "@/lib/marketing/growth-overview"
 import { clampRange, summarizeProjectUsage } from "@/lib/runtime/control/analytics"
 import { ensureRuntimeIndexes, runtimeUsageCol } from "@/lib/db/runtime-collections"
@@ -266,7 +266,7 @@ export interface IntelligenceOverview {
   projectState: string
   generatedAt: number
   window: { from: number; to: number }
-  deployment: SiteAvailability
+  deployment: DeploymentSiteAvailability
   plan: PlanKnowledge
   runtime: {
     requests: NumberMetric
@@ -311,7 +311,7 @@ const STATE_LABELS: Record<string, string> = {
 }
 
 /** Deterministic, state-derived guidance for the founder. */
-function deriveNextSteps(deployment: SiteAvailability): string[] {
+function deriveNextSteps(deployment: DeploymentSiteAvailability): string[] {
   const steps: string[] = []
   if (deployment.state === "never_deployed") {
     steps.push("Deploy your application — intelligence surfaces become meaningful once the app is live and calling the runtime.")
@@ -326,7 +326,9 @@ export async function getIntelligenceOverview({ user, project }: IntelligenceOve
   const now = Date.now()
   const window = clampRange(now - WINDOW_MS, now)
 
-  const deployment = readSiteAvailability(project)
+  // Intelligence is a build-surface view: a connected business never reaches
+  // it, so the deployment variant is the only one that can appear here.
+  const deployment = readSiteAvailability(project) as DeploymentSiteAvailability
   const plan = readPlanKnowledge(project)
   const runtime = await readRuntimeMetrics(project.id, window)
 

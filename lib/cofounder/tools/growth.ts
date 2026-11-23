@@ -5,6 +5,8 @@ import { toToolOutcome } from "../errors"
 import type { ToolDefinition } from "../types"
 import { growthOverviewSchema } from "../schemas"
 import { ownedProject } from "./projects"
+import { resolveBusinessAnchorProject } from "@/lib/connected-business/anchor"
+import { auditableSiteUrl } from "@/lib/connected-business/site-url"
 import { logger } from "@/lib/logging/logger"
 
 /**
@@ -43,7 +45,7 @@ function compactMetric(m: NumberMetric) {
 /** Bounded model-readable projection of the overview (keeps tool payloads
  * small and never dumps full AI-plan text into the transcript). */
 export function projectGrowthOverviewForTool(overview: GrowthOverview): Record<string, unknown> {
-  return {
+  const base = {
     projectId: overview.projectId,
     projectName: overview.projectName,
     projectState: overview.projectStateLabel,
@@ -53,6 +55,16 @@ export function projectGrowthOverviewForTool(overview: GrowthOverview): Record<s
       ...(overview.site.url ? { url: overview.site.url } : {}),
       caveat: overview.site.caveat,
     },
+    trustNotes: overview.trustNotes,
+  }
+  if (overview.measurement === "none") {
+    // No metrics and no next steps: this site is not hosted or measured by
+    // Atai, and saying "0 visitors" would be a fabricated measurement.
+    return { ...base, measurement: "none", measurementNote: overview.measurementNote }
+  }
+  return {
+    ...base,
+    measurement: "runtime",
     plan: overview.whatAtaiKnows.plan.health
       ? {
           percentComplete: overview.whatAtaiKnows.plan.health.percent,
@@ -64,7 +76,6 @@ export function projectGrowthOverviewForTool(overview: GrowthOverview): Record<s
       .map((d) => ({ label: d.label, note: "AI-generated planning context — not executed" })),
     metrics: Object.fromEntries(TOOL_METRIC_KEYS.map((key) => [key, compactMetric(overview.metrics[key])])),
     nextSteps: overview.nextSteps.slice(0, 3).map((s) => ({ title: s.title, detail: s.detail.slice(0, 200), executed: false })),
-    trustNotes: overview.trustNotes,
   }
 }
 
@@ -83,6 +94,30 @@ export const getGrowthOverviewTool: ToolDefinition = {
           success: false,
           error: { code: "FEATURE_DISABLED", message: "The growth overview isn't available for this account yet.", fatal: true },
         }
+      }
+      const businessId = ctx.currentSurface === "business" ? ctx.activeBusinessId : undefined
+      if (ctx.currentSurface === "business") {
+        // A connected business has no deployment. Its overview is measured
+        // against the proved address and is explicitly unmeasured.
+        if (!businessId) {
+          return { success: false, error: { code: "VALIDATION", message: "Open a business first, then ask me about it.", fatal: true } }
+        }
+        const { project } = await resolveBusinessAnchorProject({
+          businessId,
+          actor: { kind: "user", id: ctx.user.id },
+          permission: "growth.read",
+        })
+        const site = await auditableSiteUrl(project)
+        const overview = await getGrowthOverview({
+          user: ctx.user,
+          project,
+          externalSite: site ? { url: site.url } : {},
+        })
+        return { success: true, type: "growth_overview", data: projectGrowthOverviewForTool(overview) }
+      }
+
+      if (!parsed.projectId) {
+        return { success: false, error: { code: "VALIDATION", message: "I need to know which project to read.", fatal: true } }
       }
       const project = await ownedProject(ctx, parsed.projectId)
       if (!project) {

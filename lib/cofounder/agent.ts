@@ -50,6 +50,8 @@ export interface AgentTurnInput {
    * Never includes the current message (persisted only after the model call). */
   history?: CofounderConversationMessage[]
   activeProjectId?: string
+  /** Operate surface only: the business this turn belongs to. */
+  activeBusinessId?: string
   currentRoute?: string
   currentSurface?: string
 }
@@ -81,6 +83,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
     credits: { available: 0, balance: 0, reserved: 0 },
     conversationId: input.conversationId,
     ...(input.activeProjectId ? { activeProjectId: input.activeProjectId } : {}),
+    ...(input.activeBusinessId ? { activeBusinessId: input.activeBusinessId } : {}),
     ...(input.currentRoute ? { currentRoute: input.currentRoute } : {}),
     ...(input.currentSurface ? { currentSurface: input.currentSurface } : {}),
   }
@@ -94,8 +97,14 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
     // keep zeros
   }
 
+  const operate = input.currentSurface === "business"
   const [activeBrief, recentProjects] = await Promise.all([
-    input.activeProjectId ? buildActiveProjectBrief(input.activeProjectId, input.user.id) : Promise.resolve(null),
+    // On the operate surface the brief describes the business — its site,
+    // assessment and priorities — never the anchor project's build state,
+    // which would invite the model to talk about a pipeline that does not exist.
+    input.activeProjectId
+      ? buildActiveProjectBrief(input.activeProjectId, input.user.id, { operate })
+      : Promise.resolve(null),
     // Compact recent-projects list from the same store listing the workspace
     // tools use — no separate query system (spec section 77).
     store

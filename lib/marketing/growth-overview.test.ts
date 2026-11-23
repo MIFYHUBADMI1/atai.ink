@@ -33,11 +33,13 @@ vi.mock("@/lib/db/collections", () => ({
 }))
 
 import {
+  EXTERNAL_MEASUREMENT_NOTE,
   deriveNextSteps,
   getGrowthOverview,
   readAiPlanDocuments,
   readPlanKnowledge,
   readSiteAvailability,
+  runtimeNextSteps,
   type GrowthOverviewInput,
 } from "./growth-overview"
 
@@ -224,5 +226,58 @@ describe("deterministic next-step derivation", () => {
     expect(steps.length).toBeLessThanOrEqual(5)
     expect(steps.some((s) => s.kind === "complete_plan_section")).toBe(true)
     expect(steps.some((s) => s.kind === "review_ai_plan")).toBe(true)
+  })
+})
+
+describe("a site Atai does not host", () => {
+  it("marks the site external instead of claiming a deployment", () => {
+    const site = readSiteAvailability(projectFixture({ deployment: { status: "idle" } }), { url: "https://acme.com" })
+
+    expect(site).toEqual({
+      state: "external",
+      url: "https://acme.com",
+      caveat: "The site runs outside Atai. Atai reads it; it does not host or measure it.",
+    })
+  })
+
+  it("returns the unmeasured variant and reads no metrics", async () => {
+    const overview = await getGrowthOverview({
+      user,
+      project: projectFixture(),
+      externalSite: { url: "https://acme.com" },
+    })
+
+    expect(overview.measurement).toBe("none")
+    if (overview.measurement !== "none") throw new Error("expected unmeasured")
+    expect(overview.site.state).toBe("external")
+    expect(overview.measurementNote).toBe(EXTERNAL_MEASUREMENT_NOTE)
+    expect("metrics" in overview).toBe(false)
+    expect("nextSteps" in overview).toBe(false)
+    // Nothing is measured, so nothing is queried — a zero from a query that
+    // should not have run is exactly the lie this variant prevents.
+    expect(mocks.summarizeProjectUsage).not.toHaveBeenCalled()
+    expect(mocks.countRuntimeDocs).not.toHaveBeenCalled()
+    expect(mocks.countReferrals).not.toHaveBeenCalled()
+  })
+
+  it("still describes an external site with no proved address", async () => {
+    const overview = await getGrowthOverview({ user, project: projectFixture(), externalSite: {} })
+
+    expect(overview.measurement).toBe("none")
+    expect(overview.site).toMatchObject({ state: "external" })
+    expect(overview.site.url).toBeUndefined()
+  })
+
+  it("has no build next steps", async () => {
+    const overview = await getGrowthOverview({ user, project: projectFixture(), externalSite: { url: "https://acme.com" } })
+
+    expect(runtimeNextSteps(overview)).toEqual([])
+  })
+
+  it("keeps the runtime variant's next steps", async () => {
+    const overview = await getGrowthOverview({ user, project: projectFixture({ deployment: { status: "success", productionUrl: "https://x.app" } }) })
+
+    expect(overview.measurement).toBe("runtime")
+    expect(runtimeNextSteps(overview)).toEqual(overview.measurement === "runtime" ? overview.nextSteps : [])
   })
 })

@@ -65,11 +65,13 @@ function formatDate(at: number | null | undefined): string {
 
 export function DomainVerification({
   projectId,
+  apiBase,
   initialDomains,
   defaultUrl,
   onChanged,
 }: {
   projectId: string
+  apiBase?: string
   initialDomains: DomainView[]
   defaultUrl?: string
   onChanged?: () => void
@@ -94,7 +96,7 @@ export function DomainVerification({
   const [methodChoice, setMethodChoice] = useState<Record<string, BusinessDomainMethod>>({})
   const [guideFor, setGuideFor] = useState<string | null>(null)
 
-  const base = `/api/projects/${projectId}/domains`
+  const base = `${apiBase ?? `/api/projects/${projectId}`}/domains`
 
   async function run(key: string, fn: () => Promise<void>) {
     setBusy(key)

@@ -249,6 +249,36 @@ export async function verifiedHostnameForBusiness(businessId: string): Promise<s
   return typeof domain.hostname === "string" ? domain.hostname : null
 }
 
+/**
+ * The anchor project plus the account that owns its records.
+ *
+ * A business operation is authorised by membership, but the records it touches
+ * — credits, API keys, domain rows — are owned by the account that created the
+ * project. Routes must use `ownerId` for those services and `actor` only for
+ * authorisation; mixing them up is how a member ends up with an empty domain
+ * list or a key on the wrong account.
+ */
+export interface BusinessAnchorProject {
+  project: MirrorProject
+  ownerId: string
+}
+
+export async function resolveBusinessAnchorProject(input: {
+  businessId: string
+  actor: Actor
+  permission: Permission
+}): Promise<BusinessAnchorProject> {
+  const anchor = await resolveBusinessAnchor(input)
+  const project = await store.getProject(anchor.projectId)
+  if (!project) {
+    throw new AppError("BUSINESS_NOT_MIGRATED", "This business has no connected site yet.", 404)
+  }
+  if (!project.userId) {
+    throw new AppError("BUSINESS_NOT_MIGRATED", "This business has no owning account.", 409)
+  }
+  return { project, ownerId: project.userId }
+}
+
 /** True when the account has an active membership in at least one business. */
 export async function userHasBusinessMembership(userId: string): Promise<boolean> {
   const member = await (await businessMembersCol()).findOne(

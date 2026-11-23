@@ -33,7 +33,7 @@ import {
 import { getGrowthOverviewTool } from "./tools/growth"
 import { getProductAnalyticsTool } from "./tools/analytics"
 import { getBusinessAssessmentTool } from "./tools/business"
-import { runSeoAuditTool } from "./tools/seo"
+import { runBusinessSeoAuditTool, runSeoAuditTool } from "./tools/seo"
 import {
   generateMarketingCopyTool,
   searchMarketingContentTool,
@@ -94,6 +94,7 @@ const REGISTRY: readonly ToolDefinition[] = [
   // CONFIRM — SEO visibility audit (Phase 3; credits + crawl, gated behind a
   // pending action and the SEO_AUDIT flag)
   runSeoAuditTool,
+  runBusinessSeoAuditTool,
   // CONFIRM — Marketing Studio copy draft (Phase 4; credits + one-shot AI
   // generation, gated behind a pending action and the STUDIO flag; drafts only,
   // never publishes)
@@ -147,13 +148,19 @@ const BUILD_ONLY_TOOLS: ReadonlySet<string> = new Set([
   "apply_plan_update",
   "autocomplete_plan",
   "analyze_plan",
+  // The project-addressed audit cannot resolve an address for a business Atai
+  // does not host; `run_business_seo_audit` is the operate-surface equivalent.
+  "run_seo_audit",
 ])
+
+/** Tools that only make sense on the operate surface. */
+const OPERATE_ONLY_TOOLS: ReadonlySet<string> = new Set(["run_business_seo_audit"])
 
 export type ToolSurface = "build" | "operate"
 
 function forSurface(tool: ToolDefinition, surface: ToolSurface): boolean {
   if (surface === "operate") return !BUILD_ONLY_TOOLS.has(tool.name)
-  return true
+  return !OPERATE_ONLY_TOOLS.has(tool.name)
 }
 
 /** Tools the model may call immediately (READ / LOW_RISK_WRITE). */

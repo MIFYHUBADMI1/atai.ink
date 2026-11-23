@@ -27,8 +27,10 @@ export const navigationSchema = z.object({
   projectId: z.string().min(1).max(80).optional(),
 }).strip()
 
+/** `projectId` is required on the build surface. On the business surface the
+ * target is the business the founder is working in, never a model-supplied id. */
 export const growthOverviewSchema = z.object({
-  projectId: z.string().min(1).max(80),
+  projectId: z.string().min(1).max(80).optional(),
 }).strip()
 
 export const productAnalyticsSchema = z.object({
@@ -42,6 +44,12 @@ export const businessAssessmentSchema = z.object({
 
 export const runSeoAuditSchema = z.object({
   projectId: z.string().min(1).max(80),
+}).strip()
+
+/** Stored parameters for the operate-surface audit. Server-written at prepare
+ * time from the current business — the model never supplies this id. */
+export const runBusinessSeoAuditSchema = z.object({
+  businessId: z.string().min(1).max(80),
 }).strip()
 
 export const searchMarketingContentSchema = z

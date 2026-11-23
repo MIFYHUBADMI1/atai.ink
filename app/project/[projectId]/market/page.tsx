@@ -93,10 +93,11 @@ export default async function ProjectMarketPage({ params }: { params: Promise<{ 
         </div>
         <div data-tour="seo" data-atai-tour="market-seo">
           <SeoAuditPanel
-          projectId={project.id}
+          apiBase={`/api/projects/${project.id}`}
           state={{
             enabled: seoEnabled,
-            deployed,
+            ready: deployed,
+            notReadyMessage: "Deploy your project to a live URL first — the audit reads only your own deployed site.",
             cost: seoAffordability?.cost ?? 0,
             available: seoAffordability?.available ?? 0,
             href: `/project/${project.id}/market/seo`,

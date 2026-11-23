@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { CofounderMarkdown } from "@/components/cofounder/markdown"
-import type { GrowthOverview, NumberMetric } from "@/lib/marketing/growth-overview"
+import type { DeploymentSiteAvailability, GrowthOverview, NumberMetric } from "@/lib/marketing/growth-overview"
 import { projectBase, type WorkspaceBase } from "@/lib/connected-business/surface"
 
 /**
@@ -11,14 +11,14 @@ import { projectBase, type WorkspaceBase } from "@/lib/connected-business/surfac
  * from a real measured zero.
  */
 
-const SITE_LABELS: Record<GrowthOverview["site"]["state"], string> = {
+const SITE_LABELS: Record<DeploymentSiteAvailability["state"], string> = {
   live: "Live deployment",
   never_deployed: "Not deployed yet",
   deploy_failed: "Last deployment failed",
   deploy_in_progress: "Deployment in progress",
 }
 
-const STATE_BADGE: Record<GrowthOverview["site"]["state"], string> = {
+const STATE_BADGE: Record<DeploymentSiteAvailability["state"], string> = {
   live: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
   never_deployed: "bg-muted text-muted-foreground",
   deploy_failed: "bg-red-500/10 text-red-600 dark:text-red-400",
@@ -68,6 +68,35 @@ export function GrowthOverviewView({
   base?: WorkspaceBase
 }) {
   const routeBase = base ?? projectBase(overview.projectId)
+
+  if (overview.measurement === "none") {
+    // A site Atai does not host. There is nothing to measure and no build
+    // pipeline to advise on, so the honest view is the absence itself — never
+    // a grid of zeroes, which reads as "nobody visited".
+    return (
+      <div className="flex min-w-0 flex-col gap-6 sm:gap-8">
+        <section className="flex flex-col gap-3">
+          <h2 className="text-lg font-semibold tracking-tight">What Atai can see</h2>
+          <p className="rounded-2xl border border-border bg-card p-4 text-sm leading-6 text-muted-foreground sm:p-5">
+            {overview.measurementNote}
+          </p>
+        </section>
+
+        <section className="flex flex-col gap-2">
+          <h2 className="text-lg font-semibold tracking-tight">How to read what Atai tells you</h2>
+          <ul className="flex flex-col gap-2">
+            {overview.trustNotes.map((note) => (
+              <li key={note} className="flex min-w-0 gap-2 text-xs leading-5 text-muted-foreground">
+                <span aria-hidden>·</span>
+                <span className="min-w-0 break-words">{note}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      </div>
+    )
+  }
+
   const { metrics, whatAtaiKnows, site } = overview
   const windowDays = Math.round((overview.window.to - overview.window.from) / (24 * 60 * 60 * 1000))
 
