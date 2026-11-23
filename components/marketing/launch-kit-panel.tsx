@@ -5,6 +5,7 @@ import Link from "next/link"
 import { Check, Loader2, RefreshCw, Rocket, Square, TriangleAlert } from "lucide-react"
 import { postNdjson } from "@/lib/client/api"
 import { LaunchKitDraftView } from "@/components/marketing/launch-kit-draft-view"
+import { projectBase, type WorkspaceBase } from "@/lib/connected-business/surface"
 
 export interface LaunchKitItem {
   id: string
@@ -33,12 +34,15 @@ export function LaunchKitPanel({
   slots: initialSlots,
   creditsAvailable: initialCredits,
   textReady,
+  base,
 }: {
   projectId: string
   slots: LaunchKitSlotView[]
   creditsAvailable: number | null
   textReady: boolean
+  base?: WorkspaceBase
 }) {
+  const routeBase = base ?? projectBase(projectId)
   const [slots, setSlots] = useState(initialSlots)
   const [running, setRunning] = useState<string[] | null>(null)
   const [failures, setFailures] = useState<Record<string, string>>({})
@@ -288,7 +292,7 @@ export function LaunchKitPanel({
                   <LaunchKitDraftView projectId={projectId} slot={slot.slot} label={slot.label} item={slot.item} />
                   <div className="mt-3 flex flex-wrap items-center justify-end border-t border-border pt-3">
                     <Link
-                      href={`/project/${projectId}/studio`}
+                      href={routeBase.href("growth/studio")}
                       className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
                     >
                       Open in Studio <span aria-hidden>→</span>

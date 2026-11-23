@@ -272,6 +272,11 @@ export interface MirrorProject {
   /** Proof that the customer's own application is connected to Atai. Only
    * present for existing businesses; absent means nothing has been issued. */
   connection?: BusinessConnection
+  /** The connected business that owns this project (ADR-8). Present on an
+   * *anchor* project: a hidden row that carries credits and runtime keys for a
+   * business whose workspace lives at `/business/<id>`. Written only by
+   * `ensureBusinessForProject`. Absent means this is an ordinary build project. */
+  businessId?: string
   name: string
   state: ProjectState
   sourceUrl?: string
@@ -374,6 +379,9 @@ export interface ProjectSummary {
   /** Absent reads as "from_scratch". Lets the list label and gate a connected
    * business as a real business, never as an app built from scratch. */
   startingPoint?: BusinessStartingPoint
+  /** Present on an anchor project, so the portfolio can hide it behind the
+   * business row it belongs to. */
+  businessId?: string
 }
 
 /** User-facing labels for lifecycle states. */

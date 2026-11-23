@@ -51,7 +51,7 @@ vi.mock("./prompts", () => ({
   COFOUNDER_AGENT_SYSTEM: "SYSTEM",
 }))
 vi.mock("./context", () => ({ buildActiveProjectBrief: vi.fn(() => Promise.resolve(null)) }))
-vi.mock("./tool-registry", () => ({ immediateTools: () => [], listTools: () => [], getTool: vi.fn() }))
+vi.mock("./tool-registry", () => ({ immediateTools: () => [], confirmationTools: () => [], getTool: vi.fn() }))
 vi.mock("./errors", () => ({ toToolOutcome: vi.fn() }))
 
 import { runAgentTurn } from "./agent"

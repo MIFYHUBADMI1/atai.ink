@@ -563,16 +563,16 @@ export function useBusinessAccess() {
 }
 
 export function useBusinesses() {
-  const { enabled, isLoading: accessLoading } = useBusinessAccess()
-  const { data, error, isLoading } = useSWR<{ businesses: BusinessSummary[] }>(
-    enabled ? "/api/businesses" : null,
-    jsonFetcher,
-    { revalidateOnFocus: false, keepPreviousData: true },
-  )
+  // The list is no longer gated on the rollout: an account with no business
+  // simply gets an empty array, and the server decides what the caller may see.
+  const { data, error, isLoading } = useSWR<{ businesses: BusinessSummary[] }>("/api/businesses", jsonFetcher, {
+    revalidateOnFocus: false,
+    keepPreviousData: true,
+  })
   return {
     businesses: data?.businesses ?? [],
     error,
-    isLoading: enabled && (accessLoading || isLoading),
+    isLoading,
   }
 }
 

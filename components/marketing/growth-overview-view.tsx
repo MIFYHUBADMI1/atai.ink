@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { CofounderMarkdown } from "@/components/cofounder/markdown"
 import type { GrowthOverview, NumberMetric } from "@/lib/marketing/growth-overview"
+import { projectBase, type WorkspaceBase } from "@/lib/connected-business/surface"
 
 /**
  * Growth Overview presentation (Phase 2). Pure render of the trusted view
@@ -57,7 +58,16 @@ function MetricCard({ metric }: { metric: NumberMetric }) {
   )
 }
 
-export function GrowthOverviewView({ overview }: { overview: GrowthOverview }) {
+export function GrowthOverviewView({
+  overview,
+  base,
+}: {
+  overview: GrowthOverview
+  /** Where links point. A connected business passes its own base, so a growth
+   *  recommendation never sends the founder into the build workspace. */
+  base?: WorkspaceBase
+}) {
+  const routeBase = base ?? projectBase(overview.projectId)
   const { metrics, whatAtaiKnows, site } = overview
   const windowDays = Math.round((overview.window.to - overview.window.from) / (24 * 60 * 60 * 1000))
 
@@ -160,7 +170,7 @@ export function GrowthOverviewView({ overview }: { overview: GrowthOverview }) {
                   <span className="whitespace-nowrap rounded-full bg-muted px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
                     AI draft · not executed
                   </span>
-                  <Link href={`/project/${overview.projectId}/plan`} className="whitespace-nowrap text-xs font-medium text-primary hover:underline">
+                  <Link href={routeBase.href("plan")} className="whitespace-nowrap text-xs font-medium text-primary hover:underline">
                     Open in plan →
                   </Link>
                 </div>
@@ -227,7 +237,7 @@ export function GrowthOverviewView({ overview }: { overview: GrowthOverview }) {
                 <p className="break-words text-sm font-medium">{step.title}</p>
                 <p className="break-words text-xs leading-5 text-muted-foreground">{step.detail}</p>
                 {step.navigation ? (
-                  <Link href={`/project/${step.navigation.projectId}/${step.navigation.target}`} className="mt-1 w-fit text-xs font-medium text-primary hover:underline">
+                  <Link href={routeBase.segment(step.navigation.target)} className="mt-1 w-fit text-xs font-medium text-primary hover:underline">
                     Open {step.navigation.target} →
                   </Link>
                 ) : null}

@@ -23,6 +23,7 @@ import { Button, buttonVariants } from "@/components/ui/button"
 import { jsonFetcher, postJson, type ApiError } from "@/lib/client/api"
 import { BUSINESS_CLAIM_SUPPORT_HREF } from "@/lib/domain/claim-copy"
 import type { IntakeView } from "@/lib/existing-business/view"
+import { projectBase, type WorkspaceBase } from "@/lib/connected-business/surface"
 import { businessSteps, type BusinessStep, type BusinessStepId } from "@/lib/existing-business/steps"
 import { intakeStatusLabel } from "@/lib/existing-business/stage-labels"
 import { cn } from "@/lib/utils"
@@ -72,7 +73,18 @@ const STEP_COPY: Record<BusinessStepId, { icon: IconType; purpose: string; whyTi
  * they are on and nothing past it: a wall of every section at once is what made
  * "what do I do next?" unanswerable.
  */
-export function BusinessProfile({ projectId, initialView }: { projectId: string; initialView: IntakeView }) {
+export function BusinessProfile({
+  projectId,
+  initialView,
+  base,
+}: {
+  projectId: string
+  initialView: IntakeView
+  /** Where this stepper's links point. Defaults to the project workspace; a
+   *  connected business passes its own base so nothing leaks into /project. */
+  base?: WorkspaceBase
+}) {
+  const routeBase = base ?? projectBase(projectId)
   const [readingOpen, setReadingOpen] = useState(false)
   const [view, setView] = useState<IntakeView>(initialView)
   const [busy, setBusy] = useState<"retry" | "reassess" | null>(null)
@@ -376,7 +388,7 @@ export function BusinessProfile({ projectId, initialView }: { projectId: string;
                   <ArrowRight className="size-4" />
                 </Button>
               ) : (
-                <Link href={`/project/${projectId}/collaborate`} className={buttonVariants({ size: "default" })}>
+                <Link href={routeBase.href("collaborate")} className={buttonVariants({ size: "default" })}>
                   <Sparkles className="size-4" />
                   Ask your co-founder
                 </Link>
@@ -384,7 +396,7 @@ export function BusinessProfile({ projectId, initialView }: { projectId: string;
             </footer>
           </section>
 
-          {allDone ? <NextBestActions projectId={projectId} /> : null}
+          {allDone ? <NextBestActions base={routeBase} /> : null}
         </div>
 
         <ReadingPreviewDialog
@@ -487,11 +499,11 @@ export function BusinessProfile({ projectId, initialView }: { projectId: string;
   )
 }
 
-function NextBestActions({ projectId }: { projectId: string }) {
+function NextBestActions({ base }: { base: WorkspaceBase }) {
   const actions = [
-    { href: `/project/${projectId}/collaborate`, label: "Ask your co-founder", detail: "What to fix first, in your words." },
-    { href: `/project/${projectId}/market`, label: "Market & grow", detail: "Turn the read into customers." },
-    { href: `/project/${projectId}/finances`, label: "Business finances", detail: "See what the numbers say." },
+    { href: base.href("collaborate"), label: "Ask your co-founder", detail: "What to fix first, in your words." },
+    { href: base.href("growth"), label: "Market & grow", detail: "Turn the read into customers." },
+    { href: base.href("money"), label: "Business finances", detail: "See what the numbers say." },
   ]
   return (
     <section className="rounded-2xl border border-border/80 bg-card p-5 sm:p-6">

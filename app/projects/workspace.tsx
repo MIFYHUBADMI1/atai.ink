@@ -459,14 +459,11 @@ function BusinessRow({
 export function ProjectsWorkspace({
   projects,
   businesses = [],
-  connectedBusinessEnabled = false,
   portfolioTotals,
 }: {
   projects: EnrichedProject[]
-  /** Connected businesses, already filtered by the rollout on the server. */
+  /** Connected businesses. The server decides what the caller may see. */
   businesses?: ConnectedBusinessItem[]
-  /** Whether this account may see /business at all. */
-  connectedBusinessEnabled?: boolean
   portfolioTotals: FinanceTotals | null
 }) {
   const [search, setSearch] = useState("")
@@ -531,14 +528,12 @@ export function ProjectsWorkspace({
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {connectedBusinessEnabled ? (
-            <Link
-              href="/business"
-              className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-primary/30 hover:bg-accent hover:text-foreground"
-            >
-              <Building2 className="size-4" /> Connected businesses
-            </Link>
-          ) : null}
+          <Link
+            href="/new/existing"
+            className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-primary/30 hover:bg-accent hover:text-foreground"
+          >
+            <Building2 className="size-4" /> Connect existing business
+          </Link>
           <Link
             href="/new/idea"
             className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-primary/30 hover:bg-accent hover:text-foreground"

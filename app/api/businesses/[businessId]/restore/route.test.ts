@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const { requireUser, restoreBusiness, isBusinessWorkspaceEnabled } = vi.hoisted(() => ({
+const { requireUser, restoreBusiness, businessWorkspaceAccess } = vi.hoisted(() => ({
   requireUser: vi.fn(),
   restoreBusiness: vi.fn(),
-  isBusinessWorkspaceEnabled: vi.fn(),
+  businessWorkspaceAccess: vi.fn(),
 }))
 
 vi.mock("@/lib/auth/session", () => ({ requireUser }))
 vi.mock("@/lib/business/service", () => ({ restoreBusiness }))
-vi.mock("@/lib/business/flags", () => ({ isBusinessWorkspaceEnabled }))
+vi.mock("@/lib/business/flags", () => ({ businessWorkspaceAccess }))
 vi.mock("@/lib/auth/rate-limit", () => ({ checkRateLimit: vi.fn(async () => {}) }))
 
 const { POST } = await import("./route")
@@ -18,12 +18,12 @@ const context = { params: Promise.resolve({ businessId: "biz_1" }) }
 beforeEach(() => {
   vi.clearAllMocks()
   requireUser.mockResolvedValue({ id: "u1" })
-  isBusinessWorkspaceEnabled.mockReturnValue(true)
+  businessWorkspaceAccess.mockResolvedValue({ enabled: true, reason: "all" })
 })
 
 describe("POST /api/businesses/[businessId]/restore", () => {
   it("hides the surface when the rollout is off", async () => {
-    isBusinessWorkspaceEnabled.mockReturnValue(false)
+    businessWorkspaceAccess.mockResolvedValue({ enabled: false, reason: "off" })
 
     const response = await POST(new Request("http://localhost", { method: "POST" }), context)
 

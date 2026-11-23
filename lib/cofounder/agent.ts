@@ -6,7 +6,8 @@ import { resolveCofounderModel } from "./model"
 import { chargeCofounderMessage, refundCofounderMessage } from "./credits"
 import { buildAgentContextBlock, COFOUNDER_AGENT_SYSTEM } from "./prompts"
 import { buildActiveProjectBrief } from "./context"
-import { getTool, immediateTools, listTools } from "./tool-registry"
+import { confirmationTools, getTool, immediateTools } from "./tool-registry"
+import type { ToolSurface } from "./tool-registry"
 import { toToolOutcome } from "./errors"
 import { isAbortTimeoutError } from "@/lib/api/upstream-error"
 import { cofounderMessage, appendCofounderMessages, buildHistoryBlock } from "./conversation"
@@ -118,9 +119,12 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
   })
 
   // Register ONLY immediate tools as executable + the prepare_request bridge
-  // for confirmation tools.
+  // for confirmation tools. A connected business runs on the "operate"
+  // surface: build, deploy and plan-at-build tools are not offered at all, so
+  // the co-founder cannot propose work that does not apply to it.
+  const surface: ToolSurface = input.currentSurface === "business" ? "operate" : "build"
   const tools: ToolSet = {}
-  for (const def of immediateTools()) {
+  for (const def of immediateTools(surface)) {
     tools[def.name] = toAiTool(def, ctx)
   }
   tools["prepare_request"] = tool({
@@ -131,7 +135,8 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
       try {
         const parsed = prepareRequestSchema.parse(rawInput)
         const def = getTool(parsed.toolName)
-        if (!def || !def.requiresConfirmation || !def.prepare) {
+        const allowed = def ? confirmationTools(surface).some((t) => t.name === def.name) : false
+        if (!def || !allowed || !def.prepare) {
           return { success: false as const, error: { code: "VALIDATION", message: `Unknown or non-confirmable tool "${parsed.toolName}".` } }
         }
         const prepared = await def.prepare(parsed.input, ctx)
@@ -167,8 +172,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
 
   const system = [
     buildSystemPrompt(),
-    `AVAILABLE CONFIRMATION TOOLS (via prepare_request): ${listTools()
-      .filter((t) => t.requiresConfirmation)
+    `AVAILABLE CONFIRMATION TOOLS (via prepare_request): ${confirmationTools(surface)
       .map((t) => t.name)
       .join(", ")}`,
   ].join("\n\n")

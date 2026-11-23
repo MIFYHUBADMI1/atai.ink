@@ -40,14 +40,22 @@ export function BusinessWorkspace({
   applications: initialApplications,
   archivedApplications: initialArchived,
   members: initialMembers,
+  initialTab = "Overview",
+  showTabBar = true,
+  showHeader = true,
 }: {
   business: BusinessDoc
   applications: ConnectedApplicationDoc[]
   archivedApplications: ConnectedApplicationDoc[]
   members: BusinessMemberDoc[]
+  /** Which panel to open. The business workspace renders one section per page,
+   *  so the tab bar is only used by the legacy single-page entry. */
+  initialTab?: Tab
+  showTabBar?: boolean
+  showHeader?: boolean
 }) {
   const router = useRouter()
-  const [tab, setTab] = useState<Tab>("Overview")
+  const [tab, setTab] = useState<Tab>(initialTab)
   const [applications, setApplications] = useState(initialApplications)
   const [archived, setArchived] = useState(initialArchived)
   const [members, setMembers] = useState(initialMembers)
@@ -58,18 +66,21 @@ export function BusinessWorkspace({
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{business.name}</h1>
-        <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-          <Badge variant={business.status === "active" ? "default" : "secondary"}>{business.status}</Badge>
-          <span>
-            {applications.length} application{applications.length === 1 ? "" : "s"}
-          </span>
-          <span aria-hidden>·</span>
-          <span>{members.filter((member) => member.status === "active").length} people</span>
-        </div>
-      </header>
+      {showHeader ? (
+        <header>
+          <h1 className="text-2xl font-semibold tracking-tight">{business.name}</h1>
+          <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
+            <Badge variant={business.status === "active" ? "default" : "secondary"}>{business.status}</Badge>
+            <span>
+              {applications.length} application{applications.length === 1 ? "" : "s"}
+            </span>
+            <span aria-hidden>·</span>
+            <span>{members.filter((member) => member.status === "active").length} people</span>
+          </div>
+        </header>
+      ) : null}
 
+      {showTabBar ? (
       <nav className="flex flex-wrap gap-1 rounded-lg bg-muted p-1">
         {TABS.map((item) => (
           <button
@@ -86,6 +97,7 @@ export function BusinessWorkspace({
           </button>
         ))}
       </nav>
+      ) : null}
 
       {tab === "Overview" ? <Overview business={business} applications={applications} members={members} /> : null}
 

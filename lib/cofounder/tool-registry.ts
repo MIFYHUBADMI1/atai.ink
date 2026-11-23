@@ -126,15 +126,45 @@ export function listTools(): readonly ToolDefinition[] {
   return REGISTRY
 }
 
+/**
+ * Tools that only make sense for an app Atai builds. A connected business has
+ * no source, database, deployment or plan-at-build, so offering these would let
+ * the co-founder propose work the founder cannot do — or, worse, approve a
+ * deploy of a site Atai does not host.
+ */
+const BUILD_ONLY_TOOLS: ReadonlySet<string> = new Set([
+  "create_project",
+  "delete_project",
+  "request_build",
+  "request_deploy",
+  "request_followup_edit",
+  "stop_build",
+  "get_build_status",
+  "get_build_logs",
+  "get_build_conversation",
+  "get_plan",
+  "propose_plan_update",
+  "apply_plan_update",
+  "autocomplete_plan",
+  "analyze_plan",
+])
+
+export type ToolSurface = "build" | "operate"
+
+function forSurface(tool: ToolDefinition, surface: ToolSurface): boolean {
+  if (surface === "operate") return !BUILD_ONLY_TOOLS.has(tool.name)
+  return true
+}
+
 /** Tools the model may call immediately (READ / LOW_RISK_WRITE). */
-export function immediateTools(): ToolDefinition[] {
-  return REGISTRY.filter((t) => !t.requiresConfirmation)
+export function immediateTools(surface: ToolSurface = "build"): ToolDefinition[] {
+  return REGISTRY.filter((t) => !t.requiresConfirmation && forSurface(t, surface))
 }
 
 /** Tools requiring confirmation — prepared during the loop, executed only via
  * the approval endpoint. */
-export function confirmationTools(): ToolDefinition[] {
-  return REGISTRY.filter((t) => t.requiresConfirmation)
+export function confirmationTools(surface: ToolSurface = "build"): ToolDefinition[] {
+  return REGISTRY.filter((t) => t.requiresConfirmation && forSurface(t, surface))
 }
 
 /** Risk check helper for tests and the approval path. */

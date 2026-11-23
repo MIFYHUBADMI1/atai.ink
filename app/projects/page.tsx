@@ -7,7 +7,7 @@ import { store } from "@/lib/store/store"
 import { getPlatformFinances } from "@/lib/finances/platform-finances"
 import { resolveProjectThumbnail } from "@/lib/media/project-thumbnail"
 import type { ProjectSummary } from "@/lib/types/project"
-import { isBusinessWorkspaceEnabled } from "@/lib/business/flags"
+import { ensureBusinessForProject } from "@/lib/connected-business/anchor"
 import { userActor } from "@/lib/business/permissions"
 import { listBusinessesForUser } from "@/lib/business/service"
 
@@ -28,25 +28,49 @@ export default async function ProjectsPage() {
   const user = await getCurrentUser()
   if (!user) redirect("/login?next=/projects")
 
-  // Fetch projects, finances and — only when the rollout is open for this
-  // account — the connected businesses, in parallel.
-  let connectedBusinessEnabled = false
-  const [projects, platformFinances, businesses] = await Promise.all([
+  const actor = userActor(user.id)
+
+  // One portfolio: every business the founder owns, whichever surface it opens.
+  // Connected businesses are fetched unconditionally — a business the founder
+  // just connected must appear immediately, not once a rollout flag catches up.
+  const [allProjects, platformFinances, owned] = await Promise.all([
     store.listProjects(user.id),
     getPlatformFinances(user.id).catch(() => null), // Graceful degradation
-    (async (): Promise<ConnectedBusinessItem[]> => {
-      if (!(await isBusinessWorkspaceEnabled(user.id))) return []
-      connectedBusinessEnabled = true
-      const owned = await listBusinessesForUser({ actor: userActor(user.id) })
-      return owned.map((business) => ({
-        kind: "business" as const,
-        id: business.id,
-        name: business.name,
-        status: business.status,
-        updatedAt: business.updatedAt,
-      }))
-    })().catch(() => []),
+    listBusinessesForUser({ actor }).catch(() => []),
   ])
+
+  // A connected project without a business row would send the founder to a
+  // workspace that does not exist yet. Idempotent, and capped so a large legacy
+  // account cannot turn one page render into fifty transactions.
+  const needsBusiness = allProjects.filter(
+    (project) => project.startingPoint === "existing_business" && !project.businessId,
+  )
+  for (const project of needsBusiness.slice(0, 5)) {
+    await ensureBusinessForProject({ projectId: project.id, userId: user.id }).catch(() => undefined)
+  }
+
+  // An operate project is the hidden anchor of a business: it must never be
+  // listed as a build row, or the founder sees one business twice and the build
+  // workspace leaks a surface it does not own.
+  const operatedProjectIds = new Set<string>()
+  for (const project of allProjects) {
+    if (project.businessId) operatedProjectIds.add(project.id)
+  }
+  for (const business of owned) {
+    if (business.legacyProjectId) operatedProjectIds.add(business.legacyProjectId)
+  }
+
+  const projects = allProjects.filter(
+    (project) => !operatedProjectIds.has(project.id) && project.startingPoint !== "existing_business",
+  )
+
+  const businesses: ConnectedBusinessItem[] = owned.map((business) => ({
+    kind: "business" as const,
+    id: business.id,
+    name: business.name,
+    status: business.status,
+    updatedAt: business.updatedAt,
+  }))
 
   // Build a map of project finances for quick lookup
   const financesByProject = new Map(
@@ -112,7 +136,6 @@ export default async function ProjectsPage() {
         <ProjectsWorkspace
           projects={enrichedProjects}
           businesses={businesses}
-          connectedBusinessEnabled={connectedBusinessEnabled}
           portfolioTotals={portfolioTotals}
         />
       </div>

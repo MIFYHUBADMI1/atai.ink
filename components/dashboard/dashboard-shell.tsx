@@ -16,7 +16,6 @@ import {
   Lock,
   Menu,
   MessageSquare,
-  Network,
   PanelLeft,
   PanelLeftClose,
   Search,
@@ -34,7 +33,7 @@ import { DashboardNotifications } from "@/components/dashboard/dashboard-notific
 import { CofounderPanel, useCofounderPanel } from "@/components/cofounder/cofounder-panel"
 import { PageTourLauncher } from "@/components/tour/page-tour-launcher"
 import { workspaceGrowNav, workspaceIntelligenceNav, workspaceProjectNav, type AtaiNavItem } from "@/components/workspace/atai-nav"
-import { useBusinessAccess, useProjects } from "@/lib/client/api"
+import { useProjects } from "@/lib/client/api"
 import { AuthGate } from "@/components/auth/auth-gate"
 import { interpretProjectState, selectActiveProject } from "@/lib/dashboard/view-model"
 import { projectIsBuilt } from "@/lib/dashboard/built-states"
@@ -52,25 +51,15 @@ const NAV = [
   { href: "/tours", label: "Guided tours", icon: BookOpen, tour: "nav-tours" },
 ] as const
 
+export type ShellNavItem = (typeof NAV)[number]
+
 /**
- * Shown only when the rollout is open for this account. The link is fetched
- * rather than guessed: a sidebar entry pointing at a 404 is worse than none.
+ * The main navigation. One entry per destination: built apps and connected
+ * businesses are both listed on `/projects`, so a second "Connected business"
+ * link would send the founder to the same portfolio from a different name.
  */
-const CONNECTED_BUSINESS_NAV = {
-  href: "/business",
-  label: "Connected business",
-  icon: Network,
-  tour: "nav-connected-business",
-} as const
-
-export type ShellNavItem = (typeof NAV)[number] | typeof CONNECTED_BUSINESS_NAV
-
-/** The main navigation, with the connected-business entry slotted after
- *  "Businesses" once the rollout is open for this account. */
-export function shellNavigation(enabled: boolean): ShellNavItem[] {
-  if (!enabled) return [...NAV]
-  const after = NAV.findIndex((item) => item.href === "/projects")
-  return [...NAV.slice(0, after + 1), CONNECTED_BUSINESS_NAV, ...NAV.slice(after + 1)]
+export function shellNavigation(): ShellNavItem[] {
+  return [...NAV]
 }
 
 const DISCOVER_NAV = [
@@ -97,8 +86,7 @@ export function DashboardShell({
   const workspaceProject = resolvedProjectId ? projects.find((p) => p.id === resolvedProjectId) ?? null : null
   const active = workspaceProject ?? selectActiveProject(projects)
   const askHref = active ? `/project/${active.id}/collaborate` : "/new"
-  const { enabled: connectedBusinessEnabled } = useBusinessAccess()
-  const nav = useMemo(() => shellNavigation(connectedBusinessEnabled), [connectedBusinessEnabled])
+  const nav = useMemo(() => shellNavigation(), [])
   const hasBuilt = projects.some((p) => projectIsBuilt(p.state))
   // A connected business is a real business even though Atai did not build it.
   const hasRealBusiness = projects.some((p) => projectIsBuilt(p.state) || isConnectedBusiness(p))

@@ -1,4 +1,5 @@
 import { store, cryptoId } from "@/lib/store/store"
+import { logger } from "@/lib/logging/logger"
 import { fail } from "@/lib/api/respond"
 import { checkRateLimit } from "@/lib/auth/rate-limit"
 import { startProjectPipeline } from "@/lib/projects/pipeline-recovery"
@@ -350,6 +351,16 @@ export async function createUserProject(userId: string, body: CreateProjectInput
   if (isExistingBusiness) {
     // Reading the business is not building an application: the pipeline that
     // produces a plan and a site is deliberately never started here.
+    // The business row is created alongside the project so the founder lands in
+    // their business workspace. It is idempotent and must never block the
+    // connect flow: the onboarding stepper owns the address and the intake.
+    const { ensureBusinessForProject } = await import("@/lib/connected-business/anchor")
+    void ensureBusinessForProject({ projectId: project.id, userId }).catch((error) => {
+      logger.warn("business.ensure", "could not create the business for a connected project", {
+        projectId: project.id,
+        message: error instanceof Error ? error.message : String(error),
+      })
+    })
     void startBusinessIntake(project.id)
     return { project, reused: false }
   }

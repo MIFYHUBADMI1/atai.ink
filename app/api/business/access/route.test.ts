@@ -1,19 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const { requireUser, isBusinessWorkspaceEnabled } = vi.hoisted(() => ({
+const { requireUser, businessWorkspaceAccess } = vi.hoisted(() => ({
   requireUser: vi.fn(),
-  isBusinessWorkspaceEnabled: vi.fn(),
+  businessWorkspaceAccess: vi.fn(),
 }))
 
 vi.mock("@/lib/auth/session", () => ({ requireUser }))
-vi.mock("@/lib/business/flags", () => ({ isBusinessWorkspaceEnabled }))
+vi.mock("@/lib/business/flags", () => ({ businessWorkspaceAccess }))
 
 import { GET } from "./route"
 
 beforeEach(() => {
   vi.clearAllMocks()
   requireUser.mockResolvedValue({ id: "user_1" })
-  isBusinessWorkspaceEnabled.mockResolvedValue(true)
+  businessWorkspaceAccess.mockResolvedValue({ enabled: true, reason: "owner" })
 })
 
 describe("GET /api/business/access", () => {
@@ -22,18 +22,18 @@ describe("GET /api/business/access", () => {
     const body = await response.json()
 
     expect(response.status).toBe(200)
-    expect(body.data).toEqual({ enabled: true })
-    expect(isBusinessWorkspaceEnabled).toHaveBeenCalledWith("user_1")
+    expect(body.data).toEqual({ enabled: true, reason: "owner" })
+    expect(businessWorkspaceAccess).toHaveBeenCalledWith("user_1")
   })
 
   it("reports a closed rollout without a 404", async () => {
-    isBusinessWorkspaceEnabled.mockResolvedValue(false)
+    businessWorkspaceAccess.mockResolvedValue({ enabled: false, reason: "off" })
 
     const response = await GET()
     const body = await response.json()
 
     expect(response.status).toBe(200)
-    expect(body.data).toEqual({ enabled: false })
+    expect(body.data).toEqual({ enabled: false, reason: "off" })
   })
 
   it("requires a session", async () => {
@@ -43,6 +43,6 @@ describe("GET /api/business/access", () => {
     const response = await GET()
 
     expect(response.status).toBe(401)
-    expect(isBusinessWorkspaceEnabled).not.toHaveBeenCalled()
+    expect(businessWorkspaceAccess).not.toHaveBeenCalled()
   })
 })

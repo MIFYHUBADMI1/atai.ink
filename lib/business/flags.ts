@@ -1,6 +1,6 @@
 import "server-only"
 
-import { businessRolloutCol } from "@/lib/db/collections"
+import { businessMembersCol, businessRolloutCol } from "@/lib/db/collections"
 import { logger } from "@/lib/logging/logger"
 
 /**
@@ -126,6 +126,46 @@ export async function businessWorkspaceMode(): Promise<BusinessWorkspaceMode> {
 
 export async function isBusinessWorkspaceEnabled(userId: string): Promise<boolean> {
   return resolveBusinessWorkspace(await getBusinessRollout(), userId)
+}
+
+export type BusinessWorkspaceReason = "owner" | "cohort" | "all" | "off"
+
+export interface BusinessWorkspaceAccess {
+  enabled: boolean
+  /** Why the caller can (or cannot) use the surface. Shown to admins, and
+   *  used by tests so "closed" and "open by cohort" never look the same. */
+  reason: BusinessWorkspaceReason
+}
+
+/**
+ * The surface gate, as the product actually promises it: **anyone who has
+ * connected a business sees it immediately.**
+ *
+ * `isBusinessWorkspaceEnabled` answers a different question — "is this account
+ * in the rollout cohort?" — and is kept for staging. This function adds the one
+ * rule the product needs: an active member of a business is always inside,
+ * whatever the cohort says. Only an admin-saved `off` closes the door on them,
+ * because a broken surface has to be switchable off in an incident.
+ */
+export async function businessWorkspaceAccess(userId: string): Promise<BusinessWorkspaceAccess> {
+  const rollout = await getBusinessRollout()
+
+  // A deployment default is not a decision. An admin-saved `off` is.
+  if (rollout.source === "admin" && rollout.mode === "off") {
+    return { enabled: false, reason: "off" }
+  }
+
+  const member = await (await businessMembersCol()).findOne(
+    { userId, status: "active" },
+    { projection: { _id: 1 } },
+  )
+  if (member) return { enabled: true, reason: "owner" }
+
+  if (rollout.mode === "all") return { enabled: true, reason: "all" }
+  if (rollout.mode === "internal" && rollout.cohort.includes(userId)) {
+    return { enabled: true, reason: "cohort" }
+  }
+  return { enabled: false, reason: "off" }
 }
 
 /**

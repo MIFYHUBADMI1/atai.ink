@@ -5,12 +5,14 @@ const { state } = vi.hoisted(() => ({ state: { fail: false } }))
 vi.mock("@/lib/db/collections", async () => {
   const { fakeCollection } = await import("@/lib/business/testing/fake-collections")
   const rollout = fakeCollection()
+  const members = fakeCollection()
   return {
     businessRolloutCol: async () => {
       if (state.fail) throw new Error("database down")
       return rollout
     },
-    __fakes: { rollout },
+    businessMembersCol: async () => members,
+    __fakes: { rollout, members },
   }
 })
 
@@ -19,6 +21,7 @@ import type { FakeCollection } from "@/lib/business/testing/fake-collections"
 import * as db from "@/lib/db/collections"
 import {
   BUSINESS_ROLLOUT_ID,
+  businessWorkspaceAccess,
   businessWorkspaceMode,
   clearBusinessRollout,
   getBusinessRollout,
@@ -29,13 +32,16 @@ import {
   updateBusinessRollout,
 } from "./flags"
 
-const fakes = (db as unknown as { __fakes: { rollout: FakeCollection<BusinessRolloutDoc> } }).__fakes
+const fakes = (db as unknown as {
+  __fakes: { rollout: FakeCollection<BusinessRolloutDoc>; members: FakeCollection<Record<string, unknown>> }
+}).__fakes
 
 beforeEach(() => {
   vi.unstubAllEnvs()
   vi.stubEnv("CONNECTED_WORKSPACE_V2", "")
   vi.stubEnv("CONNECTED_WORKSPACE_COHORT", "")
   fakes.rollout.docs.length = 0
+  fakes.members.docs.length = 0
   state.fail = false
   resetBusinessRolloutCacheForTests()
 })
@@ -186,5 +192,43 @@ describe("admin writes", () => {
     expect(rollout.source).toBe("env")
     expect(rollout.mode).toBe("off")
     expect(fakes.rollout.docs).toHaveLength(0)
+  })
+})
+
+describe("businessWorkspaceAccess — a connected founder is always inside", () => {
+  it("admits an active member even when the rollout default is off", async () => {
+    fakes.members.docs.push({ id: "m1", businessId: "biz_1", userId: "owner_1", status: "active" })
+
+    await expect(businessWorkspaceAccess("owner_1")).resolves.toEqual({ enabled: true, reason: "owner" })
+  })
+
+  it("does not admit a stranger on a closed deployment", async () => {
+    await expect(businessWorkspaceAccess("stranger")).resolves.toEqual({ enabled: false, reason: "off" })
+  })
+
+  it("ignores a removed membership", async () => {
+    fakes.members.docs.push({ id: "m1", businessId: "biz_1", userId: "gone_1", status: "removed" })
+
+    await expect(businessWorkspaceAccess("gone_1")).resolves.toEqual({ enabled: false, reason: "off" })
+  })
+
+  it("lets an admin-saved off close the door on a member too", async () => {
+    fakes.rollout.docs.push({ id: BUSINESS_ROLLOUT_ID, mode: "off", cohort: [], updatedAt: 1 })
+    fakes.members.docs.push({ id: "m1", businessId: "biz_1", userId: "owner_1", status: "active" })
+
+    await expect(businessWorkspaceAccess("owner_1")).resolves.toEqual({ enabled: false, reason: "off" })
+  })
+
+  it("opens the surface to everyone when the mode is all", async () => {
+    fakes.rollout.docs.push({ id: BUSINESS_ROLLOUT_ID, mode: "all", cohort: [], updatedAt: 1 })
+
+    await expect(businessWorkspaceAccess("anyone")).resolves.toEqual({ enabled: true, reason: "all" })
+  })
+
+  it("admits the cohort in internal mode", async () => {
+    fakes.rollout.docs.push({ id: BUSINESS_ROLLOUT_ID, mode: "internal", cohort: ["u1"], updatedAt: 1 })
+
+    await expect(businessWorkspaceAccess("u1")).resolves.toEqual({ enabled: true, reason: "cohort" })
+    await expect(businessWorkspaceAccess("u2")).resolves.toEqual({ enabled: false, reason: "off" })
   })
 })

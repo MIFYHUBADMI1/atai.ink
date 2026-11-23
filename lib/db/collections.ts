@@ -556,6 +556,9 @@ async function runEnsureIndexes(): Promise<void> {
       { "infrastructure.status": 1, "infrastructure.expiresAt": 1 },
       { name: "projects_infrastructure_lifecycle" },
     ),
+    // Anchor lookup: a connected business resolves its hidden project by this
+    // field. Sparse because an ordinary build project never has one.
+    projects.createIndex({ businessId: 1 }, { sparse: true, name: "projects_business_id" }),
     buildRuns.createIndex({ id: 1 }, { unique: true, sparse: true, name: "build_runs_id_unique" }),
     buildRuns.createIndex({ mirrorProjectId: 1, startedAt: -1 }),
     assets.createIndex({ id: 1 }, { unique: true, sparse: true, name: "project_assets_id_unique" }),

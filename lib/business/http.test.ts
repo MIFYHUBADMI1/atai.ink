@@ -7,7 +7,7 @@ const { mockEnabled, mockCheckRateLimit } = vi.hoisted(() => ({
   mockCheckRateLimit: vi.fn(),
 }))
 
-vi.mock("./flags", () => ({ isBusinessWorkspaceEnabled: mockEnabled }))
+vi.mock("./flags", () => ({ businessWorkspaceAccess: mockEnabled }))
 vi.mock("@/lib/auth/rate-limit", () => ({ checkRateLimit: mockCheckRateLimit }))
 
 import { AppError } from "@/lib/errors"
@@ -15,13 +15,13 @@ import { BUSINESS_RATE_LIMITS, requireWorkspace } from "./http"
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mockEnabled.mockResolvedValue(true)
+  mockEnabled.mockResolvedValue({ enabled: true, reason: "all" })
   mockCheckRateLimit.mockResolvedValue(undefined)
 })
 
 describe("requireWorkspace", () => {
   it("refuses a user outside the rollout without consulting the limiter", async () => {
-    mockEnabled.mockResolvedValue(false)
+    mockEnabled.mockResolvedValue({ enabled: false, reason: "off" })
 
     await expect(requireWorkspace("u1", "write")).rejects.toMatchObject({ code: "NOT_FOUND" })
     expect(mockCheckRateLimit).not.toHaveBeenCalled()
