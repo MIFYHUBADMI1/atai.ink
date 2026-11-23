@@ -10,7 +10,7 @@ import {
   projectsCol,
 } from "@/lib/db/collections"
 import { getMongoClient } from "@/lib/db/mongodb"
-import { addOwner } from "@/lib/business/members"
+import { addMember, addOwner } from "@/lib/business/members"
 import { systemActor, userActor } from "@/lib/business/permissions"
 import { createBusiness } from "@/lib/business/service"
 import { migrateConnectedBusinesses } from "@/lib/connected-business/migrate"
@@ -266,5 +266,48 @@ describe.skipIf(!REPLICA_URI)("connected business on a real replica set", () => 
     expect(await (await connectedApplicationsCol()).countDocuments({})).toBe(0)
     const detached = await (await businessDomainsCol()).findOne({ projectId: "p_legacy" })
     expect(detached?.businessId).toBeUndefined()
+  })
+
+  it("G — refuses to roll back a business a founder has staffed", async () => {
+    await (await projectsCol()).insertOne({
+      id: "p_staffed",
+      userId: "u_legacy",
+      name: "Staffed",
+      state: "created",
+      mode: "scratch",
+      createdAt: 1,
+      updatedAt: 1,
+      sourceUrl: "https://staffed.example",
+    } as never)
+
+    await migrateConnectedBusinesses({ mode: "apply", runId: "run-int-g", now: 6_000 })
+    const business = await (await businessesCol()).findOne({ legacyProjectId: "p_staffed" })
+    expect(business).not.toBeNull()
+
+    // The founder invites a colleague through the product, so the row carries
+    // no migration stamp.
+    await addMember({
+      businessId: business!.id,
+      userId: "u_colleague",
+      actor: userActor("u_legacy"),
+      role: "developer",
+      now: 6_100,
+    })
+
+    const refused = await rollbackMigration({ runId: "run-int-g", mode: "apply" })
+    expect(refused.blocked).toBe(true)
+    expect(refused.applied).toBe(false)
+    expect(refused.impact[0].foreignMemberships).toBe(1)
+    expect(await (await businessesCol()).countDocuments({})).toBe(1)
+    expect(await (await businessMembersCol()).countDocuments({})).toBe(2)
+
+    // The separately authorised recovery path proceeds, deleting only what the
+    // run wrote and leaving the colleague's row behind.
+    const forced = await rollbackMigration({ runId: "run-int-g", mode: "apply", allowInUse: true })
+    expect(forced.applied).toBe(true)
+    expect(forced.orphanedMemberships).toBe(1)
+    expect(await (await businessesCol()).countDocuments({})).toBe(0)
+    const survivors = await (await businessMembersCol()).find({}).toArray()
+    expect(survivors.map((member) => member.userId)).toEqual(["u_colleague"])
   })
 })
