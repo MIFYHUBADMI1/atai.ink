@@ -89,6 +89,9 @@ class MemoryCatalogStore implements CatalogSeedStore {
     const found = this.catalogVersions.get(version)
     return found ? clone(found) : null
   }
+  async listCatalogVersions() {
+    return [...this.catalogVersions.values()].map(clone)
+  }
   async listBillingDodoProductIds() {
     return clone(this.billingIds)
   }

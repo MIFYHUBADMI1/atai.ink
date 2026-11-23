@@ -60,6 +60,9 @@ class MemoryStore implements CatalogSeedStore {
     const found = this.catalogVersions.get(version)
     return found ? structuredClone(found) : null
   }
+  async listCatalogVersions() {
+    return [...this.catalogVersions.values()].map((doc) => structuredClone(doc))
+  }
   async listBillingDodoProductIds() {
     return []
   }

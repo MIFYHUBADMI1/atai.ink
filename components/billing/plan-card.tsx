@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils"
 import { CheckoutButton } from "@/components/billing/checkout-button"
 import { PlanChangeDialog } from "@/components/billing/plan-change-dialog"
 import { formatUSD, CREDIT_UNIT_NAME } from "@/lib/billing/config"
-import { getCommercialPlans } from "@/lib/billing/entitlements/commercial-plans"
 import { translateFeature } from "@/lib/billing/feature-copy"
 import type { PlanAvailability, SubscriptionPlan } from "@/lib/billing/config"
 import { planCustomerInitiatedDowngrade } from "@/lib/billing/entitlements/downgrade"
@@ -30,9 +29,8 @@ interface PlanCardProps {
    * A flag, not a function prop: functions cannot cross the server→client
    * boundary during prerender. */
   translateLabels?: boolean
-  /** Override the plan source used to resolve the "current plan" for the
-   * change-plan dialog (commercial catalog passes its own list). */
-  allPlans?: SubscriptionPlan[]
+  /** The server-resolved published catalog used for current-plan resolution. */
+  allPlans: SubscriptionPlan[]
   /** The user's current business count — lets the change dialog show the
    * downgrade business-cap impact before confirmation (Gate 6, Flow A). */
   currentBusinesses?: number
@@ -87,7 +85,7 @@ export function PlanCard({
   const visibleNotIncluded = filterUnlaunchedFeatures(plan.notIncluded ?? [], plan.availability)
 
   const isActive = activePlanId === plan.id
-  const planSource = allPlans ?? getCommercialPlans()
+  const planSource = allPlans
   const activePlan = planSource.find((p) => p.id === activePlanId) ?? null
   // A free account (legacy "free" or the commercial "explorer") is not an
   // active paid subscription, so other cards must offer purchase, not a switch.

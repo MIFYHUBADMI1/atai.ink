@@ -5,16 +5,14 @@ import useSWR from "swr"
 import { toast } from "sonner"
 import { CheckoutButton } from "@/components/billing/checkout-button"
 import { PlanChangeDialog } from "@/components/billing/plan-change-dialog"
-import { formatUSD } from "@/lib/billing/config"
-import { getCommercialPlans } from "@/lib/billing/entitlements/commercial-plans"
+import { formatUSD, type SubscriptionPlan } from "@/lib/billing/config"
 import { jsonFetcher } from "@/lib/client/api"
 import { cn } from "@/lib/utils"
 
 type Overview = {
   subscription: { planId: string; currentPeriodEnd: number | null; cancelAtPeriodEnd: boolean } | null
+  plans?: SubscriptionPlan[]
 }
-
-const PLANS = getCommercialPlans()
 
 export function OnboardingPlanStep({
   selectedPlanId,
@@ -25,12 +23,13 @@ export function OnboardingPlanStep({
   onSelect: (planId: string) => void
   onBeforeCheckout?: () => void | Promise<void>
 }) {
-  const { data } = useSWR<Overview>("/api/billing/overview", jsonFetcher)
+  const { data, error } = useSWR<Overview>("/api/billing/overview", jsonFetcher)
+  const plans = data?.plans ?? []
   const activePlanId = data?.subscription?.planId ?? "explorer"
   const [changeTo, setChangeTo] = useState<string | null>(null)
   const [checkoutPending, setCheckoutPending] = useState(false)
-  const current = PLANS.find((p) => p.id === activePlanId)
-  const target = PLANS.find((p) => p.id === changeTo)
+  const current = plans.find((p) => p.id === activePlanId)
+  const target = plans.find((p) => p.id === changeTo)
   const onPaidPlan = Boolean(current && current.priceUSD > 0)
 
   function startCheckout(planId: string) {
@@ -63,8 +62,13 @@ export function OnboardingPlanStep({
           Stay on Explorer or pick a plan. You can change this later in billing.
         </p>
       </div>
+      {plans.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {error ? "Plans are temporarily unavailable." : "Loading plans…"}
+        </p>
+      ) : (
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        {PLANS.filter((plan) => plan.active).map((plan) => {
+        {plans.filter((plan) => plan.active).map((plan) => {
           const isCurrent = plan.id === activePlanId
           const selected = (selectedPlanId ?? "explorer") === plan.id
           return (
@@ -106,6 +110,7 @@ export function OnboardingPlanStep({
           )
         })}
       </div>
+      )}
       {current && target ? (
         <PlanChangeDialog
           open={Boolean(changeTo)}

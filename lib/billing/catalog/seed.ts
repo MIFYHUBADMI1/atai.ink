@@ -39,6 +39,7 @@ export interface CatalogSeedStore {
   listVersions(): Promise<CommercialProductVersionDoc[]>
   listMappings(): Promise<DodoProductMappingDoc[]>
   getCatalogVersion(version: string): Promise<CommercialCatalogVersionDoc | null>
+  listCatalogVersions(): Promise<CommercialCatalogVersionDoc[]>
   listBillingDodoProductIds(): Promise<BillingDodoProductId[]>
 }
 
@@ -132,6 +133,9 @@ export async function mongoCatalogSeedStore(): Promise<CatalogSeedStore> {
     },
     async getCatalogVersion(version) {
       return catalogVersions.findOne({ version })
+    },
+    async listCatalogVersions() {
+      return catalogVersions.find({}).sort({ publishedAt: -1 }).toArray()
     },
     async listBillingDodoProductIds() {
       const subscriptionRows = await subscriptions
