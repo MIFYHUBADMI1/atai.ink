@@ -9,10 +9,15 @@ import { TotalumError } from "@/lib/integrations/totalum/errors"
 import { validateProjectId } from "@/lib/projects/project-id"
 import { initializeProjectInfrastructure } from "@/lib/infrastructure/service"
 import { getInfrastructurePlan } from "@/lib/infrastructure/plans"
+import { infrastructureDenial } from "@/lib/infrastructure/access"
 import { buildFollowupAgentPrompt, buildInitialBuildPrompt } from "@/lib/analysis/prompt-builder"
 import { getBuildCost } from "@/lib/billing/build-auth"
 import { getDeploymentCosts } from "@/lib/billing/runtime-config"
-import { authorizeProductionWork } from "@/lib/billing/entitlements/require"
+import {
+  authorizeProductionWork,
+  releaseSubdomainSlot,
+  reserveSubdomainSlot,
+} from "@/lib/billing/entitlements/require"
 import { getProjectAttachments, clearProjectAttachments } from "@/lib/projects/attachments"
 import { CONNECTED_BUSINESS_BUILD_BLOCKED, isConnectedBusiness } from "@/lib/connected-business/guards"
 import {
@@ -109,6 +114,10 @@ export async function startProjectBuild(userId: string, projectId: string): Prom
   const project = await store.getProject(projectId)
   if (!project || project.userId !== userId) {
     return { ok: false, status: 404, code: "UNAUTHORIZED_PROJECT_ACCESS", message: "We couldn't find this project." }
+  }
+  const infrastructureBlocked = infrastructureDenial(project.infrastructure)
+  if (infrastructureBlocked) {
+    return { ok: false, status: 402, code: infrastructureBlocked.code, message: infrastructureBlocked.message }
   }
   if (isConnectedBusiness(project)) {
     return { ok: false, status: 409, code: "NOT_A_BUILD_PROJECT", message: CONNECTED_BUSINESS_BUILD_BLOCKED }
@@ -243,11 +252,26 @@ export async function sendProjectFollowup(userId: string, projectId: string, pro
   if (!project || project.userId !== userId) {
     return { ok: false, status: 404, code: "UNAUTHORIZED_PROJECT_ACCESS", message: "We couldn't find this project." }
   }
+  const infrastructureBlocked = infrastructureDenial(project.infrastructure)
+  if (infrastructureBlocked) {
+    return { ok: false, status: 402, code: infrastructureBlocked.code, message: infrastructureBlocked.message }
+  }
   if (!project.totalumProjectId) {
     return { ok: false, status: 409, code: "VALIDATION", message: "This project hasn't been built yet." }
   }
   if (project.state === "building" || project.state === "deploying") {
     return { ok: false, status: 409, code: "AGENT_RUNNING", message: "Please wait for the current change to finish." }
+  }
+  // Follow-up edits are production work: the builder, its database changes and
+  // the specialist team are the same paid capability as an initial build.
+  const planDenied = await authorizeProductionWork(userId, "buildProduction")
+  if (planDenied) {
+    return {
+      ok: false,
+      status: 402,
+      code: planDenied.code ?? "PLAN_LIMIT",
+      message: planDenied.reason ?? "Your plan does not include production changes.",
+    }
   }
 
   const trimmed = prompt.trim()
@@ -343,6 +367,10 @@ export async function startProjectDeploy(userId: string, projectId: string): Pro
   if (!project || project.userId !== userId) {
     return { ok: false, status: 404, code: "UNAUTHORIZED_PROJECT_ACCESS", message: "We couldn't find this project." }
   }
+  const infrastructureBlocked = infrastructureDenial(project.infrastructure)
+  if (infrastructureBlocked) {
+    return { ok: false, status: 402, code: infrastructureBlocked.code, message: infrastructureBlocked.message }
+  }
   if (isConnectedBusiness(project)) {
     return { ok: false, status: 409, code: "NOT_A_BUILD_PROJECT", message: CONNECTED_BUSINESS_BUILD_BLOCKED }
   }
@@ -352,7 +380,12 @@ export async function startProjectDeploy(userId: string, projectId: string): Pro
   if (project.state === "building" || project.state === "deploying") {
     return { ok: false, status: 409, code: "BUSY", message: "Please wait for the current operation to finish." }
   }
-  const deployDenied = await authorizeProductionWork(userId, "deploy")
+  const hasExistingSubdomain =
+    project.deployment?.status === "success" ||
+    Boolean(project.deployment?.productionUrl) ||
+    project.state === "deployed" ||
+    (project.deploymentHistory ?? []).some((entry) => entry.status === "success")
+  const deployDenied = await authorizeProductionWork(userId, "deploy", { hasExistingSubdomain })
   if (deployDenied) {
     return {
       ok: false,
@@ -371,14 +404,34 @@ export async function startProjectDeploy(userId: string, projectId: string): Pro
     return { ok: false, status: 402, code: "INSUFFICIENT_CREDITS", message: `Deploying requires ${deployCost.toLocaleString()} credits. Available: ${available.toLocaleString()}.` }
   }
 
+  const subdomainReservation = hasExistingSubdomain ? {} : await reserveSubdomainSlot(userId, projectId)
+  if (subdomainReservation.denial) {
+    return { ok: false, status: 402, code: subdomainReservation.denial.code, message: subdomainReservation.denial.message }
+  }
+  if (subdomainReservation.busy) {
+    return { ok: false, status: 409, code: subdomainReservation.busy.code, message: subdomainReservation.busy.message }
+  }
+  const subdomainHoldId = subdomainReservation.holdId
+
+  const previousState = project.state
+  const claimed = await store.claimBuildSlot(projectId, { state: "deploying" })
+  if (!claimed) {
+    if (subdomainHoldId) await releaseSubdomainSlot(userId, projectId)
+    return { ok: false, status: 409, code: "BUSY", message: "Please wait for the current operation to finish." }
+  }
+
   // Already-deployed check via provider status (same as the REST route).
   try {
     const deployStatus = await getDeploymentStatus(project.totalumProjectId)
     if (deployStatus.status === "deploying") {
+      if (subdomainHoldId) await releaseSubdomainSlot(userId, projectId)
+      await store.updateProject(projectId, { state: previousState })
       return { ok: false, status: 409, code: "DEPLOYMENT_RUNNING", message: "A deployment is already in progress." }
     }
   } catch (err) {
     if (err instanceof Error && err.message.includes("PROJECT_NOT_FOUND")) {
+      if (subdomainHoldId) await releaseSubdomainSlot(userId, projectId)
+      await store.updateProject(projectId, { state: previousState })
       return { ok: false, status: 404, code: "TOTALUM_PROJECT_NOT_FOUND", message: "This project wasn't found in the deployment service. Try rebuilding the project first." }
     }
     // Other status-check failures proceed with deploy (same as the route).
@@ -387,12 +440,13 @@ export async function startProjectDeploy(userId: string, projectId: string): Pro
   const runId = cryptoId()
   const reserved = await reserveCredits({ userId, amount: deployCost, buildId: runId, reason: "Production deployment", projectId })
   if (!reserved) {
+    if (subdomainHoldId) await releaseSubdomainSlot(userId, projectId)
+    await store.updateProject(projectId, { state: previousState })
     return { ok: false, status: 402, code: "INSUFFICIENT_CREDITS", message: "Could not reserve credits for deployment." }
   }
 
   const deployStartTime = Date.now()
   try {
-    await store.updateProject(projectId, { state: "deploying" })
     await store.appendEvent(projectId, event("deploy", "Starting production deployment..."))
 
     const result = await deployProject(project.totalumProjectId)
@@ -430,6 +484,7 @@ export async function startProjectDeploy(userId: string, projectId: string): Pro
     return { ok: true, status: 200, code: "OK", deployRunId: runId, creditsCharged: deployCost, message: "Deployment started. This typically takes 3-5 minutes." }
   } catch (providerError) {
     await releaseReservation({ userId, amount: deployCost, buildId: runId, reason: "Deployment failure", projectId })
+    if (subdomainHoldId) await releaseSubdomainSlot(userId, projectId)
     const errorMessage = providerError instanceof Error ? providerError.message : "Deployment failed"
     const isProjectNotFound = errorMessage.includes("PROJECT_NOT_FOUND") || errorMessage.includes("404")
     const userMessage = isProjectNotFound
@@ -447,7 +502,15 @@ export async function startProjectDeploy(userId: string, projectId: string): Pro
     } catch {
       // non-fatal
     }
-    await store.updateProject(projectId, { state: "ready" })
+    await store.updateProject(projectId, {
+      state: "ready",
+      deployment: {
+        ...(project.deployment ?? { id: cryptoId(), status: "idle", updatedAt: Date.now() }),
+        status: "failed",
+        error: userMessage,
+        updatedAt: Date.now(),
+      },
+    })
     await store.appendEvent(projectId, event("deploy", `Deployment failed: ${userMessage}`, "error"))
     throw providerError
   }

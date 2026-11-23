@@ -5,9 +5,8 @@ import { useRouter } from "next/navigation"
 import { SettingsShell } from "@/components/settings/settings-shell"
 import { ArrowRight, Calendar, Check, AlertTriangle } from "lucide-react"
 import { useSession, jsonFetcher } from "@/lib/client/api"
-import { PERMANENT_CREDIT_PACKS, CREDIT_UNIT_NAME, formatUSD } from "@/lib/billing/config"
-import type { SubscriptionPlan } from "@/lib/billing/config"
-import { getCommercialPlans } from "@/lib/billing/entitlements/commercial-plans"
+import { CREDIT_UNIT_NAME, formatUSD } from "@/lib/billing/config"
+import type { PermanentCreditPack, SubscriptionPlan } from "@/lib/billing/config"
 import { cn } from "@/lib/utils"
 import { CheckoutButton } from "@/components/billing/checkout-button"
 import { PlanCard } from "@/components/billing/plan-card"
@@ -27,9 +26,11 @@ type BillingOverview = {
     businessCapNear: boolean
     warnings: string[]
   } | null
-  /** Active plan catalog (commercial when the flag is on, else legacy). */
+  /** Active plan catalog from the published resolver. */
   plans?: SubscriptionPlan[]
-  /** The commercial plan id the user's subscription maps to (flag on only). */
+  /** Active permanent-credit catalog from the published resolver. */
+  packs?: PermanentCreditPack[]
+  /** The commercial plan id the user's subscription maps to. */
   activeCommercialPlanId?: string | null
   /** The user's current business count. */
   businessCount?: number
@@ -86,14 +87,15 @@ export default function BillingSettingsPage() {
   const usageAlerts = billingData?.usageAlerts ?? null
   const usageWarnings = usageAlerts?.warnings ?? []
 
-  // Active catalog comes from the server (the commercial five-plan catalog),
-  // so the in-app upgrade list matches the public pricing page.
-  const plans: SubscriptionPlan[] = billingData?.plans ?? getCommercialPlans()
-  const FREE_PLAN = plans.find((p) => p.priceUSD === 0) ?? plans[0]
+  // The server resolves one published catalog for pricing, overview, upgrade
+  // options and this page. Do not fall back to a second code catalog here.
+  const plans: SubscriptionPlan[] = billingData?.plans ?? []
+  const packs: PermanentCreditPack[] = billingData?.packs ?? []
+  const freePlan = plans.find((p) => p.priceUSD === 0) ?? plans[0]
   const activePlanId = billingData?.activeCommercialPlanId ?? activeSubscription?.planId ?? "explorer"
   const activePlan = activeSubscription
-    ? (plans.find((p) => p.id === activePlanId) ?? FREE_PLAN)
-    : FREE_PLAN
+    ? (plans.find((p) => p.id === activePlanId) ?? freePlan)
+    : freePlan
   const currentPeriodEnd: number | null = activeSubscription?.currentPeriodEnd ?? null
   const currentBusinesses = billingData?.businessCount ?? 0
 
@@ -214,6 +216,8 @@ export default function BillingSettingsPage() {
             <p className="mt-3 text-sm text-muted-foreground">Loading subscription…</p>
           ) : billingError ? (
             <p className="mt-3 text-sm text-muted-foreground">Subscription status unavailable until billing data loads.</p>
+          ) : !activePlan ? (
+            <p className="mt-3 text-sm text-muted-foreground">Plan details are temporarily unavailable.</p>
           ) : (
           <div className="mt-3 flex items-start justify-between gap-4 flex-wrap">
             <div className="space-y-1.5">
@@ -251,6 +255,7 @@ export default function BillingSettingsPage() {
                         monthlyCredits={activePlan.mirrorCredits}
                         priceUSD={activePlan.priceUSD}
                         currentPlanId={activePlanId}
+                        plans={plans}
                       />
                     </div>
                   )}
@@ -290,26 +295,30 @@ export default function BillingSettingsPage() {
         <section className="border border-border bg-card p-6">
           <h2 className="text-xl font-medium">Subscription Plans</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            {activePlan.priceUSD === 0
+            {activePlan?.priceUSD === 0
               ? "Choose a plan to unlock monthly credits and more capabilities."
               : <>Monthly subscriptions with recurring credit grants.{" "}
                 <span className="font-medium text-primary">Our most popular plan is recommended</span> for best value.
               </>
             }
           </p>
-          <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 items-start">
-            {plans.filter((p) => !p.custom).map((plan) => (
-              <PlanCard
-                key={plan.id}
-                plan={plan}
-                activePlanId={billingData ? activePlanId : null}
-                currentPeriodEnd={currentPeriodEnd}
-                isLoggedIn={true}
-                allPlans={plans}
-                currentBusinesses={currentBusinesses}
-              />
-            ))}
-          </div>
+          {plans.length === 0 ? (
+            <p className="mt-5 text-sm text-muted-foreground">{billingLoading ? "Loading plans…" : "Plan catalog is temporarily unavailable."}</p>
+          ) : (
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 items-start">
+              {plans.filter((p) => !p.custom).map((plan) => (
+                <PlanCard
+                  key={plan.id}
+                  plan={plan}
+                  activePlanId={billingData ? activePlanId : null}
+                  currentPeriodEnd={currentPeriodEnd}
+                  isLoggedIn={true}
+                  allPlans={plans}
+                  currentBusinesses={currentBusinesses}
+                />
+              ))}
+            </div>
+          )}
         </section>
 
         {/* ── Buy Permanent Credits ── */}
@@ -318,8 +327,11 @@ export default function BillingSettingsPage() {
           <p className="mt-1 text-sm text-muted-foreground">
             Permanent credits never expire and remain available after subscription cancellation.
           </p>
+          {packs.length === 0 ? (
+            <p className="mt-5 text-sm text-muted-foreground">{billingLoading ? "Loading credit packs…" : "Credit packs are temporarily unavailable."}</p>
+          ) : (
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {PERMANENT_CREDIT_PACKS.map((pack) => (
+            {packs.map((pack) => (
               <div
                 key={pack.id}
                 className={cn(
@@ -349,6 +361,7 @@ export default function BillingSettingsPage() {
               </div>
             ))}
           </div>
+          )}
         </section>
 
         {/* ── Credit History ── */}

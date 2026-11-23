@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react"
 import useSWR from "swr"
 import { useClientStore } from "@/lib/store/client-store"
 import type { Project, ProjectSummary } from "@/lib/types/project"
+import type { ProjectAccessView } from "@/lib/billing/entitlements/types"
 
 export interface SessionUser {
   id: string
@@ -380,7 +381,7 @@ export function usePublicStats() {
 // Per-project live data — kept as SWR because it genuinely changes on the server.
 
 export function useProject(id: string | null, options?: { pollWhileBuilding?: boolean }) {
-  const { data, error, isLoading, mutate } = useSWR<{ project: Project }>(
+  const { data, error, isLoading, mutate } = useSWR<{ project: Project; access?: ProjectAccessView }>(
     id ? `/api/projects/${id}` : null,
     jsonFetcher,
     {
@@ -405,7 +406,7 @@ export function useProject(id: string | null, options?: { pollWhileBuilding?: bo
       },
     },
   )
-  return { project: data?.project ?? null, error, isLoading, refresh: mutate }
+  return { project: data?.project ?? null, access: data?.access ?? null, error, isLoading, refresh: mutate }
 }
 
 // ─── useProjectActivity ───────────────────────────────────────────────────────

@@ -9,7 +9,7 @@ import {
   resolveCommercialPlan,
 } from "@/lib/billing/entitlements"
 import type { UsageAlerts } from "@/lib/billing/entitlements"
-import { getCommercialPlans } from "@/lib/billing/entitlements/commercial-plans"
+import { resolvePublicCommercialCatalog } from "@/lib/billing/catalog/published-resolver"
 
 /**
  * GET /api/billing/overview
@@ -25,7 +25,7 @@ export async function GET() {
   try {
     const user = await requireUser()
 
-    const [balance, history, subRows] = await Promise.all([
+    const [balance, history, subRows, catalog] = await Promise.all([
       getBalance(user.id),
       getCreditHistory(user.id, 50),
       (await subscriptionRecordsCol())
@@ -33,6 +33,7 @@ export async function GET() {
         .sort({ createdAt: -1 })
         .limit(1)
         .toArray(),
+      resolvePublicCommercialCatalog(),
     ])
 
     const sub = subRows[0]
@@ -84,16 +85,15 @@ export async function GET() {
       }
     }
 
-    // The active plan catalog — commercial five-plan set. The legacy catalog
-    // is no longer offered for purchase.
-    const plans = getCommercialPlans()
-
+    // The active plan and top-up catalogs come from the one published resolver,
+    // so Settings → Billing shows the same offerings as /pricing.
     return ok({
       balance,
       history,
       subscription,
       usageAlerts,
-      plans,
+      plans: catalog.plans,
+      packs: catalog.packs,
       activeCommercialPlanId,
       businessCount,
     })

@@ -9,12 +9,12 @@ import { SITE_URL } from "@/lib/env"
 import { getCurrentUser } from "@/lib/auth/session"
 import {
   BUILD_TIERS,
-  PERMANENT_CREDIT_PACKS,
   CREDIT_UNIT_NAME,
   formatUSD,
   WELCOME_BONUS_CREDITS,
+  type SubscriptionPlan,
 } from "@/lib/billing/config"
-import { getCommercialPlans } from "@/lib/billing/entitlements/commercial-plans"
+import { resolvePublicCommercialCatalog } from "@/lib/billing/catalog/published-resolver"
 import { getBuildTierCosts, getDeploymentCosts } from "@/lib/billing/runtime-config"
 import { PricingPlanGrid } from "@/components/billing/pricing-plan-grid"
 import { CheckoutButton } from "@/components/billing/checkout-button"
@@ -73,11 +73,6 @@ const PLAN_GUIDANCE: Record<string, { bestFor: string; outcomes: string[] }> = {
   },
 }
 
-/**
- * The commercial five-plan catalog is the live catalog. The legacy six-plan
- * set is no longer offered on this page.
- */
-const resolvedPlans = getCommercialPlans()
 const planGuidance = PLAN_GUIDANCE
 
 /** What launching costs, in the size of business rather than lines of work. */
@@ -193,24 +188,26 @@ export const metadata: Metadata = {
   },
 }
 
-const pricingStructuredData = {
-  "@context": "https://schema.org",
-  "@type": "Product",
-  name: "Atai",
-  description:
-    "Atai.ink is the business builder for founders: launch, run and grow a real business with an AI team — customers, sales and your own admin console included. No code.",
-  image: `${SITE_URL}/og-image.png`,
-  brand: { "@type": "Brand", name: "Atai" },
-  offers: resolvedPlans.filter((p) => !p.custom).map((plan) => ({
-    "@type": "Offer",
-    name: `${plan.name} Plan`,
-    price: plan.priceUSD,
-    priceCurrency: "USD",
-    description: `${plan.mirrorCredits.toLocaleString()} ${CREDIT_UNIT_NAME} per month`,
-    url: `${SITE_URL}/pricing`,
-    availability: "https://schema.org/InStock",
-    priceValidUntil: "2026-12-31",
-  })),
+function pricingStructuredData(plans: SubscriptionPlan[]) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: "Atai",
+    description:
+      "Atai.ink is the business builder for founders: launch, run and grow a real business with an AI team — customers, sales and your own admin console included. No code.",
+    image: `${SITE_URL}/og-image.png`,
+    brand: { "@type": "Brand", name: "Atai" },
+    offers: plans.filter((p) => !p.custom).map((plan) => ({
+      "@type": "Offer",
+      name: `${plan.name} Plan`,
+      price: plan.priceUSD,
+      priceCurrency: "USD",
+      description: `${plan.mirrorCredits.toLocaleString()} ${CREDIT_UNIT_NAME} per month`,
+      url: `${SITE_URL}/pricing`,
+      availability: "https://schema.org/InStock",
+      priceValidUntil: "2026-12-31",
+    })),
+  }
 }
 
 const faqStructuredData = {
@@ -257,9 +254,10 @@ export default async function PricingPage() {
 
   // Read the same billing authority the build pipeline charges from, so an
   // admin price override shows here instead of drifting from the real charge.
-  const [buildTierCosts, deploymentCosts] = await Promise.all([
+  const [buildTierCosts, deploymentCosts, catalog] = await Promise.all([
     getBuildTierCosts(),
     getDeploymentCosts(),
+    resolvePublicCommercialCatalog(),
   ])
   const simpleCredits = buildTierCosts.simple
   const deployCost = deploymentCosts.deployCost
@@ -268,10 +266,12 @@ export default async function PricingPage() {
     ...entry,
     tier: { ...entry.tier, credits: tierCosts[entry.tier.id] },
   }))
+  const plans = catalog.plans
+  const packs = catalog.packs
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(pricingStructuredData) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(pricingStructuredData(plans)) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqStructuredData) }} />
       <SiteHeader activePage="/pricing" variant="bordered" />
 
@@ -350,10 +350,10 @@ export default async function PricingPage() {
         </div>
 
         <PricingPlanGrid
-          plans={resolvedPlans}
+          plans={plans}
           isLoggedIn={!!user}
           guidance={planGuidance}
-          allPlans={resolvedPlans}
+          allPlans={plans}
         />
       </section>
 
@@ -467,7 +467,7 @@ export default async function PricingPage() {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {PERMANENT_CREDIT_PACKS.map((pack) => (
+            {packs.map((pack) => (
               <div
                 key={pack.id}
                 className={`rounded-xl border bg-card p-5 ${pack.popular ? "border-primary/50 shadow-lg shadow-primary/5" : "border-border"}`}

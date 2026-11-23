@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/auth/session"
 import { store } from "@/lib/store/store"
 import { ok, fail, handleRouteError } from "@/lib/api/respond"
 import { linkDatabaseRecords, unlinkDatabaseRecords, isTotalumConfigured } from "@/lib/integrations/totalum/service"
+import { infrastructureDenial } from "@/lib/infrastructure/access"
 
 /**
  * POST /api/projects/:id/database/records/:recordId/link
@@ -16,6 +17,8 @@ export async function POST(
     const { id, recordId } = await params
     const project = await store.getProject(id)
     if (!project || project.userId !== user.id) return fail("UNAUTHORIZED_PROJECT_ACCESS", "We couldn't find this project.", 404)
+    const infrastructureBlocked = infrastructureDenial(project.infrastructure)
+    if (infrastructureBlocked) return fail(infrastructureBlocked.code, infrastructureBlocked.message, 402)
     if (!project.totalumProjectId) return fail("NO_TOTALUM_PROJECT", "This project hasn't been built yet.", 400)
     if (!isTotalumConfigured()) return fail("PROVIDER_NOT_CONFIGURED", "The build engine isn't connected yet.", 503)
 
@@ -54,6 +57,8 @@ export async function DELETE(
     const { id, recordId } = await params
     const project = await store.getProject(id)
     if (!project || project.userId !== user.id) return fail("UNAUTHORIZED_PROJECT_ACCESS", "We couldn't find this project.", 404)
+    const infrastructureBlocked = infrastructureDenial(project.infrastructure)
+    if (infrastructureBlocked) return fail(infrastructureBlocked.code, infrastructureBlocked.message, 402)
     if (!project.totalumProjectId) return fail("NO_TOTALUM_PROJECT", "This project hasn't been built yet.", 400)
     if (!isTotalumConfigured()) return fail("PROVIDER_NOT_CONFIGURED", "The build engine isn't connected yet.", 503)
 

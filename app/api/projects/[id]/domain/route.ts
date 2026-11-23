@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/auth/session"
 import { store, cryptoId } from "@/lib/store/store"
 import { ok, fail, handleRouteError } from "@/lib/api/respond"
 import { addCustomDomain, removeCustomDomain, isTotalumConfigured, getDeploymentStatus } from "@/lib/integrations/totalum/service"
+import { releaseCustomDomainSlot, reserveCustomDomainSlot } from "@/lib/billing/entitlements/require"
 import type { ProjectEvent } from "@/lib/types/project"
 
 function event(stage: string, message: string, level: ProjectEvent["level"] = "info"): ProjectEvent {
@@ -26,27 +27,56 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const body = (await req.json().catch(() => ({}))) as { hostname?: string }
     if (!body.hostname) return fail("VALIDATION", "A hostname is required (e.g. app.yourdomain.com).", 422)
 
-    // Validate hostname format
     const hostname = body.hostname.trim().toLowerCase()
     if (!hostname.includes(".") || hostname.startsWith("http")) {
       return fail("VALIDATION", "Enter a valid hostname like app.yourdomain.com", 422)
     }
 
-    // Check deployment exists
+    const hasExistingDomain =
+      Boolean(project.deployment?.customDomain) ||
+      (project.deploymentHistory ?? []).some((entry) => Boolean(entry.customDomain))
+    const reservation = hasExistingDomain ? {} : await reserveCustomDomainSlot(user.id, id, hostname)
+    if (reservation.denial) return fail(reservation.denial.code, reservation.denial.message, 402)
+    if (reservation.busy) return fail(reservation.busy.code, reservation.busy.message, 409)
+    const reservationHoldId = reservation.holdId
+
     try {
       const deployStatus = await getDeploymentStatus(project.totalumProjectId)
       if (deployStatus.status !== "success") {
+        if (reservationHoldId) await releaseCustomDomainSlot(user.id, id)
         return fail("NO_DEPLOYMENT", "You must deploy your project first before adding a custom domain.", 400)
       }
     } catch {
+      if (reservationHoldId) await releaseCustomDomainSlot(user.id, id)
       return fail("NO_DEPLOYMENT", "Could not verify deployment status. Deploy first.", 400)
     }
 
-    // Add custom domain via Totalum
     try {
       const result = await addCustomDomain(project.totalumProjectId, { hostname })
 
-      await store.appendEvent(id, event("domain", `Custom domain added: ${hostname}`))
+      try {
+        await store.updateProject(id, {
+          deployment: {
+            ...project.deployment,
+            customDomain: result.hostname,
+            customDomainStatus: result.status,
+            updatedAt: Date.now(),
+          },
+        })
+      } catch (persistError) {
+        // The provider accepted the domain but the project write failed. Keep
+        // the hold so the slot is not handed to another request; it expires
+        // and a retry reuses the same deterministic hold.
+        console.error("[domain] provider succeeded but project write failed", persistError)
+        return fail(
+          "DOMAIN_SAVE_FAILED",
+          "The domain was registered but we couldn't save it yet. Retry shortly; the registration is held for this project.",
+          503,
+        )
+      }
+
+      await store.appendEvent(id, event("domain", `Custom domain added: ${hostname}`)).catch(() => {})
+      await releaseCustomDomainSlot(user.id, id)
 
       return ok({
         message: "Custom domain added. Configure your DNS records, then wait for activation.",
@@ -55,6 +85,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         dnsRecordsToAdd: result.dnsRecordsToAdd,
       })
     } catch (providerError) {
+      await releaseCustomDomainSlot(user.id, id)
       const msg = providerError instanceof Error ? providerError.message : "Failed to add custom domain"
       if (msg.includes("NO_DEPLOYMENT")) {
         return fail("NO_DEPLOYMENT", "You must deploy your project first before adding a custom domain.", 400)
@@ -83,7 +114,16 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
 
     const result = await removeCustomDomain(project.totalumProjectId)
 
-    await store.appendEvent(id, event("domain", "Custom domain removed"))
+    await store.updateProject(id, {
+      deployment: {
+        ...project.deployment,
+        customDomain: undefined,
+        customDomainStatus: undefined,
+        updatedAt: Date.now(),
+      },
+    })
+    await store.appendEvent(id, event("domain", "Custom domain removed")).catch(() => {})
+    await releaseCustomDomainSlot(user.id, id)
 
     return ok({ message: result.message })
   } catch (e) {

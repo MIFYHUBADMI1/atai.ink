@@ -16,6 +16,14 @@
     {
       "path": "/api/admin/domains/claim-notices",
       "schedule": "40 4 * * *"
+    },
+    {
+      "path": "/api/admin/infrastructure/expire-sweep",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/admin/billing/entitlements/resource-holds",
+      "schedule": "50 3 * * *"
     }
   ]
 }

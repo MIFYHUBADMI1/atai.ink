@@ -9,7 +9,7 @@ interface PricingPlanGridProps {
   plans: SubscriptionPlan[]
   isLoggedIn: boolean
   guidance: Record<string, { bestFor: string; outcomes: string[] }>
-  allPlans?: SubscriptionPlan[]
+  allPlans: SubscriptionPlan[]
 }
 
 /**

@@ -8,6 +8,7 @@
  */
 
 import type { RuntimeLedgerTransactionType } from "@/runtime/contracts/billing"
+import type { CatalogSaleMode } from "@/lib/billing/catalog/types"
 
 // ─── Currency ────────────────────────────────────────────────────────────────
 
@@ -230,10 +231,21 @@ export interface PermanentCreditPack {
   priceUSD: number
   label: string
   popular?: boolean
+  /** Sale mode from the published catalog; code packs are self-serve. */
+  saleMode?: CatalogSaleMode
   /** Dodo product ID — set in environment or database */
   dodoProductId?: string
   /** Dodo price ID — set in environment or database */
   dodoPriceId?: string
+}
+
+export function getLegacySubscriptionPlans(
+  env: NodeJS.ProcessEnv = process.env,
+): SubscriptionPlan[] {
+  return LEGACY_SUBSCRIPTION_PLANS.map((plan) => ({
+    ...plan,
+    dodoProductId: env[`DODO_PRODUCT_${plan.id.toUpperCase()}`],
+  }))
 }
 
 export const PERMANENT_CREDIT_PACKS: PermanentCreditPack[] = [
@@ -243,6 +255,15 @@ export const PERMANENT_CREDIT_PACKS: PermanentCreditPack[] = [
   { id: "perm_5m", credits: 5_000_000, priceUSD: 859, label: "5,000,000 Credits", dodoProductId: process.env.DODO_PRODUCT_PERM_5M },
   { id: "perm_15m", credits: 15_000_000, priceUSD: 2_499, label: "15,000,000 Credits", dodoProductId: process.env.DODO_PRODUCT_PERM_15M },
 ]
+
+export function getPermanentCreditPacks(
+  env: NodeJS.ProcessEnv = process.env,
+): PermanentCreditPack[] {
+  return PERMANENT_CREDIT_PACKS.map((pack) => ({
+    ...pack,
+    dodoProductId: env[`DODO_PRODUCT_PERM_${pack.id.replace("perm_", "").toUpperCase()}`],
+  }))
+}
 
 export function getPackById(id: string): PermanentCreditPack | undefined {
   return PERMANENT_CREDIT_PACKS.find((p) => p.id === id)
@@ -325,6 +346,7 @@ export type LedgerTransactionType =
   | "admin_adjustment"
   | "subscription_expiration"
   | "refund_reversal"
+  | "credit_reconciliation"
   | "other_reversal"
   | "infrastructure_purchase"
   | "fork_purchase"

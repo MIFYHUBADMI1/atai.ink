@@ -31,7 +31,27 @@ describe("legacy → commercial migration (Gate 4)", () => {
     expect(payload?.commercialPlanId).toBe("explorer")
     expect(payload?.legacyPlanId).toBe("free")
     expect(payload?.grandfathered).toBe(true)
-    expect(payload?.entitlementSnapshot).toBeTypeOf("object")
+    // No historical snapshot existed, so none is fabricated from the catalog.
+    expect(payload?.entitlementSnapshot).toBeUndefined()
+  })
+
+  it("preserves a historical snapshot verbatim instead of rebuilding it", () => {
+    const historical = { commercialPlanId: "growth", marker: "purchased-v1" }
+    const { payload } = computeMigrationForRecord(
+      makeSub({ planId: "business", entitlementSnapshot: historical }),
+      { batchId: "b1" },
+    )
+    expect(payload?.entitlementSnapshot).toEqual(historical)
+    expect(payload?.entitlementSnapshot).not.toBe(historical)
+  })
+
+  it("never fabricates a snapshot for a commercial record without one", () => {
+    const { payload } = computeMigrationForRecord(
+      makeSub({ planId: "growth", commercialPlanId: "growth" }),
+      { batchId: "b1" },
+    )
+    expect(payload?.commercialPlanId).toBe("growth")
+    expect(payload?.entitlementSnapshot).toBeUndefined()
   })
 
   it("maps legacy business to growth", () => {

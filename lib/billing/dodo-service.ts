@@ -11,7 +11,7 @@ import { DodoPayments } from "dodopayments"
 import { getDodoConfig } from "@/lib/env"
 import { logger } from "@/lib/logging/logger"
 import { checkRateLimit } from "@/lib/auth/rate-limit"
-import { productCreationLocks, checkoutSessionLocks } from "@/lib/cache/locks"
+import { productCreationLocks } from "@/lib/cache/locks"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -250,9 +250,11 @@ export async function getOrCreatePermanentProduct(
   description: string,
   priceUSD: number,
   credits: number,
+  /** Provisioned Dodo product id (commercial catalog). */
+  existingProductId?: string,
 ): Promise<DodoProductInfo> {
   // Check cache first
-  const cacheKey = `perm:${packId}`
+  const cacheKey = `perm:${existingProductId ?? packId}`
   const cached = createdProducts.get(cacheKey)
   if (
     cached &&
@@ -261,6 +263,19 @@ export async function getOrCreatePermanentProduct(
     Date.now() - cached.createdAt < PRODUCT_CACHE_TTL_MS
   ) {
     return cached
+  }
+
+  if (existingProductId) {
+    const productInfo: DodoProductInfo = {
+      productId: existingProductId,
+      name,
+      priceUSD,
+      credits,
+      type: "permanent",
+      createdAt: Date.now(),
+    }
+    createdProducts.set(cacheKey, productInfo)
+    return productInfo
   }
 
   // Use a lock to prevent concurrent duplicate creation

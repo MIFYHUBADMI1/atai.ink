@@ -281,4 +281,58 @@ describe("expireSubscriptionCredits (webhook path)", () => {
     expect(entry.idempotencyKey).toBe(`sub_expire_subX_${Math.floor(renewalAt / DAY)}`)
     expect(entry.metadata.expiredBuckets).toBe(2)
   })
+
+  it("expires only buckets due at the renewal cutoff", async () => {
+    const cutoff = now + DAY
+    const doc = {
+      id: "u5",
+      credits: 700_000,
+      subscriptionCredits: 700_000,
+      permanentCredits: 0,
+      creditBuckets: [
+        { subscriptionId: "subX", bucketId: "b_due", planId: "growth", amount: 400_000, originalAmount: 400_000, expiresAt: cutoff, createdAt: now },
+        { subscriptionId: "subX", bucketId: "b_new", planId: "growth", amount: 300_000, originalAmount: 300_000, expiresAt: cutoff + DAY, createdAt: now },
+      ],
+    }
+    userFindOne.mockResolvedValue(doc)
+
+    const ok = await expireSubscriptionCredits({
+      userId: "u5",
+      subscriptionId: "subX",
+      periodStart: cutoff,
+      expiresAtOrBefore: cutoff,
+    })
+
+    expect(ok).toBe(true)
+    const [, ops] = userUpdateOne.mock.calls[0]
+    expect(ops.$inc).toEqual({ subscriptionCredits: -400_000, credits: -400_000 })
+    expect(ops.$pull).toEqual({
+      creditBuckets: { subscriptionId: "subX", expiresAt: { $lte: cutoff } },
+    })
+  })
+
+  it("reads expiry state with the transaction session only", async () => {
+    const doc = {
+      id: "u6",
+      credits: 100_000,
+      subscriptionCredits: 100_000,
+      permanentCredits: 0,
+      creditBuckets: [
+        { subscriptionId: "subX", bucketId: "b1", planId: "growth", amount: 100_000, originalAmount: 100_000, expiresAt: now + DAY, createdAt: now },
+      ],
+    }
+    userFindOne.mockResolvedValue(doc)
+
+    await expireSubscriptionCredits({
+      userId: "u6",
+      subscriptionId: "subX",
+      periodStart: now + DAY,
+      expiresAtOrBefore: now + DAY,
+    })
+
+    expect(userFindOne).toHaveBeenCalled()
+    for (const call of userFindOne.mock.calls) {
+      expect(call[1]).toMatchObject({ session: expect.anything() })
+    }
+  })
 })

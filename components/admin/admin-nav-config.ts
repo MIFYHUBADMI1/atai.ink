@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   BarChart3,
   BookOpen,
+  Boxes,
   Bug,
   Bot,
   Coins,
@@ -82,6 +83,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     label: "Money",
     items: [
       { href: "/admin/billing", label: "Billing", icon: Receipt, description: "Revenue, credits, and billing overview." },
+      { href: "/admin/billing/catalog", label: "Catalog", icon: Boxes, description: "Versioned commercial products, prices, credits, and Dodo mappings." },
       { href: "/admin/billing/configuration", label: "Billing configuration", icon: Settings, description: "Credit costs and billing settings." },
       { href: "/admin/billing/plans", label: "Plans", icon: Package, description: "Subscription plans." },
       { href: "/admin/billing/credit-packs", label: "Credit packs", icon: Wallet, description: "One-time credit products." },

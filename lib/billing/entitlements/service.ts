@@ -19,12 +19,15 @@
  * @module lib/billing/entitlements/service
  */
 
+import type { Filter } from "mongodb"
 import { subscriptionRecordsCol, projectsCol } from "@/lib/db/collections"
+import type { MirrorProject } from "@/lib/types/project"
 import { buildEntitlementSet, ENTITLEMENT_VERSION } from "./catalog"
 import { resolveCommercialPlan, isCommercialPlanId } from "./migration-map"
 import { checkEntitlement } from "./catalog"
 import { entitlementCache } from "./cache"
 import type { EntitlementSet, EntitlementOp, EntitlementCheck, CommercialPlanId } from "./types"
+import type { SubscriptionRecord } from "@/lib/billing/billing-types"
 
 /** How long a last-known snapshot is trusted during a downstream failure. */
 const SNAPSHOT_FRESHNESS_MS = 24 * 60 * 60 * 1000
@@ -86,96 +89,240 @@ async function countBusinessesForScope(scope: EntitlementScope): Promise<number>
   }
 }
 
-async function getActiveSubscriptionForScope(scope: EntitlementScope) {
+function scopeFilter(scope: EntitlementScope): Record<string, string> {
+  return scope.kind === "user" ? { userId: scope.userId } : { workspaceId: scope.workspaceId }
+}
+
+/**
+ * A production subdomain belongs to a project once it has ever deployed
+ * successfully. A failed later deploy must not free the slot: the live URL
+ * still exists.
+ */
+const SUBDOMAIN_COUNT_FILTER: Filter<MirrorProject> = {
+  $or: [
+    { "deployment.status": "success" },
+    { "deployment.productionUrl": { $exists: true, $ne: "" } },
+    { state: "deployed" },
+    { "deploymentHistory.status": "success" },
+    // A first deploy in flight has already claimed its slot; the hold is
+    // released only when the deployment fails or resolves.
+    { state: "deploying" },
+  ],
+}
+
+async function countSubdomainsForScope(scope: EntitlementScope): Promise<number> {
   try {
-    const col = await subscriptionRecordsCol()
-    if (scope.kind === "user") {
-      return await col.findOne(
-        { userId: scope.userId, status: { $in: ["active", "trialing", "past_due"] } },
-        { sort: { createdAt: -1 } },
-      )
-    }
-    const ownerId = await getWorkspaceOwnerId(scope.workspaceId)
-    if (!ownerId) return null
-    return await col.findOne(
-      { userId: ownerId, status: { $in: ["active", "trialing", "past_due"] } },
-      { sort: { createdAt: -1 } },
-    )
+    const col = await projectsCol()
+    return await col.countDocuments({ ...scopeFilter(scope), ...SUBDOMAIN_COUNT_FILTER })
   } catch {
-    return null
+    return 0
   }
 }
 
-function snapshotFromSub(sub: Record<string, unknown>): EntitlementSet | undefined {
-  const snap = sub.entitlementSnapshot as EntitlementSet | undefined
-  return snap ?? undefined
+/** How many of the given projects already count as a subdomain. Used to avoid
+ * counting a live hold twice when its project is already in `current`. */
+export async function countSubdomainsAmongProjects(
+  scope: EntitlementScope,
+  projectIds: readonly string[],
+): Promise<number> {
+  if (projectIds.length === 0) return 0
+  try {
+    const col = await projectsCol()
+    return await col.countDocuments({
+      ...scopeFilter(scope),
+      id: { $in: [...projectIds] },
+      ...SUBDOMAIN_COUNT_FILTER,
+    })
+  } catch {
+    return 0
+  }
+}
+
+/** Projects currently in the first-deploy window; their slot is also held. */
+export async function countDeployingProjectsForScope(scope: EntitlementScope): Promise<number> {
+  try {
+    const col = await projectsCol()
+    return await col.countDocuments({ ...scopeFilter(scope), state: "deploying" })
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * Count projects that have consumed a custom-domain registration. New records
+ * persist the active hostname on `deployment.customDomain`; legacy records are
+ * recognised from their deployment history so an existing paid domain is never
+ * silently treated as unused.
+ */
+async function countCustomDomainsForScope(scope: EntitlementScope): Promise<number> {
+  try {
+    const col = await projectsCol()
+    return await col.countDocuments({
+      ...scopeFilter(scope),
+      $or: [
+        { "deployment.customDomain": { $exists: true, $ne: null } },
+        { "deploymentHistory.customDomain": { $exists: true, $ne: null } },
+      ],
+    })
+  } catch {
+    return 0
+  }
+}
+
+interface ScopeUsage {
+  businesses: number
+  subdomains: number
+  customDomainsConsumed: number
+}
+
+async function getUsageForScope(scope: EntitlementScope): Promise<ScopeUsage> {
+  const [businesses, subdomains, customDomainsConsumed] = await Promise.all([
+    countBusinessesForScope(scope),
+    countSubdomainsForScope(scope),
+    countCustomDomainsForScope(scope),
+  ])
+  return { businesses, subdomains, customDomainsConsumed }
+}
+
+const ACTIVE_SUBSCRIPTION_STATUSES = ["active", "trialing", "past_due"] as const
+const TERMINATED_SUBSCRIPTION_STATUSES = new Set<string>([
+  "cancelled",
+  "canceled",
+  "terminated",
+  "expired",
+])
+
+async function getSubscriptionForScope(
+  scope: EntitlementScope,
+  status?: readonly SubscriptionRecord["status"][],
+) {
+  const col = await subscriptionRecordsCol()
+  const userId = scope.kind === "user" ? scope.userId : await getWorkspaceOwnerId(scope.workspaceId)
+  if (!userId) return null
+  return await col.findOne(
+    { userId, ...(status ? { status: { $in: status } } : {}) },
+    { sort: { createdAt: -1 } },
+  )
+}
+
+async function getActiveSubscriptionForScope(scope: EntitlementScope) {
+  return getSubscriptionForScope(scope, ACTIVE_SUBSCRIPTION_STATUSES)
+}
+
+/**
+ * A terminated paid subscription is not the same as a legacy free account.
+ * The free plan's grandfathering exists to protect founders who never bought a
+ * paid plan; it must not restore production capability after cancellation.
+ */
+async function hasTerminatedSubscription(scope: EntitlementScope): Promise<boolean> {
+  const latest = await getSubscriptionForScope(scope)
+  return Boolean(latest && TERMINATED_SUBSCRIPTION_STATUSES.has(latest.status))
+}
+
+/**
+ * Copy a frozen snapshot before attaching live counts. The stored snapshot is
+ * the purchase-time record and must never be mutated in place.
+ */
+function cloneEntitlementSet(set: EntitlementSet): EntitlementSet {
+  return JSON.parse(JSON.stringify(set)) as EntitlementSet
 }
 
 async function computeSet(scope: EntitlementScope): Promise<EntitlementSet> {
   const sub = await getActiveSubscriptionForScope(scope)
-  const businesses = await countBusinessesForScope(scope)
+  const usage = await getUsageForScope(scope)
+  const businesses = usage.businesses
 
   if (!sub) {
-    // No subscription record means a free account. One that already owns
-    // projects is grandfathered (legacy free behaviour) so turning enforcement
-    // on never caps a founder's existing assets.
-    const preserve = businesses > 0
-    return buildEntitlementSet(
-      "explorer",
-      {
-        businesses,
-        productionApps: businesses,
-        subdomains: 0,
-        customDomainsConsumed: 0,
-      },
-      {
-        legacyPlanId: "free",
-        grandfathered: preserve,
-        preserveLegacyBehavior: preserve,
-      },
-    )
+    // No active subscription means free access. A legacy free account that
+    // already owns projects keeps its old capability, but a terminated paid
+    // subscription must fall back to Explorer rather than re-acquiring it.
+    const terminated = await hasTerminatedSubscription(scope)
+    const preserve = businesses > 0 && !terminated
+    return {
+      ...buildEntitlementSet(
+        "explorer",
+        {
+          businesses,
+          productionApps: businesses,
+          subdomains: usage.subdomains,
+          customDomainsConsumed: usage.customDomainsConsumed,
+        },
+        {
+          legacyPlanId: "free",
+          grandfathered: preserve,
+          preserveLegacyBehavior: preserve,
+        },
+      ),
+      entitlementSource: "free",
+    }
   }
 
-  // Post-migration path: a stored snapshot + commercialPlanId wins.
-  const storedCommercial = sub.commercialPlanId as string | undefined
-  const snapshot = snapshotFromSub(sub as unknown as Record<string, unknown>)
-  if (storedCommercial && snapshot) {
-    const set = snapshot
+  // Post-migration path: a frozen snapshot wins over the live catalog. The
+  // purchased plan, caps and benefits stay exactly as bought. A provisional
+  // snapshot is used for review-pending records but is labelled as such.
+  const terms = sub.purchasedTerms
+  const snapshot =
+    terms?.entitlementSnapshot ?? (sub.entitlementSnapshot as EntitlementSet | undefined)
+  if (snapshot) {
+    const set = cloneEntitlementSet(snapshot)
     set.businesses.current = businesses
     set.productionApps.current = businesses
+    set.subdomains.current = usage.subdomains
+    set.customDomainsIncluded.consumed = usage.customDomainsConsumed
+    // The purchased allocation is authoritative even if the snapshot was
+    // frozen from a different catalog generation.
+    if (typeof terms?.monthlyCredits === "number") {
+      set.credits = { ...set.credits, monthlyGrant: terms.monthlyCredits }
+    }
+    const provisional =
+      sub.termsStatus === "needs_review" ||
+      terms?.entitlementEvidence === "legacy_mapping_provisional"
+    set.entitlementSource = provisional ? "review_provisional" : "pinned"
     return set
   }
 
-  // A stored commercialPlanId without a snapshot: the subscription was created
-  // by the new commercial checkout, which writes the plan id but freezes no
-  // snapshot. The stored id is authoritative on its own — falling through to
-  // the legacy resolver would hand a paying Growth/Scale customer the free
-  // Explorer set.
+  const storedCommercial = sub.commercialPlanId as string | undefined
+  // A record the migration could not pin is deliberately NOT downgraded while
+  // it awaits review: preserve its legacy capability until an operator settles
+  // the terms. This mirrors grandfathered free behaviour.
+  const needsReview = sub.termsStatus === "needs_review"
   if (isCommercialPlanId(storedCommercial)) {
-    return buildEntitlementSet(storedCommercial, {
-      businesses,
-      productionApps: businesses,
-      subdomains: 0,
-      customDomainsConsumed: 0,
-    }, {
-      legacyPlanId: (sub.planId as string) ?? undefined,
-      grandfathered: false,
-      preserveLegacyBehavior: false,
-    })
+    // No frozen snapshot exists. Do NOT persist today's commercial catalog as
+    // if it were purchased: resolve the record's legacy-compatible plan, keep
+    // its current capability, and label the gap `needs_review`. The migration
+    // freezes this provisional resolution and flags the record.
+    const legacyResolved = resolveCommercialPlan((sub.planId as string) ?? storedCommercial)
+    return {
+      ...buildEntitlementSet(storedCommercial, {
+        businesses,
+        productionApps: businesses,
+        subdomains: usage.subdomains,
+        customDomainsConsumed: usage.customDomainsConsumed,
+      }, {
+        legacyPlanId: (sub.planId as string) ?? legacyResolved.legacyPlanId,
+        grandfathered: needsReview || sub.grandfathered === true || legacyResolved.grandfathered,
+        preserveLegacyBehavior:
+          needsReview || sub.grandfathered === true || legacyResolved.preserveLegacyBehavior,
+      }),
+      entitlementSource: "needs_review",
+    }
   }
 
   const legacyPlanId = (sub.planId as string) ?? "free"
   const resolved = resolveCommercialPlan(legacyPlanId, { hasProjects: businesses > 0 })
-  return buildEntitlementSet(resolved.commercialPlanId, {
-    businesses,
-    productionApps: businesses,
-    subdomains: 0,
-    customDomainsConsumed: 0,
-  }, {
-    legacyPlanId: resolved.legacyPlanId,
-    grandfathered: resolved.grandfathered,
-    preserveLegacyBehavior: resolved.preserveLegacyBehavior,
-  })
+  return {
+    ...buildEntitlementSet(resolved.commercialPlanId, {
+      businesses,
+      productionApps: businesses,
+      subdomains: usage.subdomains,
+      customDomainsConsumed: usage.customDomainsConsumed,
+    }, {
+      legacyPlanId: resolved.legacyPlanId,
+      grandfathered: resolved.grandfathered || needsReview,
+      preserveLegacyBehavior: resolved.preserveLegacyBehavior || needsReview,
+    }),
+    entitlementSource: "legacy",
+  }
 }
 
 /**
@@ -219,11 +366,38 @@ export async function resolveForWorkspace(workspaceId: string): Promise<Entitlem
   return resolveScope({ kind: "workspace", workspaceId })
 }
 
+/** Live usage counters used by the entitlement snapshot and access views. */
+export async function getUsageCounts(userId: string): Promise<ScopeUsage> {
+  return getUsageForScope({ kind: "user", userId })
+}
+
 export interface AuthorizeOpts {
   /** Resolve at workspace scope instead of the user scope. */
   workspaceId?: string
   /** Bypass the cache and force a fresh DB read (security-sensitive ops). */
   fresh?: boolean
+}
+
+export interface AuthorizeRequest {
+  op: EntitlementOp
+  ctx?: { agent?: "start" | "scout" | "optimize" }
+}
+
+/**
+ * Resolve once and check several operations against the same snapshot. Used by
+ * compound actions (a build also provisions a database) so a plan change cannot
+ * be observed half-way between two independent resolutions.
+ */
+export async function authorizeOperations(
+  userId: string,
+  requests: readonly AuthorizeRequest[],
+  opts?: AuthorizeOpts,
+): Promise<EntitlementCheck[]> {
+  const scope: EntitlementScope = opts?.workspaceId
+    ? { kind: "workspace", workspaceId: opts.workspaceId }
+    : { kind: "user", userId }
+  const set = await resolveScope(scope, { fresh: opts?.fresh })
+  return requests.map((request) => checkEntitlement(set, request.op, request.ctx))
 }
 
 /** Authorize an operation. Always returns a structured decision. */

@@ -242,6 +242,7 @@ export function CompetitionDashboard({
   researchReady,
   hasPlan,
   researchEnabled,
+  entitlementDenied,
   positioning,
   valueProposition,
   targetUsers,
@@ -256,6 +257,7 @@ export function CompetitionDashboard({
   researchReady: boolean
   hasPlan: boolean
   researchEnabled: boolean
+  entitlementDenied?: string | null
   positioning: string
   valueProposition: string
   targetUsers: string[]
@@ -313,7 +315,9 @@ export function CompetitionDashboard({
   const growth = useMemo(() => (report ? null : extractGrowthSignal(parse.market)), [report, parse.market])
   const landscapeLabel = competitivenessLabel(competitorCount)
   const stale = Boolean(snapshot) && (!snapshot?.contextHash || (currentContextHash && snapshot?.contextHash !== currentContextHash))
-  const blockedReason = !researchEnabled
+  const blockedReason = entitlementDenied
+    ? entitlementDenied
+    : !researchEnabled
     ? "Live research is switched off on this deployment."
     : !hasPlan
       ? "The snapshot builds on your plan — create one first."

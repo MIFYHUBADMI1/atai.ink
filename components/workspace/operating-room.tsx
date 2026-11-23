@@ -56,7 +56,7 @@ const MUTATION_MESSAGE: Record<WorkspaceMutation, string> = {
 
 export function ProjectWorkspace({ projectId, initialState }: { projectId: string; initialState: ProjectState }) {
   const router = useRouter()
-  const { project: fetched, refresh } = useProject(projectId, { pollWhileBuilding: true })
+  const { project: fetched, access, refresh } = useProject(projectId, { pollWhileBuilding: true })
   const projectState = (fetched?.state ?? initialState) as ProjectState
   const active = workspaceIsLive(projectState)
   const events = fetched?.events ?? []
@@ -444,7 +444,7 @@ export function ProjectWorkspace({ projectId, initialState }: { projectId: strin
               </p>
               {project.totalumProjectId ? (
                 <div className="mt-4 min-w-0">
-                  <PublishMenu projectId={projectId} projectName={project.name} totalumProjectId={project.totalumProjectId} onDeployed={() => void refresh()} />
+                  <PublishMenu projectId={projectId} projectName={project.name} totalumProjectId={project.totalumProjectId} access={access} onDeployed={() => void refresh()} />
                 </div>
               ) : null}
               <div className="mt-6 min-w-0 border-t border-border pt-5">

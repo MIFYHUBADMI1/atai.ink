@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/auth/session"
 import { store } from "@/lib/store/store"
 import { ok, fail, handleRouteError } from "@/lib/api/respond"
 import { getDatabaseTables, isTotalumConfigured } from "@/lib/integrations/totalum/service"
+import { infrastructureDenial } from "@/lib/infrastructure/access"
 
 /**
  * GET /api/projects/:id/database/tables
@@ -13,6 +14,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const { id } = await params
     const project = await store.getProject(id)
     if (!project || project.userId !== user.id) return fail("UNAUTHORIZED_PROJECT_ACCESS", "We couldn't find this project.", 404)
+    const infrastructureBlocked = infrastructureDenial(project.infrastructure)
+    if (infrastructureBlocked) return fail(infrastructureBlocked.code, infrastructureBlocked.message, 402)
     if (!project.totalumProjectId) return fail("NO_TOTALUM_PROJECT", "This project hasn't been built yet.", 400)
     if (!isTotalumConfigured()) return fail("PROVIDER_NOT_CONFIGURED", "The build engine isn't connected yet.", 503)
 

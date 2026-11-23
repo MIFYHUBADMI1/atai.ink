@@ -316,7 +316,11 @@ export function checkEntitlement(
       return allow()
     }
     case "useSpecialistTeam": {
-      if (set.ai.teams === "none") return deny("NO_TEAMS", "Specialist teams are not available on this plan.")
+      // A review-pending or grandfathered account keeps its legacy capability
+      // until an operator settles the purchased terms.
+      if (set.ai.teams === "none" && !set.preserveLegacyBehavior) {
+        return deny("NO_TEAMS", "Specialist teams are not available on this plan.")
+      }
       return allow()
     }
     case "useAgent": {
@@ -328,6 +332,7 @@ export function checkEntitlement(
     case "useCompetitionIntel": {
       if (set.bi.competitionMonitoring) return allow()
       if (set.planningOnly) return allow() // explorer research-only path
+      if (set.preserveLegacyBehavior) return allow() // unresolved historical capability
       return deny("COMPETITION_MONITORING_UNAVAILABLE", "Competition monitoring requires Growth or higher.")
     }
     case "useMarketingAutomation": {
