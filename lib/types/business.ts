@@ -31,7 +31,7 @@ export type MemberStatus = "active" | "invited" | "removed"
 /** Which applications a member may act on. `all` is the default. */
 export type MemberScope = { kind: "all" } | { kind: "applications"; applicationIds: string[] }
 
-export type SuggestedNameSource = "website_title" | "hostname" | "founder"
+export type SuggestedNameSource = "website_title" | "hostname" | "founder" | "project_name"
 
 /**
  * Set only on rows a migration run created. Rollback refuses to delete any row

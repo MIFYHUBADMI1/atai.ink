@@ -17,8 +17,8 @@ import { describe, expect, it } from "vitest"
 const ROOT = process.cwd()
 const BUSINESS_DIR = join(ROOT, "lib/business")
 
-/** Modules that hold no business data: constants, pure helpers, env reads. */
-const PURE_MODULES = new Set(["paths.ts", "permissions.ts", "flags.ts"])
+/** Modules that hold no business data: constants, pure helpers, route plumbing. */
+const PURE_MODULES = new Set(["paths.ts", "permissions.ts", "flags.ts", "http.ts"])
 
 /** Test-support modules, not service operations. */
 const TEST_SUPPORT_DIRS = new Set(["testing"])

@@ -38,6 +38,7 @@ export interface FakeCollection<T extends object> {
     options?: FakeOptions,
   ) => Promise<{ matchedCount: number; modifiedCount: number }>
   countDocuments: (filter?: Filter, options?: FakeOptions) => Promise<number>
+  updateMany: (filter: Filter, update: FakeUpdate, options?: FakeOptions) => Promise<{ modifiedCount: number }>
   deleteMany: (filter?: Filter, options?: FakeOptions) => Promise<{ deletedCount: number }>
 }
 
@@ -53,7 +54,13 @@ function assertSession(options: FakeOptions | undefined, operation: string): voi
 }
 
 function field(doc: object, key: string): unknown {
-  return (doc as Record<string, unknown>)[key]
+  if (!key.includes(".")) return (doc as Record<string, unknown>)[key]
+  return key
+    .split(".")
+    .reduce<unknown>(
+      (value, part) => (value && typeof value === "object" ? (value as Record<string, unknown>)[part] : undefined),
+      doc,
+    )
 }
 
 function matches(doc: object, filter: Filter): boolean {
@@ -117,6 +124,17 @@ export function fakeCollection<T extends object>(
     async countDocuments(filter = {}, options) {
       assertSession(options, "countDocuments")
       return docs.filter((doc) => matches(doc, filter)).length
+    },
+    async updateMany(filter, update, options) {
+      assertSession(options, "updateMany")
+      const matched = docs.filter((doc) => matches(doc, filter))
+      for (const doc of matched) {
+        if (update.$set) Object.assign(doc, update.$set)
+        for (const key of Object.keys(update.$unset ?? {})) {
+          delete (doc as Record<string, unknown>)[key]
+        }
+      }
+      return { modifiedCount: matched.length }
     },
     async deleteMany(filter = {}, options) {
       assertSession(options, "deleteMany")
