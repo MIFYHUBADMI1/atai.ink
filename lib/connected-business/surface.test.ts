@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest"
-import { businessBase, leaksBuildSurface, projectBase, workspaceModeOf } from "./surface"
+import {
+  businessBase,
+  businessBaseRef,
+  leaksBuildSurface,
+  projectBase,
+  projectBaseRef,
+  workspaceBase,
+  workspaceModeOf,
+} from "./surface"
 
 const BUSINESS_PAGES = [
   "overview",
@@ -26,6 +34,10 @@ describe("two surfaces, one rule", () => {
     expect(businessBase("biz_1").href("collaborate")).toBe("/business/biz_1/plan")
   })
 
+  it("sends the SEO audit to the page that renders it", () => {
+    expect(businessBase("biz_1").href("growth/seo")).toBe("/business/biz_1/growth")
+  })
+
   it("refuses a build-only segment on the operate surface", () => {
     const base = businessBase("biz_1")
     for (const target of ["source", "database", "deploy", "runtime", "collaborate", "hosting"]) {
@@ -47,6 +59,24 @@ describe("two surfaces, one rule", () => {
     expect(workspaceModeOf({ businessId: "biz_1" })).toBe("operate")
     expect(workspaceModeOf({ startingPoint: "from_scratch" })).toBe("build")
     expect(workspaceModeOf({})).toBe("build")
+  })
+
+  it("carries no functions in a base reference, so a Server Component may pass one to a Client Component", () => {
+    for (const ref of [projectBaseRef("p1"), businessBaseRef("biz_1")]) {
+      const roundTripped = JSON.parse(JSON.stringify(ref))
+      expect(roundTripped).toEqual(ref)
+      expect(Object.values(roundTripped).some((value) => typeof value === "function")).toBe(false)
+    }
+  })
+
+  it("rebuilds the same links from a reference", () => {
+    const fromRef = workspaceBase(businessBaseRef("biz_1"))
+    const direct = businessBase("biz_1")
+    for (const page of BUSINESS_PAGES) expect(fromRef.href(page)).toBe(direct.href(page))
+    for (const target of ["market", "deploy", "studio"]) {
+      expect(fromRef.segment(target)).toBe(direct.segment(target))
+    }
+    expect(workspaceBase(projectBaseRef("p1")).href("growth")).toBe("/project/p1/market")
   })
 
   it("detects a leaked build target", () => {

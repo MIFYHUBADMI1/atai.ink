@@ -61,6 +61,15 @@ export interface BusinessPriority {
   needs?: string
 }
 
+/**
+ * A stored horizon the current parser would not have written — a row from
+ * before `priority` existed, or a hand-edited assessment. It reads as the
+ * neutral horizon rather than crashing the page or claiming urgency.
+ */
+function horizonOf(value: unknown): BusinessPriority["priority"] {
+  return value === "immediate" || value === "later" ? value : "short_term"
+}
+
 export function businessPriorities(input: { project: MirrorProject; businessId: string }): BusinessPriority[] {
   const base = businessBase(input.businessId)
   const priorities = input.project.intake?.assessment?.result?.priorities ?? []
@@ -70,7 +79,7 @@ export function businessPriorities(input: { project: MirrorProject; businessId: 
     explanation: priority.explanation,
     whyItMatters: priority.whyItMatters,
     expectedOutcome: priority.expectedOutcome,
-    priority: priority.priority,
+    priority: horizonOf(priority.priority),
     ataiSection: priority.ataiSection,
     href: priority.route ? base.segment(segmentOf(priority.route, input.project.id)) : "",
     executableNow: priority.executableNow,
