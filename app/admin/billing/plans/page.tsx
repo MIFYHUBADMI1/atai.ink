@@ -11,6 +11,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { jsonFetcher } from "@/lib/client/api"
 import { AdminNav } from "@/components/admin-nav"
+import { CatalogSourceBanner } from "@/components/admin/catalog-source-banner"
+import type { AdminCatalogSourceView } from "@/lib/billing/catalog/admin-source-types"
 
 interface PlanConfig {
   id: string
@@ -24,6 +26,11 @@ interface PlanConfig {
   popular?: boolean
   features: string[]
   notIncluded: string[]
+  annualPriceUSD?: number | null
+  purchaseState?: string
+  annualPurchaseState?: string
+  dodoProductId?: string
+  annualDodoProductId?: string
 }
 
 interface CreditPack {
@@ -31,9 +38,12 @@ interface CreditPack {
   credits: number
   priceUSD: number
   label: string
+  saleMode?: string
+  dodoProductId?: string
 }
 
 interface BillingConfig {
+  catalogSource?: AdminCatalogSourceView
   subscriptionPlans: PlanConfig[]
   permanentCreditPacks: CreditPack[]
   conversionRate: {
@@ -101,7 +111,8 @@ export default function AdminPlansPage() {
             </div>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight">Subscription Plans</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              View and configure subscription plans, pricing, and credit allocations.
+              Read-only view of the active commercial catalog. Edit products, drafts, and publications in
+              Catalog authoring.
             </p>
           </div>
           <Button variant="outline" size="sm" onClick={() => mutate()} className="gap-1.5">
@@ -109,6 +120,8 @@ export default function AdminPlansPage() {
             Refresh
           </Button>
         </header>
+
+        <CatalogSourceBanner source={config?.catalogSource} />
 
         {/* ── Dodo Integration Status ── */}
         <section className="mt-8">
@@ -157,9 +170,16 @@ export default function AdminPlansPage() {
                       </div>
                       <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">{plan.tagline}</p>
                     </div>
-                    <Badge variant={plan.active ? "default" : "outline"} className="shrink-0">
-                      {plan.active ? "Active" : "Inactive"}
-                    </Badge>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <Badge variant={plan.active ? "default" : "outline"}>
+                        {plan.active ? "Active" : "Inactive"}
+                      </Badge>
+                      {plan.purchaseState && plan.purchaseState !== "available" ? (
+                        <Badge variant="outline" className="text-[10px] capitalize">
+                          {plan.purchaseState}
+                        </Badge>
+                      ) : null}
+                    </div>
                   </div>
 
                   {/* Price + stats */}
@@ -168,6 +188,12 @@ export default function AdminPlansPage() {
                       ${plan.priceUSD}
                       <span className="text-sm font-normal text-muted-foreground">/mo</span>
                     </p>
+                    {plan.annualPriceUSD ? (
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        ${plan.annualPriceUSD}/yr · annual checkout{" "}
+                        {plan.annualPurchaseState === "available" ? "available" : plan.annualPurchaseState ?? "unavailable"}
+                      </p>
+                    ) : null}
                     <div className="mt-2 space-y-1.5 text-sm">
                       <div className="flex items-center justify-between">
                         <span className="text-muted-foreground flex items-center gap-1.5">
@@ -189,7 +215,16 @@ export default function AdminPlansPage() {
                           Per 1K credits
                         </span>
                         <span className="font-mono">
-                          ${plan.priceUSD > 0 ? (plan.priceUSD / plan.mirrorCredits * 1000).toFixed(4) : "0"}
+                          {plan.priceUSD > 0 && plan.mirrorCredits > 0 ? `$${(plan.priceUSD / plan.mirrorCredits * 1000).toFixed(4)}` : "—"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground flex items-center gap-1.5">
+                          <CreditCard className="size-3" />
+                          Dodo monthly
+                        </span>
+                        <span className="font-mono text-xs">
+                          {plan.dodoProductId ? "Configured" : "Not configured"}
                         </span>
                       </div>
                     </div>
@@ -244,6 +279,8 @@ export default function AdminPlansPage() {
                       <th className="text-right py-2 text-xs font-mono uppercase text-muted-foreground">Credits</th>
                       <th className="text-right py-2 text-xs font-mono uppercase text-muted-foreground">Price (USD)</th>
                       <th className="text-right py-2 text-xs font-mono uppercase text-muted-foreground">Price per Credit</th>
+                      <th className="text-left py-2 text-xs font-mono uppercase text-muted-foreground">Sale mode</th>
+                      <th className="text-left py-2 text-xs font-mono uppercase text-muted-foreground">Dodo</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -253,7 +290,11 @@ export default function AdminPlansPage() {
                         <td className="py-3 text-right font-mono">{pack.credits.toLocaleString()}</td>
                         <td className="py-3 text-right font-mono">${pack.priceUSD}</td>
                         <td className="py-3 text-right font-mono text-muted-foreground">
-                          ${(pack.priceUSD / pack.credits).toFixed(4)}
+                          {pack.credits > 0 ? `$${(pack.priceUSD / pack.credits).toFixed(4)}` : "—"}
+                        </td>
+                        <td className="py-3 text-xs capitalize">{pack.saleMode ?? "self_serve"}</td>
+                        <td className="py-3 text-xs font-mono">
+                          {pack.dodoProductId ? "Configured" : "Not configured"}
                         </td>
                       </tr>
                     ))}

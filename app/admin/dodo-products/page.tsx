@@ -13,6 +13,8 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { formatUSD } from "@/lib/billing/config"
 import { jsonFetcher } from "@/lib/client/api"
+import { CatalogSourceBanner } from "@/components/admin/catalog-source-banner"
+import type { AdminCatalogSourceView } from "@/lib/billing/catalog/admin-source-types"
 import Link from "next/link"
 
 interface DodoProduct {
@@ -23,6 +25,8 @@ interface DodoProduct {
   type: "subscription" | "permanent"
   dodoProductId: string
   configured: boolean
+  saleMode?: string
+  purchaseState?: string
   dodoStatus: "synced" | "not_found" | "not_created"
   dodoData: {
     product_id: string
@@ -35,6 +39,7 @@ export default function DodoProductsAdminPage() {
   const { data, error, isLoading, mutate } = useSWR<{
     products: DodoProduct[]
     total: number
+    catalogSource?: AdminCatalogSourceView
   }>("/api/admin/dodo-products", jsonFetcher)
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
@@ -94,7 +99,8 @@ export default function DodoProductsAdminPage() {
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Dodo Products</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Manage payment products for subscriptions and credit packs
+              Provision Dodo payment products here. When the database catalog is active, attach the Dodo
+              product id to the published catalog version in Catalog authoring.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -117,6 +123,8 @@ export default function DodoProductsAdminPage() {
             </button>
           </div>
         </div>
+
+        <CatalogSourceBanner source={data?.catalogSource} />
 
         {error && (
           <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
@@ -262,6 +270,7 @@ function ProductTable({ products, onDelete }: { products: DodoProduct[]; onDelet
                 <th className="px-5 py-3 text-left font-medium text-muted-foreground">Product</th>
                 <th className="px-5 py-3 text-right font-medium text-muted-foreground">Price</th>
                 <th className="px-5 py-3 text-right font-medium text-muted-foreground">Credits</th>
+                <th className="px-5 py-3 text-left font-medium text-muted-foreground">Sale mode</th>
                 <th className="px-5 py-3 text-center font-medium text-muted-foreground">Dodo Status</th>
                 <th className="px-5 py-3 text-right font-medium text-muted-foreground">Actions</th>
               </tr>
@@ -284,6 +293,12 @@ function ProductTable({ products, onDelete }: { products: DodoProduct[]; onDelet
                   <td className="px-5 py-3 text-right font-mono">
                     {product.credits.toLocaleString()}
                     <span className="ml-1 text-xs text-muted-foreground">cr</span>
+                  </td>
+                  <td className="px-5 py-3 text-xs capitalize">
+                    {product.saleMode ?? "self_serve"}
+                    {product.purchaseState && product.purchaseState !== "available" ? (
+                      <span className="ml-1 text-muted-foreground">({product.purchaseState})</span>
+                    ) : null}
                   </td>
                   <td className="px-5 py-3 text-center">
                     <Badge

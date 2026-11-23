@@ -6,7 +6,7 @@ import useSWR from "swr"
 import {
   ArrowRight, CreditCard, DollarSign, Users, ShoppingCart, TrendingUp,
   TrendingDown, RefreshCw, AlertTriangle, Loader2, BarChart3, Coins,
-  ArrowUpRight, ArrowDownLeft, Package, Shield, Calendar, Download,
+  ArrowUpRight, ArrowDownLeft, Package, Shield, Calendar, Download, Boxes,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -478,6 +478,12 @@ export default function AdminBillingPage() {
               title="Subscriptions"
               description="View and manage all user subscriptions and plans."
               icon={CreditCard}
+            />
+            <QuickLink
+              href="/admin/billing/catalog"
+              title="Catalog Authoring"
+              description="Create products, publish versions, and activate the customer catalog."
+              icon={Boxes}
             />
             <QuickLink
               href="/admin/billing/plans"

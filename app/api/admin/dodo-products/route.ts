@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/auth/session"
 import { getDodoConfig } from "@/lib/env"
-import { PERMANENT_CREDIT_PACKS } from "@/lib/billing/config"
+import { resolveAdminCatalogSnapshot } from "@/lib/billing/catalog/admin-context"
 import {
-  getCommercialPlans,
   commercialProductName,
   commercialProductDescription,
 } from "@/lib/billing/entitlements/commercial-plans"
@@ -40,6 +39,7 @@ export async function GET(req: Request) {
       bearerToken: apiKey,
       environment: environment as "test_mode" | "live_mode",
     })
+    const catalog = await resolveAdminCatalogSnapshot()
 
     // Fetch products from Dodo
     let dodoItems: Array<{ product_id: string; name: string }> = []
@@ -52,10 +52,10 @@ export async function GET(req: Request) {
       // Non-fatal — show local config even if Dodo is unreachable
     }
 
-    // Combine with local config — the commercial catalog, monthly + annual variant
-    // per plan. Names match what checkout creates (price-in-name), so a product
+    // Combine with the active catalog, monthly + annual variant per plan.
+    // Names match what checkout creates (price-in-name), so a product
     // provisioned by either path matches.
-    const subscriptionProducts = getCommercialPlans()
+    const subscriptionProducts = catalog.plans
       .filter((p) => !p.custom)
       .flatMap((plan) => {
         const monthly = {
@@ -68,6 +68,8 @@ export async function GET(req: Request) {
           billingCycle: "monthly" as const,
           dodoProductId: plan.dodoProductId ?? "",
           configured: Boolean(plan.dodoProductId),
+          saleMode: "self_serve" as const,
+          purchaseState: plan.purchaseState,
         }
         if (!plan.annualPriceUSD) return [monthly]
         return [
@@ -82,13 +84,15 @@ export async function GET(req: Request) {
             billingCycle: "annual" as const,
             dodoProductId: plan.annualDodoProductId ?? "",
             configured: Boolean(plan.annualDodoProductId),
+            saleMode: "self_serve" as const,
+            purchaseState: plan.annualPurchaseState,
           },
         ]
       })
 
     const localProducts = [
       ...subscriptionProducts,
-      ...PERMANENT_CREDIT_PACKS.map((p) => ({
+      ...catalog.packs.map((p) => ({
         id: p.id,
         name: `Atai — ${p.label}`,
         priceUSD: p.priceUSD,
@@ -96,6 +100,8 @@ export async function GET(req: Request) {
         type: "permanent" as const,
         dodoProductId: p.dodoProductId ?? "",
         configured: Boolean(p.dodoProductId),
+        saleMode: p.saleMode ?? "self_serve",
+        purchaseState: p.saleMode === "self_serve" ? "available" : "unavailable",
       })),
     ]
 
@@ -131,6 +137,7 @@ export async function GET(req: Request) {
         products: matchedProducts,
         total: matchedProducts.length,
         dodoTotal: dodoItems.length,
+        catalogSource: catalog.source,
       },
     })
   } catch (error) {

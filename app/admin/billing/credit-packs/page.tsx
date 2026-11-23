@@ -11,6 +11,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { jsonFetcher } from "@/lib/client/api"
 import { AdminNav } from "@/components/admin-nav"
+import { CatalogSourceBanner } from "@/components/admin/catalog-source-banner"
+import type { AdminCatalogSourceView } from "@/lib/billing/catalog/admin-source-types"
 
 interface BillingOverview {
   payments: {
@@ -32,6 +34,7 @@ interface BillingOverview {
 }
 
 interface BillingConfig {
+  catalogSource?: AdminCatalogSourceView
   permanentCreditPacks: {
     id: string
     credits: number
@@ -39,6 +42,8 @@ interface BillingConfig {
     pricePerCredit: number
     label: string
     popular: boolean
+    saleMode?: string
+    dodoProductId?: string
   }[]
   conversionRate: {
     AtaiCreditsPerBaselineUnit: number
@@ -81,7 +86,8 @@ export default function AdminCreditPacksPage() {
             </div>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight">Credit Packs</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Manage permanent credit packs (purchased via Dodo Payments).
+              Read-only view of the active catalog. Edit credit-pack products and Dodo mappings in Catalog
+              authoring.
             </p>
           </div>
           <Button variant="outline" size="sm" onClick={() => mutate()} className="gap-1.5">
@@ -90,8 +96,12 @@ export default function AdminCreditPacksPage() {
           </Button>
         </header>
 
+        <CatalogSourceBanner source={config?.catalogSource} />
+
         {/* ── Permanent Credit Packages (Dodo) ── */}
-        <section className="mt-8">              <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-4">Permanent Credit Packages</p>            <p className="text-sm text-muted-foreground mb-4">
+        <section className="mt-8">
+          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-4">Permanent Credit Packages</p>
+          <p className="text-sm text-muted-foreground mb-4">
             Customer-facing permanent credit packages for purchase via Dodo Payments.
           </p>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -113,7 +123,9 @@ export default function AdminCreditPacksPage() {
                           ${pkg.priceUSD.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">USD</span>
                         </p>
                       </div>
-                      <Badge variant="default">Active</Badge>
+                      <Badge variant={pkg.saleMode === "self_serve" ? "default" : "outline"} className="capitalize">
+                        {pkg.saleMode ?? "self_serve"}
+                      </Badge>
                     </div>
 
                     <div className="mt-4 space-y-2 text-sm">
@@ -129,7 +141,7 @@ export default function AdminCreditPacksPage() {
                           <DollarSign className="size-3" />
                           Price per Credit
                         </span>
-                        <span className="font-mono">${pkg.pricePerCredit.toFixed(4)}</span>
+                        <span className="font-mono">{pkg.credits > 0 ? `$${pkg.pricePerCredit.toFixed(4)}` : "—"}</span>
                       </div>
                     </div>
 
@@ -141,40 +153,36 @@ export default function AdminCreditPacksPage() {
           </div>
         </section>
 
-        {/* ── Permanent Credit Packs ── */}
+        {/* ── Dodo Mappings ── */}
         <section className="mt-10">
-          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-4">Permanent Credit Packs</p>              <p className="text-sm text-muted-foreground mb-4">
-            Permanent credit packs for purchase via Dodo Payments. They never expire and remain after subscription cancellation.
-          </p>
+          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-4">Dodo Product Mappings</p>
           <Card>
             <CardContent className="py-5">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {config?.permanentCreditPacks.map((pack) => (
-                  <div key={pack.id} className="rounded-lg border border-border bg-muted/30 p-4">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="font-medium">{pack.label}</p>
-                        <p className="mt-1 text-2xl font-bold text-primary">
-                          ${pack.priceUSD}
-                        </p>
-                      </div>
-                      <Badge variant="outline">
-                        <Coins className="size-3 mr-1" />
-                        {pack.credits.toLocaleString()}
-                      </Badge>
-                    </div>
-                    <div className="mt-3 space-y-1 text-xs text-muted-foreground">
-                      <div className="flex justify-between">
-                        <span>Price per credit</span>
-                        <span className="font-mono">${(pack.priceUSD / pack.credits).toFixed(4)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Baseline units</span>
-                        <span className="font-mono">{Math.round(pack.credits / (config?.conversionRate.AtaiCreditsPerBaselineUnit ?? 1000)).toLocaleString()}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+              <p className="text-sm text-muted-foreground mb-4">
+                Checkout uses the Dodo product attached to the active catalog version. Change an id by
+                publishing a new version in Catalog authoring; direct Dodo edits do not update the catalog.
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-2 text-xs font-mono uppercase text-muted-foreground">Pack</th>
+                      <th className="text-left py-2 text-xs font-mono uppercase text-muted-foreground">Sale mode</th>
+                      <th className="text-left py-2 text-xs font-mono uppercase text-muted-foreground">Dodo product id</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {config?.permanentCreditPacks.map((pack) => (
+                      <tr key={pack.id} className="border-b border-border last:border-0">
+                        <td className="py-3 font-medium">{pack.label}</td>
+                        <td className="py-3 text-xs capitalize">{pack.saleMode ?? "self_serve"}</td>
+                        <td className="py-3 font-mono text-xs text-muted-foreground">
+                          {pack.dodoProductId || "Not configured"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </CardContent>
           </Card>

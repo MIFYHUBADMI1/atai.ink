@@ -13,10 +13,13 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { jsonFetcher, patchJson } from "@/lib/client/api"
 import { AdminNav } from "@/components/admin-nav"
+import { CatalogSourceBanner } from "@/components/admin/catalog-source-banner"
+import type { AdminCatalogSourceView } from "@/lib/billing/catalog/admin-source-types"
 import { toast } from "sonner"
 
 interface BillingConfig {
   currency: string
+  catalogSource?: AdminCatalogSourceView
   permanentCreditPacks: {
     id: string
     credits: number
@@ -24,6 +27,8 @@ interface BillingConfig {
     pricePerCredit: number
     label: string
     popular: boolean
+    saleMode?: string
+    dodoProductId?: string
   }[]
   applicationTiers: {
     id: string
@@ -943,7 +948,8 @@ export default function AdminConfigurationPage() {
             </div>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight">Billing Configuration</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              View and manage billing system configuration, pricing, and integration settings.
+              Runtime costs and integration settings are editable here. Catalog prices, credits, and Dodo
+              mappings are read-only and edited in Catalog authoring.
             </p>
           </div>
           <Button variant="outline" size="sm" onClick={() => mutate()} className="gap-1.5">
@@ -951,6 +957,8 @@ export default function AdminConfigurationPage() {
             Refresh
           </Button>
         </header>
+
+        <CatalogSourceBanner source={config?.catalogSource} />
 
         {/* ── Dodo Integration ── */}
         <section className="mt-8">
@@ -1178,6 +1186,9 @@ export default function AdminConfigurationPage() {
         {/* ── Subscription Plans ── */}
         <section className="mt-8">
           <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-4">Subscription Plans</p>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Read-only values from the active catalog source. Use Catalog authoring to change a plan.
+          </p>
           <Card>
             <CardContent className="py-5">
               <div className="overflow-x-auto">
@@ -1220,6 +1231,9 @@ export default function AdminConfigurationPage() {
         {/* ── Permanent Credit Packs ── */}
         <section className="mt-8">
           <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-4">Permanent Credit Packs</p>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Read-only values from the active catalog source. Use Catalog authoring to change a pack.
+          </p>
           <Card>
             <CardContent className="py-5">
               <div className="overflow-x-auto">
@@ -1238,7 +1252,9 @@ export default function AdminConfigurationPage() {
                         <td className="py-3 font-medium">{pack.label}</td>
                         <td className="py-3 text-right font-mono">{pack.credits.toLocaleString()}</td>
                         <td className="py-3 text-right font-mono">${pack.priceUSD}</td>
-                        <td className="py-3 text-right font-mono text-muted-foreground">${(pack.priceUSD / pack.credits).toFixed(4)}</td>
+                        <td className="py-3 text-right font-mono text-muted-foreground">
+                          {pack.credits > 0 ? `$${(pack.priceUSD / pack.credits).toFixed(4)}` : "—"}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

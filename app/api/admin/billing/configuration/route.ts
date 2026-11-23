@@ -2,13 +2,12 @@ import { requireAdmin } from "@/lib/auth/session"
 import { ok, fail, handleRouteError } from "@/lib/api/respond"
 import { z } from "zod"
 import {
-  PERMANENT_CREDIT_PACKS,
   BUILD_TIERS,
   DEFAULT_BILLING_CURRENCY,
   CREDITS_PER_BASELINE_UNIT,
   BASELINE_COST_MODEL_V1,
 } from "@/lib/billing/config"
-import { getCommercialPlans } from "@/lib/billing/entitlements/commercial-plans"
+import { resolveAdminCatalogSnapshot } from "@/lib/billing/catalog/admin-context"
 import {
   getCollaborateCosts,
   getBuildTierCosts,
@@ -47,19 +46,25 @@ export async function GET() {
     const infrastructurePrices = await getInfrastructurePrices()
     const rewards = await getRewardSettings()
     const runtimePricing = await getRuntimePricing()
+    const catalog = await resolveAdminCatalogSnapshot()
 
     const configuration = {
       // ── Currency ──
       currency: DEFAULT_BILLING_CURRENCY,
 
+      // ── Catalog source and publication ──
+      catalogSource: catalog.source,
+
       // ── Permanent Credit Packs (USD) ──
-      permanentCreditPacks: PERMANENT_CREDIT_PACKS.map((pack) => ({
+      permanentCreditPacks: catalog.packs.map((pack) => ({
         id: pack.id,
         credits: pack.credits,
         priceUSD: pack.priceUSD,
-        pricePerCredit: pack.priceUSD / pack.credits,
+        pricePerCredit: pack.credits > 0 ? pack.priceUSD / pack.credits : 0,
         label: pack.label,
         popular: pack.popular ?? false,
+        saleMode: pack.saleMode ?? "self_serve",
+        dodoProductId: pack.dodoProductId ?? "",
       })),
 
       // ── Application Build Tiers ──
@@ -156,13 +161,13 @@ export async function GET() {
         environment: process.env.DODO_PAYMENTS_ENVIRONMENT ?? "not_configured",
       },
 
-      // ── Subscription Plans (USD) — the live commercial catalog ──
-      subscriptionPlans: getCommercialPlans().map((plan) => ({
+      // ── Subscription Plans (USD) — the active catalog source ──
+      subscriptionPlans: catalog.plans.map((plan) => ({
         id: plan.id,
         name: plan.name,
         tagline: plan.tagline,
         priceUSD: plan.priceUSD,
-        annualPriceUSD: plan.annualPriceUSD,
+        annualPriceUSD: plan.annualPriceUSD ?? null,
         mirrorCredits: plan.mirrorCredits,
         interval: plan.interval,
         active: plan.active,
