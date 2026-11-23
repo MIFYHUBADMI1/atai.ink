@@ -11,6 +11,23 @@ import { readAuthBody } from "@/lib/api/request-body"
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
+function readCookie(request: Request, name: string): string | undefined {
+  const header = request.headers.get("cookie")
+  if (!header) return undefined
+  for (const part of header.split(";")) {
+    const [key, ...rest] = part.trim().split("=")
+    if (key === name) {
+      const value = rest.join("=")
+      try {
+        return decodeURIComponent(value)
+      } catch {
+        return value
+      }
+    }
+  }
+  return undefined
+}
+
 /**
  * Email/password registration (spec section 3). Creates an unverified
  * account, issues a hashed 24h verification token, emails the link, and logs
@@ -24,7 +41,13 @@ export async function POST(req: Request) {
     const email = typeof body.email === "string" ? body.email.trim() : ""
     const password = typeof body.password === "string" ? body.password : ""
     const name = typeof body.name === "string" ? body.name.trim() : ""
-    const referralCode = typeof body.ref === "string" ? body.ref.trim().toUpperCase() : ""
+    // The edge proxy keeps the referral code in a cookie across the whole
+    // signup journey, so a client that lost sessionStorage still attributes.
+    const cookieRef = readCookie(req, "Atai_referral")?.trim().toUpperCase() ?? ""
+    const bodyRef = typeof body.ref === "string" ? body.ref.trim().toUpperCase() : ""
+    // The cookie is the first touch the edge recorded; it wins over a later
+    // client value so a shared link is never re-attributed.
+    const referralCode = cookieRef || bodyRef
 
     if (email.length > 254 || !EMAIL_RE.test(email)) return fail("VALIDATION", "Please enter a valid email address.", 422)
     if (!name || name.length > 80) return fail("VALIDATION", "Please enter your name.", 422)
@@ -45,16 +68,33 @@ export async function POST(req: Request) {
 
     // Capture referral relationship if a referral code was provided
     let referralCaptured = false
+    let referralBonus = 0
+    let referrerName: string | undefined
     if (referralCode) {
-      const referral = await captureReferral(user.id, referralCode)
-      referralCaptured = !!referral
-      logger.info("api.auth.register", "captureReferral result", { referralCaptured, referralId: referral?.id, userId: user.id })
+      // Attribution is best-effort: the account already exists, so a referral
+      // write must never turn a successful signup into a 500.
+      const captured = await captureReferral(user.id, referralCode).catch((e) => {
+        logger.error("api.auth.register", "referral capture failed", {
+          userId: user.id,
+          error: e instanceof Error ? e.message : String(e),
+        })
+        return null
+      })
+      referralCaptured = !!captured
+      referralBonus = captured?.signupBonus ?? 0
+      referrerName = captured?.referrerName
+      logger.info("api.auth.register", "captureReferral result", { referralCaptured, referralId: captured?.referral.id, userId: user.id })
     }
 
     const token = await createSession(user.id)
     await setSessionCookie(token)
 
-    return ok({ user: toPublicUser(user), verificationEmail: verification, referralCaptured }, { status: 201 })
+    const response = ok(
+      { user: toPublicUser(user), verificationEmail: verification, referralCaptured, referralBonus, referrerName },
+      { status: 201 },
+    )
+    if (referralCaptured) response.cookies.delete("Atai_referral")
+    return response
   } catch (e) {
     return handleRouteError("api.auth.register", e)
   }

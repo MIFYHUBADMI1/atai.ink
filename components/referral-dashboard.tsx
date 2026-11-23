@@ -230,6 +230,9 @@ export function ReferralDashboard() {
         <p className="text-lg font-medium">
           Up to <span className="text-primary font-semibold">2,000 Credits</span> per successful referral
         </p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Whoever you invite also gets 500 bonus credits when they join, on top of their welcome credits.
+        </p>
       </div>
 
       {/* Stats */}

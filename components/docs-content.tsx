@@ -854,7 +854,7 @@ export function DocsContent() {
 
               <h3 className="text-lg font-semibold text-foreground mt-8">Refer and earn</h3>
               <p>
-                Invite friends to Atai and earn bonus credits. When someone signs up using your referral link and becomes an active user, you both receive credits. Share your referral link from the <strong className="text-foreground">Refer &amp; Earn</strong> page in your account menu.
+                Invite friends to Atai and both sides earn bonus credits. Someone who joins through your link receives <strong className="text-foreground">500 bonus credits</strong>. You receive <strong className="text-foreground">500 credits</strong> when they verify their account, plus <strong className="text-foreground">1,500 credits</strong> when their successful builds reach 75,000 eligible credits. Share your link from the <strong className="text-foreground">Refer &amp; Earn</strong> page in your account menu, or read the <a href="/referral-program" className="text-primary underline">referral program guide</a>.
               </p>
             </div>
             <SectionFeedbackInline sectionId="account" />

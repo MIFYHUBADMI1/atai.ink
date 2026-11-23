@@ -11,6 +11,7 @@ import { GoogleButton } from "@/components/auth/google-button"
 import { GitHubButton } from "@/components/auth/github-button"
 import { PasswordField } from "@/components/auth/password-field"
 import { BrandMark } from "@/components/brand-logo"
+import { toast } from "sonner"
 import type { AuthView } from "@/lib/auth/client-intent"
 import {
   getReferralCode,
@@ -88,8 +89,18 @@ export function AuthPanel({
   const [sessionVerifyCtx, setSessionVerifyCtx] = useState<{ id?: string; email: string } | null>(null)
   const [sessionCooldown, setSessionCooldown] = useState(0)
   const [sessionResendError, setSessionResendError] = useState<string | null>(null)
+  const [referralCode, setReferralCode] = useState<string | undefined>(undefined)
 
   const busy = submitting || oauthProvider !== null
+
+  // Resolve the referral code after mount so the OAuth buttons are rendered
+  // with it. Reading sessionStorage during the first render missed a code that
+  // the page-level effect had not stored yet, which dropped attribution for
+  // every Google and GitHub signup.
+  useEffect(() => {
+    persistReferralCode(new URLSearchParams(window.location.search).get("ref"))
+    setReferralCode(getReferralCode())
+  }, [])
 
   useEffect(() => {
     onBusyChange?.(busy)
@@ -187,12 +198,17 @@ export function AuthPanel({
     }
     setBusy(true)
     try {
-      await registerWithPassword({
+      const result = await registerWithPassword({
         name,
         email,
         password,
-        ref: getReferralCode(),
+        ref: referralCode ?? getReferralCode(),
       })
+      if (result?.referralCaptured && (result.referralBonus ?? 0) > 0) {
+        toast.success(
+          `You joined through ${result.referrerName ? `${result.referrerName}'s` : "a friend's"} referral link — ${result.referralBonus!.toLocaleString()} bonus credits added.`,
+        )
+      }
       onViewChange("verify")
       setBusy(false)
     } catch (err) {
@@ -251,14 +267,14 @@ export function AuthPanel({
           <div className="flex flex-col gap-2">
             <GoogleButton
               next={next}
-              referralCode={getReferralCode()}
+              referralCode={referralCode}
               disabled={submitting}
               onStart={() => setOauthProvider("google")}
               label={oauthProvider === "google" ? "Connecting to Google..." : "Continue with Google"}
             />
             <GitHubButton
               next={next}
-              referralCode={getReferralCode()}
+              referralCode={referralCode}
               disabled={submitting}
               onStart={() => setOauthProvider("github")}
               label={oauthProvider === "github" ? "Connecting to GitHub..." : "Continue with GitHub"}

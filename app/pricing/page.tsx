@@ -4,6 +4,7 @@ import { ArrowRight, BookOpen, Check, Store, Users, Building2, Globe, Link as Li
 import { buttonVariants } from "@/components/ui/button"
 import { SiteHeader } from "@/components/site-header"
 import { SiteFooter } from "@/components/site-footer"
+import { ReferralProgramSection } from "@/components/referral/referral-program-section"
 import { SITE_URL } from "@/lib/env"
 import { getCurrentUser } from "@/lib/auth/session"
 import {
@@ -617,6 +618,9 @@ export default async function PricingPage() {
           </div>
         </div>
       </section>
+
+      {/* Referral program */}
+      <ReferralProgramSection />
 
       {/* CTA */}
       <section className="mx-auto max-w-4xl px-6 py-16 text-center">

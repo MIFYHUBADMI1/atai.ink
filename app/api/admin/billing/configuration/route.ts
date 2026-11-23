@@ -75,6 +75,7 @@ export async function GET() {
         currency: DEFAULT_BILLING_CURRENCY,
         creditUnit: "Atai Credits",
         welcomeBonusCredits: rewards.welcomeBonus,
+        referralSignupBonus: rewards.referralSignupBonus,
         referralVerificationReward: rewards.referralVerificationReward,
         referralMilestoneReward: rewards.referralMilestoneReward,
         referralMilestoneThreshold: rewards.referralMilestoneThreshold,
@@ -259,6 +260,7 @@ const PatchSchema = z.object({
   rewards: z
     .object({
       welcomeBonus: z.number().int().min(0).max(1_000_000).optional(),
+      referralSignupBonus: z.number().int().min(0).max(1_000_000).optional(),
       referralVerificationReward: z.number().int().min(0).max(1_000_000).optional(),
       referralMilestoneReward: z.number().int().min(0).max(1_000_000).optional(),
       referralMilestoneThreshold: z.number().int().min(0).max(100_000_000).optional(),

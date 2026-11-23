@@ -25,6 +25,38 @@ import type { NextRequest } from "next/server"
 
 const SESSION_COOKIE = "Atai_session"
 
+const REFERRAL_COOKIE = "Atai_referral"
+/** Referral attribution outlives a single browsing session: a founder may
+ * click a link, read the site, then sign up days later. */
+const REFERRAL_COOKIE_MAX_AGE = 60 * 60 * 24 * 30
+
+/** The referral code carried by `?ref=`, normalized for storage. */
+export function referralCodeFrom(request: NextRequest): string | null {
+  const raw = request.nextUrl.searchParams.get("ref")?.trim().toUpperCase()
+  if (!raw) return null
+  return /^[A-Z0-9][A-Z0-9-]{2,39}$/.test(raw) ? raw : null
+}
+
+/**
+ * Keep the referral code across the whole signup journey — landing page,
+ * register form, OAuth redirect, and callback. sessionStorage alone lost it
+ * whenever the client rendered the OAuth button before reading `?ref=`, which
+ * is why Google and GitHub signups arrived unattributed. First touch wins so a
+ * later link cannot steal attribution from the one a founder actually used.
+ */
+function withReferral(request: NextRequest, response: NextResponse): NextResponse {
+  const code = referralCodeFrom(request)
+  if (!code || request.cookies.get(REFERRAL_COOKIE)?.value) return response
+  response.cookies.set(REFERRAL_COOKIE, code, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: request.nextUrl.protocol === "https:",
+    path: "/",
+    maxAge: REFERRAL_COOKIE_MAX_AGE,
+  })
+  return response
+}
+
 /**
  * Developer portal host rewrite — OPT-IN only. The portal's one public location
  * is /developers on the canonical app origin, so production needs no subdomain
@@ -82,12 +114,12 @@ export function proxy(request: NextRequest) {
   // host-relative — rewriting either would break the portal.
   if (isDeveloperHost(hostname) && !pathname.startsWith("/api/") && !pathname.startsWith("/_next/")) {
     const target = pathname === "/" ? "/developers" : `/developers${pathname}`
-    return NextResponse.rewrite(new URL(target, request.url))
+    return withReferral(request, NextResponse.rewrite(new URL(target, request.url)))
   }
 
   // Only gate /api/* routes — page routes handle their own redirects client-side.
   if (!pathname.startsWith("/api/")) {
-    return NextResponse.next()
+    return withReferral(request, NextResponse.next())
   }
 
   // Allow explicitly public API routes through without a session cookie.
@@ -103,20 +135,23 @@ export function proxy(request: NextRequest) {
     pathname === "/api/explore" || pathname.startsWith("/api/explore/") ||
     PUBLIC_API_PREFIXES.some((prefix) => pathname.startsWith(prefix))
   ) {
-    return NextResponse.next()
+    return withReferral(request, NextResponse.next())
   }
 
   // For all other /api/* routes: require the session cookie to be present.
   // If it's missing there's no point hitting the DB — return 401 immediately.
   const hasSession = request.cookies.has(SESSION_COOKIE)
   if (!hasSession) {
-    return NextResponse.json(
-      { ok: false, error: { code: "UNAUTHORIZED", message: "Please sign in to continue." } },
-      { status: 401 },
+    return withReferral(
+      request,
+      NextResponse.json(
+        { ok: false, error: { code: "UNAUTHORIZED", message: "Please sign in to continue." } },
+        { status: 401 },
+      ),
     )
   }
 
-  return NextResponse.next()
+  return withReferral(request, NextResponse.next())
 }
 
 export const config = {

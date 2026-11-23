@@ -10,6 +10,15 @@ import { captureReferral } from "@/lib/referrals/referrals"
 
 const STATE_COOKIE = "Atai_oauth_state"
 
+/** Tell the destination page that a referral bonus landed, so it can confirm
+ * the bonus to the person who just joined. */
+function withReferralWelcome(path: string, bonus: number): string {
+  if (bonus <= 0) return path
+  const [base, hash] = path.split("#")
+  const separator = base.includes("?") ? "&" : "?"
+  return `${base}${separator}welcome=referral&bonus=${bonus}${hash ? `#${hash}` : ""}`
+}
+
 /**
  * Google OAuth callback (spec section 3). Verifies the CSRF `state`,
  * exchanges the code for a verified ID token, then either:
@@ -98,12 +107,15 @@ export async function GET(req: Request) {
     }
 
     // Capture referral if this is a new user and a referral code was stored
+    let referralBonus = 0
     if (isNewUser) {
       const referralCookie = jar.get("Atai_referral")?.value
       if (referralCookie) {
-        await captureReferral(user.id, referralCookie).catch((e) => {
+        const captured = await captureReferral(user.id, referralCookie).catch((e) => {
           logger.error("api.auth.google.callback", "referral capture failed", { error: e instanceof Error ? e.message : String(e) })
+          return null
         })
+        referralBonus = captured?.signupBonus ?? 0
       }
       jar.delete("Atai_referral")
     }
@@ -113,7 +125,10 @@ export async function GET(req: Request) {
       return NextResponse.redirect(`${appUrl}/login?error=account_${reason}`)
     }
 
-    const next = nextFromState.startsWith("/") && !nextFromState.startsWith("//") ? nextFromState : "/workspace"
+    const next = withReferralWelcome(
+      nextFromState.startsWith("/") && !nextFromState.startsWith("//") ? nextFromState : "/workspace",
+      referralBonus,
+    )
 
     // Session cap: confirm via emailed code before evicting old sessions.
     // Without SMTP (local dev) we fall through to normal session creation.

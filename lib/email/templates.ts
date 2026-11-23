@@ -31,6 +31,36 @@ export function verificationEmail(name: string, verifyUrl: string) {
   }
 }
 
+export function referralWelcomeEmail(name: string, referrerName: string, bonusCredits: number) {
+  const bonus = bonusCredits.toLocaleString()
+  const bodyHtml = [
+    emailParagraph(`Hey ${emailStrong(name)},`),
+    emailParagraph(
+      `${emailStrong(referrerName)} invited you to Atai, and you joined through their referral link. We added ${emailStrong(`${bonus} bonus credits`)} to your account.`,
+    ),
+    emailParagraph(
+      "They are in your balance now. Use them to plan your business, build your first product, or start reaching customers.",
+    ),
+    emailButton("https://atai.ink/dashboard", "Open my dashboard"),
+    emailNote(
+      "Referral credits are promotional: they have no cash value and cannot be refunded or transferred.",
+    ),
+  ].join("")
+
+  return {
+    subject: `You received ${bonus} bonus credits from ${referrerName}'s invite`,
+    html: renderEmailShell({
+      title: "Your referral bonus is in",
+      preheader: `You joined Atai through ${referrerName} and received ${bonus} bonus credits.`,
+      eyebrow: "Referral",
+      heading: "Your referral bonus is in",
+      bodyHtml,
+      footerNote: "This is a transactional email about your Atai account.",
+    }),
+    text: `Hey ${name}, ${referrerName} invited you to Atai. We added ${bonus} bonus credits to your account.`,
+  }
+}
+
 export function passwordResetEmail(name: string, resetUrl: string) {
   const bodyHtml = [
     emailParagraph(`Hey ${emailStrong(name)},`),

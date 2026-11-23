@@ -5,15 +5,20 @@ import { cryptoId } from "@/lib/store/id"
 import { logger } from "@/lib/logging/logger"
 import { grantCredits } from "@/lib/billing/credit-service"
 import { getMongoClient } from "@/lib/db/mongodb"
+import { sendMail } from "@/lib/email/mailer"
+import { referralWelcomeEmail } from "@/lib/email/templates"
+import { isSmtpConfigured } from "@/lib/env"
 
 /**
  * Atai referral system.
  *
  * Business model:
+ *   - The person who joins through a referral link gets a one-time signup
+ *     bonus (+500 credits by default).
  *   - Referrer gets +500 credits when referred user verifies their account.
  *   - Referrer gets +1,500 credits when referred user reaches 75,000 eligible
  *     application-generation usage (successful builds only).
- *   - Max 2,000 credits per referred user.
+ *   - Max 2,000 credits per referred user for the referrer.
  */
 
 const REFERRAL_CODE_PREFIX = "ATAI"
@@ -23,6 +28,7 @@ const CUSTOM_REFERRAL_CODE_PATTERN = /^ATAI-[A-Z0-9](?:[A-Z0-9-]{1,28}[A-Z0-9])$
 /** Legacy fallback constants — live values come from admin-configurable
  * runtime settings (lib/billing/runtime-config.ts) at grant time. */
 const VERIFICATION_REWARD = 500
+const SIGNUP_BONUS = 500
 const MILESTONE_REWARD = 1500
 const MILESTONE_THRESHOLD = 75_000
 
@@ -33,6 +39,8 @@ async function getRuntimeRewards() {
     return await getRewardSettings()
   } catch {
     return {
+      welcomeBonus: 500,
+      referralSignupBonus: SIGNUP_BONUS,
       referralVerificationReward: VERIFICATION_REWARD,
       referralMilestoneReward: MILESTONE_REWARD,
       referralMilestoneThreshold: MILESTONE_THRESHOLD,
@@ -129,33 +137,47 @@ export async function resolveReferralCode(code: string): Promise<UserDoc | null>
 
 // ─── Referral Relationship ──────────────────────────────────────────────────
 
+export interface ReferralCaptureResult {
+  referral: ReferralDoc
+  /** Extra credits granted to the person who joined through the link. */
+  signupBonus: number
+  /** Display name of the referrer, for the welcome message. */
+  referrerName?: string
+}
+
 /**
  * Establish a referral relationship during registration.
  * - Validates the referral code exists and resolves to a different user.
  * - Prevents self-referral.
  * - Prevents overwriting an existing referral.
  * - Records the relationship in the referrals collection.
+ * - Grants the referred user their one-time signup bonus.
+ * - Settles the referrer's verification reward when the referred user is
+ *   already verified (Google/GitHub verify the email before we see them).
+ * - Emails the referred user to confirm the bonus.
  *
- * Returns the referral doc if created, null if no valid referral.
+ * Returns the capture outcome, or null if there was no valid referral.
  */
 export async function captureReferral(
   referredUserId: string,
   referralCode: string,
-): Promise<ReferralDoc | null> {
+): Promise<ReferralCaptureResult | null> {
   await ensureIndexes()
-  console.log("[referral] captureReferral: starting", { referredUserId, referralCode })
+
+  // Codes are stored uppercase; normalize here so every caller (cookie, OAuth
+  // query, form body) resolves the same referrer.
+  const code = referralCode.trim().toUpperCase()
 
   // Resolve the code
-  const referrer = await resolveReferralCode(referralCode)
-  console.log("[referral] captureReferral: resolveReferralCode result", { found: !!referrer, referrerId: referrer?.id })
+  const referrer = await resolveReferralCode(code)
   if (!referrer) {
-    console.warn("[referral] captureReferral: invalid referral code", { referredUserId, referralCode })
+    logger.warn("referral.capture", "invalid referral code", { referredUserId })
     return null
   }
 
   // Self-referral protection
   if (referrer.id === referredUserId) {
-    logger.warn("referral.capture", "self-referral attempt blocked", { referredUserId, referralCode })
+    logger.warn("referral.capture", "self-referral attempt blocked", { referredUserId })
     return null
   }
 
@@ -182,7 +204,7 @@ export async function captureReferral(
     id: cryptoId(),
     referrerUserId: referrer.id,
     referredUserId,
-    referralCode,
+    referralCode: code,
     status: "registered",
     verificationRewardIssued: false,
     milestoneRewardIssued: false,
@@ -191,13 +213,20 @@ export async function captureReferral(
     updatedAt: now,
   }
 
-  await referrals.insertOne(doc)
-  console.log("[referral] captureReferral: referral inserted", { referralId: doc.id, referrerUserId: referrer.id, referredUserId })
+  try {
+    await referrals.insertOne(doc)
+  } catch (e) {
+    // The unique index on referredUserId settles two simultaneous signups.
+    if ((e as { code?: number }).code === 11000) {
+      logger.info("referral.capture", "concurrent capture already recorded", { referredUserId })
+      return null
+    }
+    throw e
+  }
 
   // Also set referredBy on the user document
   const col = await usersCol()
   await col.updateOne({ id: referredUserId }, { $set: { referredBy: referrer.id, updatedAt: now } })
-  console.log("[referral] captureReferral: user referredBy set", { referredUserId, referredBy: referrer.id })
 
   logger.info("referral.capture", "referral created", {
     referralId: doc.id,
@@ -205,7 +234,60 @@ export async function captureReferral(
     referredUserId,
   })
 
-  return doc
+  const rewards = await getRuntimeRewards()
+  const signupBonus = rewards.referralSignupBonus
+
+  if (signupBonus > 0) {
+    try {
+      const grant = await grantCredits({
+        userId: referredUserId,
+        creditType: "permanent",
+        amount: signupBonus,
+        transactionType: "referral_bonus",
+        idempotencyKey: `referral_signup_${doc.id}`,
+        referenceType: "referral",
+        referenceId: doc.id,
+        metadata: {
+          reason: "Referral signup bonus",
+          referrerUserId: referrer.id,
+        },
+      })
+      if (!grant.success) throw new Error("Referral signup bonus was not committed")
+    } catch (e) {
+      // The relationship is already durable. Never fail a signup because the
+      // bonus grant hiccuped; log it so support can re-grant the credits.
+      logger.error("referral.capture", "signup bonus failed", {
+        referralId: doc.id,
+        referredUserId,
+        error: e instanceof Error ? e.message : String(e),
+      })
+    }
+  }
+
+  const referredUser = await col.findOne({ id: referredUserId })
+
+  // OAuth signups arrive pre-verified, so the verify-email route never runs for
+  // them. Settle the referrer's reward here instead of leaving it pending.
+  if (referredUser?.emailVerified) {
+    await processVerificationReward(referredUserId).catch((e) => {
+      logger.error("referral.capture", "verification reward failed", {
+        referralId: doc.id,
+        error: e instanceof Error ? e.message : String(e),
+      })
+    })
+  }
+
+  if (signupBonus > 0 && referredUser?.email && isSmtpConfigured()) {
+    const { subject, html, text } = referralWelcomeEmail(referredUser.name, referrer.name, signupBonus)
+    await sendMail({ to: referredUser.email, subject, html, text }).catch((e) => {
+      logger.warn("referral.capture", "welcome email failed", {
+        referralId: doc.id,
+        error: e instanceof Error ? e.message : String(e),
+      })
+    })
+  }
+
+  return { referral: doc, signupBonus, referrerName: referrer.name }
 }
 
 // ─── Verification Reward ────────────────────────────────────────────────────
