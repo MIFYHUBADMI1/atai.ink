@@ -184,7 +184,9 @@ export async function migrateConnectedBusinesses(options: MigrationOptions): Pro
           if (application) {
             await (await connectedApplicationsCol()).insertOne(application, { session })
           }
-          const set: Record<string, unknown> = { businessId: business.id }
+          // The stamp is what makes rollback precise: a claim the founder
+          // connects after this run carries no stamp and is never detached.
+          const set: Record<string, unknown> = { businessId: business.id, migration: stamp }
           if (application) set.applicationId = application.id
           await (await businessDomainsCol()).updateMany({ projectId: project.id }, { $set: set }, { session })
         })

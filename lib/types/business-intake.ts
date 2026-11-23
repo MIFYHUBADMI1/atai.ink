@@ -1,3 +1,4 @@
+import type { MigrationStamp } from "./business"
 import type { MirrorProject } from "./project"
 
 /**
@@ -290,6 +291,12 @@ export interface BusinessDomainDoc {
   businessId?: string
   /** The connected application this hostname was proven for, when known. */
   applicationId?: string
+  /**
+   * Set when a migration run linked this claim to a business. Rollback only
+   * detaches claims that carry the run's stamp, so a domain the founder
+   * connected afterwards is never touched.
+   */
+  migration?: MigrationStamp
   /** Exact hostname being verified — the verification target, lowercased, no port. */
   hostname: string
   /** The business identity used for uniqueness only: the exact hostname with a
