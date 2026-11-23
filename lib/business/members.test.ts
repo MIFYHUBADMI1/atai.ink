@@ -23,7 +23,7 @@ vi.mock("@/lib/db/collections", async () => {
     unique: [
       {
         keys: ["businessId", "hostname", "basePath"],
-        when: (doc: { archivedAt?: number }) => doc.archivedAt === undefined,
+        when: (doc: { archivedAt?: number | null }) => doc.archivedAt == null,
       },
     ],
   })

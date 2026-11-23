@@ -1059,8 +1059,8 @@ async function runEnsureIndexes(): Promise<void> {
   // business_domains; these indexes enforce the model's own invariants. A
   // failure here is logged and retried on a later call, but it does prevent
   // __mirrorIndexesReady from being set for that attempt.
-  const [businesses, applications, members, domains] = await Promise.all([
-    businessesCol(), connectedApplicationsCol(), businessMembersCol(), businessDomainsCol(),
+  const [businesses, applications, members, domains, rollout] = await Promise.all([
+    businessesCol(), connectedApplicationsCol(), businessMembersCol(), businessDomainsCol(), businessRolloutCol(),
   ])
   await batchedIndexCreation([
     businesses.createIndex(
@@ -1102,5 +1102,8 @@ async function runEnsureIndexes(): Promise<void> {
     ),
     members.createIndex({ userId: 1, status: 1 }),
     domains.createIndex({ businessId: 1, createdAt: -1 }),
+    // One settings document. Without this, two admins saving at the same moment
+    // can both upsert and leave two documents disagreeing about who is allowed in.
+    rollout.createIndex({ id: 1 }, { unique: true, name: "business_rollout_singleton" }),
   ])
 }

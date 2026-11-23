@@ -21,16 +21,22 @@ export default async function BusinessWorkspacePage({ params }: { params: Promis
   const actor = userActor(user.id)
 
   try {
-    const [business, applications, members] = await Promise.all([
+    const [business, applications, archivedApplications, members] = await Promise.all([
       getBusiness({ businessId, actor }),
       listApplications({ businessId, actor }),
+      listApplications({ businessId, actor, includeArchived: true }),
       listMembers({ businessId, actor }),
     ])
 
     return (
       <DashboardShell title={business.name}>
         <div className="mx-auto w-full max-w-6xl px-4 pb-16 pt-6 sm:py-8 lg:px-8">
-          <BusinessWorkspace business={business} applications={applications} members={members} />
+          <BusinessWorkspace
+            business={business}
+            applications={applications}
+            archivedApplications={archivedApplications.filter((application) => application.archivedAt !== null)}
+            members={members}
+          />
         </div>
       </DashboardShell>
     )

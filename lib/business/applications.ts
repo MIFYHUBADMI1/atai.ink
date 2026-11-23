@@ -133,6 +133,44 @@ export async function archiveApplication(input: {
   return updated
 }
 
+/**
+ * Undo an archive. Archive is a soft delete, so the row is still there — but
+ * the origin unique index is partial on `archivedAt: null`, which means the
+ * address could have been claimed by another application in the meantime.
+ * Restoring into that state is a conflict, not a silent duplicate.
+ */
+export async function restoreApplication(input: {
+  businessId: string
+  applicationId: string
+  actor: Actor
+  now?: number
+}): Promise<ConnectedApplicationDoc> {
+  await requireBusinessAccess({
+    businessId: input.businessId,
+    actor: input.actor,
+    permission: "apps.manage",
+    applicationId: input.applicationId,
+    allowArchivedApplication: true,
+  })
+
+  const col = await connectedApplicationsCol()
+  const now = input.now ?? Date.now()
+  try {
+    const result = await col.updateOne(
+      { id: input.applicationId, businessId: input.businessId, archivedAt: { $ne: null } },
+      { $set: { archivedAt: null, updatedAt: now } },
+    )
+    if (result.matchedCount === 0) throw new AppError("NOT_FOUND")
+  } catch (error) {
+    if (isDuplicateKey(error)) throw duplicateOrigin()
+    throw error
+  }
+
+  const restored = await col.findOne({ id: input.applicationId, businessId: input.businessId })
+  if (!restored) throw new AppError("NOT_FOUND")
+  return restored
+}
+
 export async function getApplication(input: {
   businessId: string
   applicationId: string

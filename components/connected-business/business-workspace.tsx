@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Globe, Plus, Trash2, Users } from "lucide-react"
+import { Globe, Plus, RotateCcw, Trash2, Users } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -38,15 +38,18 @@ const SELECT_CLASS =
 export function BusinessWorkspace({
   business,
   applications: initialApplications,
+  archivedApplications: initialArchived,
   members: initialMembers,
 }: {
   business: BusinessDoc
   applications: ConnectedApplicationDoc[]
+  archivedApplications: ConnectedApplicationDoc[]
   members: BusinessMemberDoc[]
 }) {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>("Overview")
   const [applications, setApplications] = useState(initialApplications)
+  const [archived, setArchived] = useState(initialArchived)
   const [members, setMembers] = useState(initialMembers)
   const [name, setName] = useState(business.name)
   const [, startTransition] = useTransition()
@@ -90,12 +93,19 @@ export function BusinessWorkspace({
         <Applications
           businessId={business.id}
           applications={applications}
+          archived={archived}
           onCreated={(application) => {
             setApplications((current) => [...current, application])
             refresh()
           }}
-          onArchived={(applicationId) => {
-            setApplications((current) => current.filter((application) => application.id !== applicationId))
+          onArchived={(application) => {
+            setApplications((current) => current.filter((item) => item.id !== application.id))
+            setArchived((current) => [...current, application])
+            refresh()
+          }}
+          onRestored={(application) => {
+            setArchived((current) => current.filter((item) => item.id !== application.id))
+            setApplications((current) => [...current, application])
             refresh()
           }}
         />
@@ -197,13 +207,17 @@ function Row({ label, value }: { label: string; value: string }) {
 function Applications({
   businessId,
   applications,
+  archived,
   onCreated,
   onArchived,
+  onRestored,
 }: {
   businessId: string
   applications: ConnectedApplicationDoc[]
+  archived: ConnectedApplicationDoc[]
   onCreated: (application: ConnectedApplicationDoc) => void
-  onArchived: (applicationId: string) => void
+  onArchived: (application: ConnectedApplicationDoc) => void
+  onRestored: (application: ConnectedApplicationDoc) => void
 }) {
   const [name, setName] = useState("")
   const [kind, setKind] = useState<string>("marketing_site")
@@ -211,6 +225,7 @@ function Applications({
   const [basePath, setBasePath] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [confirming, setConfirming] = useState<string | null>(null)
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
@@ -232,10 +247,25 @@ function Applications({
     setBasePath("")
   }
 
-  async function archive(applicationId: string) {
-    const result = await sendJson(`/api/businesses/${businessId}/applications/${applicationId}`, "DELETE")
-    if (!result.ok) setError(result.message ?? "Could not archive the application.")
-    else onArchived(applicationId)
+  async function archive(application: ConnectedApplicationDoc) {
+    setConfirming(null)
+    setError(null)
+    const result = await sendJson<{ application: ConnectedApplicationDoc }>(
+      `/api/businesses/${businessId}/applications/${application.id}`,
+      "DELETE",
+    )
+    if (!result.ok || !result.data) setError(result.message ?? "Could not archive the application.")
+    else onArchived(result.data.application)
+  }
+
+  async function restore(application: ConnectedApplicationDoc) {
+    setError(null)
+    const result = await sendJson<{ application: ConnectedApplicationDoc }>(
+      `/api/businesses/${businessId}/applications/${application.id}/restore`,
+      "POST",
+    )
+    if (!result.ok || !result.data) setError(result.message ?? "Could not restore the application.")
+    else onRestored(result.data.application)
   }
 
   return (
@@ -257,14 +287,25 @@ function Applications({
                     <Badge variant={application.hostVerified ? "default" : "outline"}>
                       {application.hostVerified ? "verified" : "unverified"}
                     </Badge>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Archive application"
-                      onClick={() => archive(application.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    {confirming === application.id ? (
+                      <>
+                        <Button variant="destructive" size="sm" onClick={() => archive(application)}>
+                          Archive
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => setConfirming(null)}>
+                          Cancel
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Archive ${application.name}`}
+                        onClick={() => setConfirming(application.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -272,6 +313,36 @@ function Applications({
           ))}
         </ul>
       )}
+
+      {archived.length > 0 ? (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium">Archived</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Archived applications keep their record and their history. Restore one to use it again.
+            </p>
+            <ul className="space-y-2">
+              {archived.map((application) => (
+                <li
+                  key={application.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed p-3"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{application.name}</p>
+                    <p className="truncate text-xs text-muted-foreground">{application.primaryUrl}</p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => restore(application)}>
+                    <RotateCcw className="mr-2 h-3.5 w-3.5" />
+                    Restore
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader className="pb-3">

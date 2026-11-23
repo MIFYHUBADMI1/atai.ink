@@ -16,7 +16,7 @@ vi.mock("@/lib/db/collections", async () => {
     unique: [
       {
         keys: ["businessId", "hostname", "basePath"],
-        when: (doc: { archivedAt?: number }) => doc.archivedAt === undefined,
+        when: (doc: { archivedAt?: number | null }) => doc.archivedAt == null,
       },
     ],
   })
@@ -32,7 +32,7 @@ vi.mock("@/lib/db/collections", async () => {
 import type { BusinessDoc, BusinessMemberDoc, ConnectedApplicationDoc } from "@/lib/types/business"
 import type { FakeCollection } from "./testing/fake-collections"
 import * as db from "@/lib/db/collections"
-import { applicationAddress, archiveApplication, createApplication, listApplications } from "./applications"
+import { applicationAddress, archiveApplication, createApplication, listApplications, restoreApplication } from "./applications"
 import { userActor } from "./permissions"
 
 interface Fakes {
@@ -174,6 +174,47 @@ describe("connected applications", () => {
     const replacement = await createApplication({ businessId: "biz_1", actor: OWNER, name: "B", kind: "other", url: "example.com", now: NOW + 2 })
     expect(replacement.id).not.toBe(first.id)
     expect(fakes.applications.docs).toHaveLength(2)
+  })
+
+  it("restores an archived application", async () => {
+    const shop = await createApplication({ businessId: "biz_1", actor: OWNER, name: "Shop", kind: "storefront", url: "example.com/shop", now: NOW })
+    await archiveApplication({ businessId: "biz_1", applicationId: shop.id, actor: OWNER, now: NOW + 1 })
+
+    const restored = await restoreApplication({ businessId: "biz_1", applicationId: shop.id, actor: OWNER, now: NOW + 2 })
+
+    expect(restored.archivedAt).toBeNull()
+    expect(restored.updatedAt).toBe(NOW + 2)
+    expect((await listApplications({ businessId: "biz_1", actor: OWNER })).map((app) => app.id)).toEqual([shop.id])
+  })
+
+  it("refuses to restore an application that was never archived", async () => {
+    const shop = await createApplication({ businessId: "biz_1", actor: OWNER, name: "Shop", kind: "storefront", url: "example.com/shop", now: NOW })
+
+    await expect(
+      restoreApplication({ businessId: "biz_1", applicationId: shop.id, actor: OWNER, now: NOW + 1 }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" })
+  })
+
+  it("refuses to restore when the address was taken while archived", async () => {
+    const first = await createApplication({ businessId: "biz_1", actor: OWNER, name: "A", kind: "other", url: "example.com", now: NOW })
+    await archiveApplication({ businessId: "biz_1", applicationId: first.id, actor: OWNER, now: NOW + 1 })
+    await createApplication({ businessId: "biz_1", actor: OWNER, name: "B", kind: "other", url: "example.com", now: NOW + 2 })
+
+    await expect(
+      restoreApplication({ businessId: "biz_1", applicationId: first.id, actor: OWNER, now: NOW + 3 }),
+    ).rejects.toMatchObject({ code: "APPLICATION_ALREADY_EXISTS" })
+    expect(fakes.applications.docs.find((doc) => doc.id === first.id)?.archivedAt).toBe(NOW + 1)
+  })
+
+  it("refuses to restore an application of another business", async () => {
+    const app = await createApplication({ businessId: "biz_1", actor: OWNER, name: "A", kind: "other", url: "example.com", now: NOW })
+    await archiveApplication({ businessId: "biz_1", applicationId: app.id, actor: OWNER, now: NOW + 1 })
+    seedBusiness({ id: "biz_2", ownerId: "u_owner" })
+    seedMember({ id: "mem_owner_biz2", businessId: "biz_2" })
+
+    await expect(
+      restoreApplication({ businessId: "biz_2", applicationId: app.id, actor: OWNER, now: NOW + 2 }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" })
   })
 
   it("refuses to archive an application of another business", async () => {

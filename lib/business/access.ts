@@ -38,6 +38,12 @@ export interface RequireBusinessAccessInput {
    * that must be able to run against it.
    */
   allowArchived?: boolean
+  /**
+   * Set only by application restore. Every other operation treats an archived
+   * application as missing, so a restore would be refused by the very check
+   * that hides it. The member's scope is still enforced.
+   */
+  allowArchivedApplication?: boolean
 }
 
 export async function requireBusinessAccess(input: RequireBusinessAccessInput): Promise<BusinessAccess> {
@@ -73,7 +79,9 @@ export async function requireBusinessAccess(input: RequireBusinessAccessInput): 
   if (!permissions.has(input.permission)) throw new AppError("BUSINESS_FORBIDDEN")
 
   if (input.applicationId) {
-    const application = await assertApplicationInBusiness(business.id, input.applicationId)
+    const application = await assertApplicationInBusiness(business.id, input.applicationId, {
+      includeArchived: input.allowArchivedApplication === true,
+    })
     if (member.scope.kind === "applications" && !member.scope.applicationIds.includes(application.id)) {
       throw new AppError("BUSINESS_FORBIDDEN", "Your access is limited to specific applications.")
     }
@@ -82,11 +90,15 @@ export async function requireBusinessAccess(input: RequireBusinessAccessInput): 
   return { business, member, role: member.role, permissions }
 }
 
-async function assertApplicationInBusiness(businessId: string, applicationId: string) {
+async function assertApplicationInBusiness(
+  businessId: string,
+  applicationId: string,
+  options: { includeArchived?: boolean } = {},
+) {
   const application = await (await connectedApplicationsCol()).findOne({
     id: applicationId,
     businessId,
-    archivedAt: null,
+    ...(options.includeArchived ? {} : { archivedAt: null }),
   })
   // Another business's application and an archived one are both "not found":
   // the caller has no business knowing which.

@@ -40,6 +40,10 @@ export interface BusinessRollout {
   updatedBy?: string
 }
 
+function isDuplicateKey(error: unknown): boolean {
+  return typeof error === "object" && error !== null && (error as { code?: number }).code === 11000
+}
+
 export function parseBusinessWorkspaceMode(raw: string | null | undefined): BusinessWorkspaceMode {
   const value = (raw ?? "").trim().toLowerCase()
   return value === "internal" || value === "all" ? value : "off"
@@ -146,11 +150,15 @@ export async function updateBusinessRollout(
   if (input.mode === undefined) onInsert.mode = current.mode
   if (input.cohort === undefined) onInsert.cohort = [...current.cohort]
 
-  await (await businessRolloutCol()).updateOne(
-    { id: BUSINESS_ROLLOUT_ID },
-    { $set: patch, $setOnInsert: onInsert },
-    { upsert: true },
-  )
+  const col = await businessRolloutCol()
+  try {
+    await col.updateOne({ id: BUSINESS_ROLLOUT_ID }, { $set: patch, $setOnInsert: onInsert }, { upsert: true })
+  } catch (error) {
+    // Two admins saving at once can both take the insert path; the singleton
+    // index settles it, and the loser only has to apply its fields as an update.
+    if (!isDuplicateKey(error)) throw error
+    await col.updateOne({ id: BUSINESS_ROLLOUT_ID }, { $set: patch })
+  }
   cache = null
   return getBusinessRollout()
 }

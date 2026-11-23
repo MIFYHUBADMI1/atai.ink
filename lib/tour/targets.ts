@@ -31,6 +31,7 @@ export const TOUR_TARGETS = {
   // ── Workspace shell ───────────────────────────────────────────────────────
   "nav-dashboard": { label: "Dashboard", shell: "workspace", risk: "none" },
   "nav-businesses": { label: "Your businesses", shell: "workspace", risk: "none" },
+  "nav-connected-business": { label: "Connected business", shell: "workspace", risk: "none" },
   "nav-finances": { label: "All business finances", shell: "workspace", risk: "none" },
   "nav-notifications": { label: "Notifications", shell: "workspace", risk: "none" },
   "nav-contributions": { label: "Contributions", shell: "workspace", risk: "none" },

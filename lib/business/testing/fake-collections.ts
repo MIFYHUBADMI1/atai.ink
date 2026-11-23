@@ -77,7 +77,12 @@ function matches(doc: object, filter: Filter): boolean {
       const operator = expected as Record<string, unknown>
       if ("$in" in operator) return (operator.$in as unknown[]).includes(actual)
       if ("$exists" in operator) return operator.$exists ? actual !== undefined : actual === undefined
-      if ("$ne" in operator) return actual !== operator.$ne
+      if ("$ne" in operator) {
+        // `{field: {$ne: null}}` means "exists and is not null": a missing field
+        // satisfies `field: null`, so it must not satisfy the negation.
+        if (operator.$ne === null) return actual !== null && actual !== undefined
+        return actual !== operator.$ne
+      }
     }
     return actual === expected
   })
@@ -88,14 +93,16 @@ export function fakeCollection<T extends object>(
 ): FakeCollection<T> {
   const docs: T[] = []
 
-  function violatesUnique(candidate: T): boolean {
+  function violatesUnique(candidate: T, ignore?: T): boolean {
     return (config.unique ?? []).some((rule) => {
       const keys = Array.isArray(rule) ? rule : rule.keys
       const when = Array.isArray(rule) ? undefined : rule.when
       if (when && !when(candidate)) return false
       return docs.some(
         (existing) =>
-          (!when || when(existing)) && keys.every((key) => field(existing, key) === field(candidate, key)),
+          existing !== ignore &&
+          (!when || when(existing)) &&
+          keys.every((key) => field(existing, key) === field(candidate, key)),
       )
     })
   }
@@ -135,6 +142,15 @@ export function fakeCollection<T extends object>(
           docs.push({ ...equality, ...(update.$setOnInsert ?? {}), ...(update.$set ?? {}) } as T)
         }
         return { matchedCount: 0, modifiedCount: 0 }
+      }
+      // An update can violate a partial unique index too (restoring an
+      // application whose address was claimed while it was archived), so the
+      // post-update row is validated before anything is written.
+      const next = { ...doc } as Record<string, unknown>
+      if (update.$set) Object.assign(next, update.$set)
+      for (const key of Object.keys(update.$unset ?? {})) delete next[key]
+      if (violatesUnique(next as T, doc)) {
+        throw Object.assign(new Error("E11000 duplicate key error"), { code: 11000 })
       }
       if (update.$set) Object.assign(doc, update.$set)
       for (const key of Object.keys(update.$unset ?? {})) {

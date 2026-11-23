@@ -18,13 +18,19 @@ export function BusinessIndex({ initialBusinesses }: { initialBusinesses: Busine
   const [businesses, setBusinesses] = useState(initialBusinesses)
   const [name, setName] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
   const [pending, startTransition] = useTransition()
 
   async function create(event: React.FormEvent) {
     event.preventDefault()
+    // Two clicks before the first response would create two businesses: the
+    // request is not idempotent and the button has nothing else to slow it down.
+    if (busy) return
     setError(null)
+    setBusy(true)
     const result = await sendJson<{ business: BusinessDoc }>("/api/businesses", "POST", { name })
     if (!result.ok || !result.data) {
+      setBusy(false)
       setError(result.message ?? "Could not create the business.")
       return
     }
@@ -57,7 +63,7 @@ export function BusinessIndex({ initialBusinesses }: { initialBusinesses: Busine
                 required
               />
             </div>
-            <Button type="submit" disabled={pending || name.trim().length === 0}>
+            <Button type="submit" disabled={busy || pending || name.trim().length === 0}>
               <Plus className="mr-2 h-4 w-4" />
               Create business
             </Button>

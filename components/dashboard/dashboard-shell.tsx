@@ -3,6 +3,7 @@
 import { useEffect, useId, useMemo, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import useSWR from "swr"
 import {
   Bell,
   BookOpen,
@@ -17,6 +18,7 @@ import {
   Lock,
   Menu,
   MessageSquare,
+  Network,
   PanelLeft,
   PanelLeftClose,
   Plus,
@@ -35,7 +37,7 @@ import { DashboardNotifications } from "@/components/dashboard/dashboard-notific
 import { CofounderPanel, useCofounderPanel } from "@/components/cofounder/cofounder-panel"
 import { PageTourLauncher } from "@/components/tour/page-tour-launcher"
 import { workspaceGrowNav, workspaceIntelligenceNav, workspaceProjectNav, type AtaiNavItem } from "@/components/workspace/atai-nav"
-import { useProjects } from "@/lib/client/api"
+import { jsonFetcher, useProjects } from "@/lib/client/api"
 import { AuthGate } from "@/components/auth/auth-gate"
 import { interpretProjectState, selectActiveProject } from "@/lib/dashboard/view-model"
 import { projectIsBuilt } from "@/lib/dashboard/built-states"
@@ -52,6 +54,27 @@ const NAV = [
   { href: "/new", label: "New business", icon: Sparkles, tour: "nav-new" },
   { href: "/tours", label: "Guided tours", icon: BookOpen, tour: "nav-tours" },
 ] as const
+
+/**
+ * Shown only when the rollout is open for this account. The link is fetched
+ * rather than guessed: a sidebar entry pointing at a 404 is worse than none.
+ */
+const CONNECTED_BUSINESS_NAV = {
+  href: "/business",
+  label: "Connected business",
+  icon: Network,
+  tour: "nav-connected-business",
+} as const
+
+export type ShellNavItem = (typeof NAV)[number] | typeof CONNECTED_BUSINESS_NAV
+
+/** The main navigation, with the connected-business entry slotted after
+ *  "Businesses" once the rollout is open for this account. */
+export function shellNavigation(enabled: boolean): ShellNavItem[] {
+  if (!enabled) return [...NAV]
+  const after = NAV.findIndex((item) => item.href === "/projects")
+  return [...NAV.slice(0, after + 1), CONNECTED_BUSINESS_NAV, ...NAV.slice(after + 1)]
+}
 
 const DISCOVER_NAV = [
   { href: "/explore", label: "Explore", icon: Compass, tour: "nav-explore" },
@@ -77,6 +100,12 @@ export function DashboardShell({
   const workspaceProject = resolvedProjectId ? projects.find((p) => p.id === resolvedProjectId) ?? null : null
   const active = workspaceProject ?? selectActiveProject(projects)
   const askHref = active ? `/project/${active.id}/collaborate` : "/new"
+  const { data: businessAccess } = useSWR<{ enabled: boolean }>("/api/business/access", jsonFetcher, {
+    revalidateOnFocus: false,
+    shouldRetryOnError: false,
+    dedupingInterval: 60_000,
+  })
+  const nav = useMemo(() => shellNavigation(businessAccess?.enabled === true), [businessAccess])
   const hasBuilt = projects.some((p) => projectIsBuilt(p.state))
   // A connected business is a real business even though Atai did not build it.
   const hasRealBusiness = projects.some((p) => projectIsBuilt(p.state) || isConnectedBusiness(p))
@@ -130,6 +159,7 @@ export function DashboardShell({
             workspaceName={title}
             hasBuilt={hasBuilt}
             hasRealBusiness={hasRealBusiness}
+            nav={nav}
           />
           <div className={cn("flex items-center gap-1 border-t border-border p-2", collapsed && "flex-col")}>
             <button
@@ -183,7 +213,7 @@ export function DashboardShell({
                   <X className="size-4" />
                 </button>
               </div>
-              <SidebarBody collapsed={false} pathname={pathname} recent={recent} projectCount={projects.length} active={active} askHref={askHref} projectId={resolvedProjectId} workspaceName={title} hasBuilt={hasBuilt} hasRealBusiness={hasRealBusiness} />
+              <SidebarBody collapsed={false} pathname={pathname} recent={recent} projectCount={projects.length} active={active} askHref={askHref} projectId={resolvedProjectId} workspaceName={title} hasBuilt={hasBuilt} hasRealBusiness={hasRealBusiness} nav={nav} />
             </aside>
           </div>
         ) : null}
@@ -314,6 +344,7 @@ function SidebarBody({
   workspaceName,
   hasBuilt,
   hasRealBusiness,
+  nav,
 }: {
   collapsed: boolean
   pathname: string
@@ -325,6 +356,7 @@ function SidebarBody({
   workspaceName?: string
   hasBuilt: boolean
   hasRealBusiness: boolean
+  nav: readonly ShellNavItem[]
 }) {
   if (projectId) {
     const tools = workspaceProjectNav(projectId)
@@ -429,7 +461,7 @@ function SidebarBody({
       ) : null}
 
       <nav className="flex flex-col gap-1" aria-label="Primary">
-        {NAV.map((item) => (
+        {nav.map((item) => (
           <SidebarLink key={item.href} item={item} pathname={pathname} collapsed={collapsed} locked={{ built: !hasBuilt, business: !hasRealBusiness }} />
         ))}
       </nav>
