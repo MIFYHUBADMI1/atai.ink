@@ -39,7 +39,14 @@ import type { FakeCollection } from "./testing/fake-collections"
 import * as db from "@/lib/db/collections"
 import { addMember, removeMember } from "./members"
 import { systemActor, userActor } from "./permissions"
-import { archiveBusiness, createBusiness, getBusiness, listBusinessesForUser, renameBusiness } from "./service"
+import {
+  archiveBusiness,
+  createBusiness,
+  getBusiness,
+  listBusinessesForUser,
+  renameBusiness,
+  restoreBusiness,
+} from "./service"
 
 interface Fakes {
   businesses: FakeCollection<BusinessDoc>
@@ -221,5 +228,58 @@ describe("migration stamping", () => {
     })
     expect(fakes.businesses.docs).toHaveLength(1)
     expect(fakes.members.docs.filter((member) => member.businessId === business.id)).toHaveLength(1)
+  })
+})
+
+describe("business restoration", () => {
+  async function archivedBusiness(now = 100) {
+    const business = await createBusiness({ actor: userActor("u1"), name: "Acme", now })
+    await archiveBusiness({ businessId: business.id, actor: userActor("u1"), now: now + 50 })
+    return business
+  }
+
+  it("restores the status the business held before archiving", async () => {
+    const business = await archivedBusiness()
+
+    const restored = await restoreBusiness({ businessId: business.id, actor: userActor("u1"), now: 500 })
+
+    expect(restored.status).toBe("draft")
+    expect(restored.restoredBy).toBe("u1")
+    expect(restored.restoredAt).toBe(500)
+    expect(restored.archivedAt).toBe(150)
+  })
+
+  it("keeps memberships and applications intact", async () => {
+    const business = await archivedBusiness()
+
+    await restoreBusiness({ businessId: business.id, actor: userActor("u1"), now: 500 })
+
+    expect(fakes.members.docs).toHaveLength(1)
+    expect(fakes.members.docs[0]).toMatchObject({ businessId: business.id, role: "owner", status: "active" })
+  })
+
+  it("refuses a business that is not archived", async () => {
+    const business = await createBusiness({ actor: userActor("u1"), name: "Acme", now: 100 })
+
+    await expect(restoreBusiness({ businessId: business.id, actor: userActor("u1"), now: 500 })).rejects.toMatchObject({
+      code: "VALIDATION",
+    })
+  })
+
+  it("refuses a non-member", async () => {
+    const business = await archivedBusiness()
+
+    await expect(restoreBusiness({ businessId: business.id, actor: userActor("u2"), now: 500 })).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    })
+    expect(fakes.businesses.docs[0].status).toBe("archived")
+  })
+
+  it("leaves every other write blocked while archived", async () => {
+    const business = await archivedBusiness()
+
+    await expect(
+      renameBusiness({ businessId: business.id, name: "New", actor: userActor("u1"), now: 500 }),
+    ).rejects.toMatchObject({ code: "BUSINESS_FORBIDDEN" })
   })
 })

@@ -68,6 +68,10 @@ export interface BusinessDoc {
   createdAt: number
   updatedAt: number
   archivedAt?: number
+  /** The status the business held before it was archived, so restore is exact. */
+  archivedFrom?: BusinessStatus
+  restoredBy?: string
+  restoredAt?: number
 }
 
 export interface ConnectedApplicationDoc {

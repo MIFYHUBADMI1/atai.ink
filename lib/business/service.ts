@@ -130,7 +130,7 @@ export async function archiveBusiness(input: {
   actor: Actor
   now?: number
 }): Promise<BusinessDoc> {
-  await requireBusinessAccess({
+  const access = await requireBusinessAccess({
     businessId: input.businessId,
     actor: input.actor,
     permission: "business.manage",
@@ -140,7 +140,51 @@ export async function archiveBusiness(input: {
   const col = await businessesCol()
   const result = await col.updateOne(
     { id: input.businessId },
-    { $set: { status: "archived", archivedAt: now, updatedAt: now } },
+    { $set: { status: "archived", archivedAt: now, archivedFrom: access.business.status, updatedAt: now } },
+  )
+  if (result.matchedCount === 0) throw new AppError("BUSINESS_NOT_FOUND")
+  const updated = await col.findOne({ id: input.businessId })
+  if (!updated) throw new AppError("BUSINESS_NOT_FOUND")
+  return updated
+}
+
+/**
+ * Undo an archive. Restoration is its own operation because the gate blocks
+ * every other write on an archived business: without this, archiving would be
+ * a one-way door.
+ *
+ * It restores the status the business held before archiving and records who
+ * did it. It never touches a suspended business, and it leaves memberships,
+ * applications, claims and history exactly as they were.
+ */
+export async function restoreBusiness(input: {
+  businessId: string
+  actor: Actor
+  now?: number
+}): Promise<BusinessDoc> {
+  const access = await requireBusinessAccess({
+    businessId: input.businessId,
+    actor: input.actor,
+    permission: "business.manage",
+    allowArchived: true,
+  })
+
+  if (access.business.status !== "archived") {
+    throw new AppError("VALIDATION", "This business isn't archived.")
+  }
+
+  const now = input.now ?? Date.now()
+  const col = await businessesCol()
+  const result = await col.updateOne(
+    { id: input.businessId, status: "archived" },
+    {
+      $set: {
+        status: access.business.archivedFrom ?? "active",
+        restoredBy: input.actor.id,
+        restoredAt: now,
+        updatedAt: now,
+      },
+    },
   )
   if (result.matchedCount === 0) throw new AppError("BUSINESS_NOT_FOUND")
   const updated = await col.findOne({ id: input.businessId })

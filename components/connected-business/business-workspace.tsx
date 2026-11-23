@@ -126,6 +126,7 @@ export function BusinessWorkspace({
           onNameChange={setName}
           onRenamed={() => refresh()}
           onArchived={() => router.push("/business")}
+          onRestored={() => router.refresh()}
         />
       ) : null}
     </div>
@@ -477,16 +478,19 @@ function Settings({
   onNameChange,
   onRenamed,
   onArchived,
+  onRestored,
 }: {
   business: BusinessDoc
   name: string
   onNameChange: (value: string) => void
   onRenamed: () => void
   onArchived: () => void
+  onRestored: () => void
 }) {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [confirming, setConfirming] = useState(false)
+  const archived = business.status === "archived"
 
   async function rename(event: React.FormEvent) {
     event.preventDefault()
@@ -505,6 +509,15 @@ function Settings({
     else onArchived()
   }
 
+  async function restore() {
+    setError(null)
+    setBusy(true)
+    const result = await sendJson(`/api/businesses/${business.id}/restore`, "POST")
+    setBusy(false)
+    if (!result.ok) setError(result.message ?? "Could not restore the business.")
+    else onRestored()
+  }
+
   return (
     <div className="space-y-4">
       <Card>
@@ -515,9 +528,15 @@ function Settings({
           <form onSubmit={rename} className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <div className="flex-1 space-y-1.5">
               <Label htmlFor="rename">Business name</Label>
-              <Input id="rename" value={name} onChange={(event) => onNameChange(event.target.value)} required />
+              <Input
+                id="rename"
+                value={name}
+                onChange={(event) => onNameChange(event.target.value)}
+                disabled={archived}
+                required
+              />
             </div>
-            <Button type="submit" disabled={busy || name.trim() === business.name}>
+            <Button type="submit" disabled={busy || archived || name.trim() === business.name}>
               Save
             </Button>
           </form>
@@ -526,14 +545,20 @@ function Settings({
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium">Archive</CardTitle>
+          <CardTitle className="text-sm font-medium">{archived ? "Archived" : "Archive"}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Archiving stops every write to this business. Its applications, people and records are kept.
+            {archived
+              ? "This business is read-only until you restore it. Its applications, people and records are all still here."
+              : "Archiving stops every write to this business. Its applications, people and records are kept, and you can restore it later."}
           </p>
           <Separator />
-          {confirming ? (
+          {archived ? (
+            <Button variant="outline" onClick={restore} disabled={busy}>
+              Restore business
+            </Button>
+          ) : confirming ? (
             <div className="flex flex-wrap gap-2">
               <Button variant="destructive" onClick={archive}>
                 Yes, archive

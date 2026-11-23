@@ -32,6 +32,12 @@ export interface RequireBusinessAccessInput {
   permission: Permission
   /** When present, the member's application scope is checked too. */
   applicationId?: string
+  /**
+   * Set only by restore. Every other write stays blocked while archived, so an
+   * archived business can be read but not edited; restore is the one operation
+   * that must be able to run against it.
+   */
+  allowArchived?: boolean
 }
 
 export async function requireBusinessAccess(input: RequireBusinessAccessInput): Promise<BusinessAccess> {
@@ -55,7 +61,7 @@ export async function requireBusinessAccess(input: RequireBusinessAccessInput): 
   const permissions = permissionsForRole(member.role)
   const isWrite = isWritePermission(input.permission)
 
-  if (business.status === "archived" && isWrite) {
+  if (business.status === "archived" && isWrite && !input.allowArchived) {
     throw new AppError("BUSINESS_FORBIDDEN", "This business is archived. Restore it before making changes.")
   }
 
