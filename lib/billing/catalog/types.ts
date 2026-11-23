@@ -134,6 +134,10 @@ export interface CommercialCatalogVersionDoc {
   entitlementVersion: string
   publisher: string
   publishedAt: number
+  activatedBy?: string
+  activatedAt?: number
+  supersededBy?: string
+  supersededAt?: number
   notes?: string
   checksum: string
 }

@@ -4,6 +4,7 @@ import { AppError } from "@/lib/errors"
 const mocks = vi.hoisted(() => ({
   requireAdmin: vi.fn(),
   previewCatalogPublication: vi.fn(),
+  activateCatalogPublication: vi.fn(),
   mongoCatalogSeedStore: vi.fn(),
 }))
 
@@ -14,8 +15,12 @@ vi.mock("@/lib/billing/catalog/publication-preview", () => ({
 vi.mock("@/lib/billing/catalog/seed", () => ({
   mongoCatalogSeedStore: mocks.mongoCatalogSeedStore,
 }))
+vi.mock("@/lib/billing/catalog/activation", () => ({
+  activateCatalogPublication: mocks.activateCatalogPublication,
+}))
 
 import { GET as preview } from "./publications/preview/route"
+import { POST as activate } from "./publications/[version]/activate/route"
 
 const ADMIN = { id: "admin_1", email: "admin@example.com" }
 
@@ -72,5 +77,61 @@ describe("A7.3 catalog publication routes", () => {
       ),
     )
     expect(response.status).toBe(404)
+  })
+
+  it("refuses non-admin activation before calling the service", async () => {
+    mocks.requireAdmin.mockRejectedValue(new AppError("UNAUTHORIZED", "Admin access required.", 403))
+
+    const response = await activate(
+      new Request("http://localhost/api/admin/billing/catalog/publications/x/activate", {
+        method: "POST",
+        body: JSON.stringify({ expectedChecksum: "abc" }),
+      }),
+      { params: Promise.resolve({ version: "CATALOG_CANDIDATE_V1" }) },
+    )
+    expect(response.status).toBe(403)
+    expect(mocks.activateCatalogPublication).not.toHaveBeenCalled()
+  })
+
+  it("activates a candidate with the admin actor and expected checksum", async () => {
+    mocks.requireAdmin.mockResolvedValue(ADMIN as never)
+    mocks.activateCatalogPublication.mockResolvedValue({
+      publicationVersion: "CATALOG_CANDIDATE_V1",
+      status: "active",
+      activatedAt: 1,
+      superseded: ["CATALOG_ACTIVE_V1"],
+    })
+
+    const response = await activate(
+      new Request("http://localhost/api/admin/billing/catalog/publications/x/activate", {
+        method: "POST",
+        body: JSON.stringify({ expectedChecksum: "abc" }),
+      }),
+      { params: Promise.resolve({ version: "CATALOG_CANDIDATE_V1" }) },
+    )
+    expect(response.status).toBe(200)
+    expect(mocks.activateCatalogPublication).toHaveBeenCalledWith(
+      expect.objectContaining({
+        version: "CATALOG_CANDIDATE_V1",
+        body: { expectedChecksum: "abc" },
+        actor: { id: ADMIN.id, email: ADMIN.email },
+      }),
+    )
+  })
+
+  it("returns 409 when the candidate changed", async () => {
+    mocks.requireAdmin.mockResolvedValue(ADMIN as never)
+    mocks.activateCatalogPublication.mockRejectedValue(
+      new AppError("CATALOG_CONFLICT", "Publication changed.", 409),
+    )
+
+    const response = await activate(
+      new Request("http://localhost/api/admin/billing/catalog/publications/x/activate", {
+        method: "POST",
+        body: JSON.stringify({ expectedChecksum: "abc" }),
+      }),
+      { params: Promise.resolve({ version: "CATALOG_CANDIDATE_V1" }) },
+    )
+    expect(response.status).toBe(409)
   })
 })

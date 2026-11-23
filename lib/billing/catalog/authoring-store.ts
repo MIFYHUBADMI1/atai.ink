@@ -15,6 +15,7 @@ import type {
 export type CreateProductOutcome = "inserted" | "duplicate"
 export type ReplaceDraftOutcome = "ok" | "conflict" | "duplicate_version"
 export type PublishOutcome = "ok" | "conflict" | "duplicate_publication"
+export type ActivatePublicationOutcome = "ok" | "conflict"
 
 export interface ProductPatch {
   status?: CommercialProductDoc["status"]
@@ -31,6 +32,18 @@ export interface VersionPatch {
   publishedAt?: number
   checksum?: string
   notes?: string
+}
+
+export interface CatalogActivationStore {
+  listProducts(): Promise<CommercialProductDoc[]>
+  listVersions(): Promise<CommercialProductVersionDoc[]>
+  listCatalogVersions(): Promise<CommercialCatalogVersionDoc[]>
+  activatePublication(input: {
+    version: string
+    expectedChecksum: string
+    actorId: string
+    now: number
+  }): Promise<ActivatePublicationOutcome>
 }
 
 export interface CatalogAuthoringStore {
@@ -78,7 +91,9 @@ function isDuplicateKey(error: unknown): boolean {
   )
 }
 
-export async function mongoCatalogAuthoringStore(): Promise<CatalogAuthoringStore> {
+export async function mongoCatalogAuthoringStore(): Promise<
+  CatalogAuthoringStore & CatalogActivationStore
+> {
   const products = await commercialProductsCol()
   const versions = await commercialProductVersionsCol()
   const catalogVersions = await commercialCatalogVersionsCol()
@@ -207,6 +222,39 @@ export async function mongoCatalogAuthoringStore(): Promise<CatalogAuthoringStor
             status: { $ne: "archived" },
           },
           { $set: input.productPatch },
+          { session },
+        )
+        if (result.matchedCount === 0) throw new AbortWrite("conflict")
+      })
+      return outcome ?? "ok"
+    },
+
+    async activatePublication(input) {
+      const outcome = await inTransaction<"conflict">(async (session) => {
+        await catalogVersions.updateMany(
+          { status: "active", version: { $ne: input.version } },
+          {
+            $set: {
+              status: "superseded",
+              supersededBy: input.actorId,
+              supersededAt: input.now,
+            },
+          },
+          { session },
+        )
+        const result = await catalogVersions.updateOne(
+          {
+            version: input.version,
+            status: "candidate",
+            checksum: input.expectedChecksum,
+          },
+          {
+            $set: {
+              status: "active",
+              activatedBy: input.actorId,
+              activatedAt: input.now,
+            },
+          },
           { session },
         )
         if (result.matchedCount === 0) throw new AbortWrite("conflict")

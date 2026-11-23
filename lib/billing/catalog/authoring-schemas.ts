@@ -103,10 +103,15 @@ export const archiveSchema = z
   .object({ expectedUpdatedAt: z.number().int().min(0) })
   .strict()
 
+export const activatePublicationSchema = z
+  .object({ expectedChecksum: z.string().trim().min(1).max(128) })
+  .strict()
+
 export type CreateProductInput = z.infer<typeof createProductSchema>
 export type VersionMutationInput = z.infer<typeof versionMutationSchema>
 export type PublishInput = z.infer<typeof publishSchema>
 export type ArchiveInput = z.infer<typeof archiveSchema>
+export type ActivatePublicationInput = z.infer<typeof activatePublicationSchema>
 
 export interface CatalogVersionFields {
   name: string
@@ -153,6 +158,10 @@ export function parsePublishInput(input: unknown): PublishInput {
 
 export function parseArchiveInput(input: unknown): ArchiveInput {
   return parse(archiveSchema, input)
+}
+
+export function parseActivatePublicationInput(input: unknown): ActivatePublicationInput {
+  return parse(activatePublicationSchema, input)
 }
 
 function normalizeCredits(

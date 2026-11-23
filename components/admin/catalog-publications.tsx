@@ -1,16 +1,18 @@
 "use client"
 
+import { useState } from "react"
 import useSWR from "swr"
 import {
   AlertTriangle,
   CheckCircle2,
   Eye,
+  Play,
   RefreshCw,
   ShieldAlert,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { jsonFetcher } from "@/lib/client/api"
+import { jsonFetcher, postJson } from "@/lib/client/api"
 import type {
   CatalogPublicationPreview,
   CatalogPublicationSummary,
@@ -48,11 +50,43 @@ function PublicationSummary({ label, value }: { label: string; value: CatalogPub
   )
 }
 
+type ActivationResult = {
+  publicationVersion: string
+  status: "active"
+  activatedAt: number
+  superseded: string[]
+}
+
 export function CatalogPublications() {
   const { data, error, isLoading, mutate } = useSWR<CatalogPublicationPreview>(
     PREVIEW_URL,
     jsonFetcher,
   )
+  const [confirming, setConfirming] = useState(false)
+  const [activating, setActivating] = useState(false)
+  const [activationError, setActivationError] = useState<string | null>(null)
+  const [activationResult, setActivationResult] = useState<ActivationResult | null>(null)
+
+  async function activate() {
+    if (!data?.candidate) return
+    setActivating(true)
+    setActivationError(null)
+    try {
+      const result = await postJson<ActivationResult>(
+        `/api/admin/billing/catalog/publications/${encodeURIComponent(data.candidate.version)}/activate`,
+        { expectedChecksum: data.candidate.checksum },
+      )
+      setActivationResult(result)
+      setConfirming(false)
+      await mutate()
+    } catch (activateError) {
+      setActivationError(
+        activateError instanceof Error ? activateError.message : "Could not activate the publication.",
+      )
+    } finally {
+      setActivating(false)
+    }
+  }
 
   return (
     <section className="mt-8 rounded-2xl border border-border bg-card p-5">
@@ -106,7 +140,63 @@ export function CatalogPublications() {
               {data.diff.added.length} added · {data.diff.removed.length} removed ·{" "}
               {data.diff.changed.length} changed
             </span>
+            {data.candidate && data.ready ? (
+              <Button
+                type="button"
+                size="sm"
+                className="ml-auto gap-1"
+                onClick={() => setConfirming(true)}
+                disabled={confirming || activating}
+              >
+                <Play className="size-3.5" /> Activate candidate
+              </Button>
+            ) : null}
           </div>
+
+          {confirming && data.candidate ? (
+            <div className="mt-4 rounded-xl border border-amber-500/40 bg-amber-500/5 px-4 py-3">
+              <p className="flex items-center gap-1 text-sm font-medium text-amber-700 dark:text-amber-400">
+                <AlertTriangle className="size-4" /> Activate {data.candidate.version}?
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                This supersedes the current active publication. Customer reads still stay on the code
+                catalog until the database read gates are enabled.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button type="button" size="sm" onClick={activate} disabled={activating}>
+                  {activating ? "Activating…" : "Confirm activation"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setConfirming(false)}
+                  disabled={activating}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {activationError ? (
+            <p className="mt-4 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+              {activationError}
+            </p>
+          ) : null}
+
+          {activationResult ? (
+            <div className="mt-4 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400">
+              <p className="flex items-center gap-1 font-medium">
+                <CheckCircle2 className="size-4" /> {activationResult.publicationVersion} is active.
+              </p>
+              <p className="mt-1 text-xs">
+                {activationResult.superseded.length > 0
+                  ? `Superseded: ${activationResult.superseded.join(", ")}.`
+                  : "No previous active publication was superseded."}
+              </p>
+            </div>
+          ) : null}
 
           {data.errors.length > 0 ? (
             <div className="mt-4 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2">
