@@ -164,13 +164,23 @@ export async function migrateConnectedBusinesses(options: MigrationOptions): Pro
       const identity = applicationIdentityFrom(project.sourceUrl)
       const application = identity ? applicationDocFor(project, business.id, identity, stamp, now) : undefined
 
+      // A claim that already has an owner belongs to somebody else's decision.
+      // Re-pointing it would move a domain without anyone being asked.
+      const ownedClaims = await (await businessDomainsCol()).countDocuments({
+        projectId: project.id,
+        businessId: { $exists: true },
+      })
+      const warnings: string[] = []
+      if (!identity) warnings.push("no usable site address; business only")
+      if (ownedClaims > 0) warnings.push(`${ownedClaims} domain claim(s) already owned; left untouched`)
+
       if (options.mode === "dry-run") {
         items.push({
           ...base,
           status: "planned",
           businessId: business.id,
           applicationId: application?.id,
-          warning: identity ? undefined : "no usable site address; business only",
+          warning: warnings.length ? warnings.join("; ") : undefined,
         })
         continue
       }
@@ -188,7 +198,11 @@ export async function migrateConnectedBusinesses(options: MigrationOptions): Pro
           // connects after this run carries no stamp and is never detached.
           const set: Record<string, unknown> = { businessId: business.id, migration: stamp }
           if (application) set.applicationId = application.id
-          await (await businessDomainsCol()).updateMany({ projectId: project.id }, { $set: set }, { session })
+          await (await businessDomainsCol()).updateMany(
+            { projectId: project.id, businessId: { $exists: false } },
+            { $set: set },
+            { session },
+          )
         })
       } finally {
         await session.endSession()
@@ -199,7 +213,7 @@ export async function migrateConnectedBusinesses(options: MigrationOptions): Pro
         status: "created",
         businessId: business.id,
         applicationId: application?.id,
-        warning: identity ? undefined : "no usable site address; business only",
+        warning: warnings.length ? warnings.join("; ") : undefined,
       })
     } catch (error) {
       items.push({ ...base, status: "failed", error: error instanceof Error ? error.message : String(error) })

@@ -124,6 +124,19 @@ describe("migration", () => {
     expect(fakes.applications.docs[0].migration?.runId).toBe("run-1")
     expect(fakes.applications.docs[0].hostname).toBe("example.com")
     expect(fakes.domains.docs[0].businessId).toBe(business.id)
+    expect(fakes.domains.docs[0].migration?.runId).toBe("run-1")
+  })
+
+  it("never re-points a domain claim that already has an owner", async () => {
+    fakes.projects.docs.push(project())
+    fakes.domains.docs.push({ id: "d1", projectId: "p1", hostname: "example.com", businessId: "biz_other" })
+
+    const report = await migrateConnectedBusinesses({ mode: "apply", runId: "run-1", now: 100 })
+
+    expect(report.created).toBe(1)
+    expect(fakes.domains.docs[0].businessId).toBe("biz_other")
+    expect(fakes.domains.docs[0].migration).toBeUndefined()
+    expect(report.items[0].warning).toMatch(/already owned/)
   })
 
   it("is idempotent across runs", async () => {
