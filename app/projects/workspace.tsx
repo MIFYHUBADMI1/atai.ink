@@ -12,7 +12,10 @@ import {
 import { toast } from "sonner"
 import { StateBadge } from "@/components/state-badge"
 import { ProjectThumbnail } from "@/components/project-thumbnail"
-import { deleteJson } from "@/lib/client/api"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { deleteJson, postJson, useSession } from "@/lib/client/api"
 import { selectOrphanedBuilds } from "@/lib/projects/build-recovery"
 import { cn } from "@/lib/utils"
 import type { BusinessStatus } from "@/lib/types/business"
@@ -173,6 +176,136 @@ function DeleteDialog({
   )
 }
 
+// ─── Connected business delete dialog ─────────────────────────────────────────
+
+function DeleteConnectedBusinessDialog({
+  business,
+  open,
+  onOpenChange,
+  onDeleted,
+}: {
+  business: ConnectedBusinessItem | null
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  onDeleted: () => void
+}) {
+  const { session } = useSession()
+  const isPasswordUser = session?.user?.authProvider === "password"
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [deleting, setDeleting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (open) return
+    setEmail("")
+    setPassword("")
+    setError(null)
+    setDeleting(false)
+  }, [open])
+
+  if (!business) return null
+
+  const emailMatches =
+    email.trim().toLowerCase() === (session?.user?.email ?? "").toLowerCase()
+  const canDelete = !deleting && emailMatches && (!isPasswordUser || password.length > 0)
+
+  async function handleDelete() {
+    if (!business) return
+    setDeleting(true)
+    setError(null)
+    try {
+      await postJson(`/api/businesses/${business.id}/delete`, {
+        confirmEmail: email.trim(),
+        ...(isPasswordUser ? { currentPassword: password } : {}),
+      })
+      toast.success("Business deleted")
+      onOpenChange(false)
+      onDeleted()
+    } catch (e) {
+      setError((e as Error).message || "Failed to delete business")
+      setDeleting(false)
+    }
+  }
+
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent className="max-h-[min(90vh,44rem)] overflow-y-auto">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Permanently delete {business.name}?</AlertDialogTitle>
+          <AlertDialogDescription className="block space-y-2">
+            <span className="block">
+              This permanently removes the connected business, its applications, its people and its workspace
+              records. Atai also releases its ownership claim on the website, so another Atai account can connect
+              it. Runtime keys are revoked.
+            </span>
+            <span className="block">
+              Anything running outside Atai — hosting, DNS, your domain registrar, third-party subscriptions — is
+              not cancelled or removed. Billing, refund and audit records are retained. This cannot be undone.
+            </span>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="delete-business-email" className="text-sm font-medium">
+              Confirm with your account email
+            </Label>
+            <Input
+              id="delete-business-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder={session?.user?.email ?? "you@example.com"}
+              autoComplete="email"
+              disabled={deleting}
+            />
+          </div>
+
+          {isPasswordUser ? (
+            <div className="space-y-2">
+              <Label htmlFor="delete-business-password" className="text-sm font-medium">
+                Confirm with your current password
+              </Label>
+              <Input
+                id="delete-business-password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter current password"
+                autoComplete="current-password"
+                disabled={deleting}
+              />
+            </div>
+          ) : (
+            <p className="text-xs leading-5 text-muted-foreground">
+              Your account signs in with {session?.user?.authProvider === "github" ? "GitHub" : "Google"}, so typing
+              your account email is the confirmation.
+            </p>
+          )}
+
+          {error ? (
+            <p className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+              {error}
+            </p>
+          ) : null}
+        </div>
+
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+          <Button
+            variant="destructive"
+            onClick={() => void handleDelete()}
+            disabled={!canDelete}
+          >
+            {deleting ? <Loader2 className="size-3.5 animate-spin" /> : "Delete permanently"}
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
 // ─── Portfolio overview cards ─────────────────────────────────────────────────
 
 function PortfolioOverview({
@@ -264,10 +397,12 @@ function BusinessCard({
   item,
   recovering = false,
   onDeleteRequest,
+  onDeleteBusiness,
 }: {
   item: PortfolioItem
   recovering?: boolean
   onDeleteRequest: (p: EnrichedProject) => void
+  onDeleteBusiness: (b: ConnectedBusinessItem) => void
 }) {
   const connected = isConnectedBusinessItem(item)
   const hasThumbnail = !connected && Boolean(item.thumbnailUrl)
@@ -281,17 +416,17 @@ function BusinessCard({
 
   return (
     <div className="group relative flex flex-col overflow-hidden rounded-2xl border border-border bg-card transition-all hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5">
-      {/* Delete trigger — archiving a connected business is reversible and lives
-          in its own workspace, so the card only offers it for projects. */}
-      {!connected ? (
-        <button
-          aria-label="Delete business"
-          onClick={(e) => { e.preventDefault(); onDeleteRequest(item) }}
-          className="absolute right-3 top-3 z-10 flex size-7 items-center justify-center rounded-md bg-card/80 text-muted-foreground opacity-0 backdrop-blur-sm transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-        >
-          <Trash2 className="size-3.5" />
-        </button>
-      ) : null}
+      <button
+        aria-label={connected ? "Delete connected business" : "Delete business"}
+        onClick={(e) => {
+          e.preventDefault()
+          if (isConnectedBusinessItem(item)) onDeleteBusiness(item)
+          else onDeleteRequest(item)
+        }}
+        className="absolute right-3 top-3 z-10 flex size-7 items-center justify-center rounded-md bg-card/80 text-muted-foreground opacity-100 backdrop-blur-sm transition-opacity hover:bg-destructive/10 hover:text-destructive sm:opacity-0 sm:group-hover:opacity-100"
+      >
+        <Trash2 className="size-3.5" />
+      </button>
 
       <Link href={itemHref(item)} className="flex flex-1 flex-col">
         {/* Thumbnail */}
@@ -379,10 +514,12 @@ function BusinessRow({
   item,
   recovering = false,
   onDeleteRequest,
+  onDeleteBusiness,
 }: {
   item: PortfolioItem
   recovering?: boolean
   onDeleteRequest: (p: EnrichedProject) => void
+  onDeleteBusiness: (b: ConnectedBusinessItem) => void
 }) {
   const connected = isConnectedBusinessItem(item)
   const isPlanReady = !connected && item.state === "plan_ready"
@@ -440,15 +577,16 @@ function BusinessRow({
         >
           <ArrowRight className="size-3.5" />
         </Link>
-        {!connected ? (
-          <button
-            aria-label="Delete business"
-            onClick={() => onDeleteRequest(item)}
-            className="flex size-8 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-          >
-            <Trash2 className="size-3.5" />
-          </button>
-        ) : null}
+        <button
+          aria-label={connected ? "Delete connected business" : "Delete business"}
+          onClick={() => {
+            if (isConnectedBusinessItem(item)) onDeleteBusiness(item)
+            else onDeleteRequest(item)
+          }}
+          className="flex size-8 items-center justify-center rounded-md text-muted-foreground opacity-100 transition-all hover:bg-destructive/10 hover:text-destructive sm:opacity-0 sm:group-hover:opacity-100"
+        >
+          <Trash2 className="size-3.5" />
+        </button>
       </div>
     </div>
   )
@@ -472,6 +610,8 @@ export function ProjectsWorkspace({
   const [view, setView] = useState<"grid" | "list">("grid")
   const [deleteTarget, setDeleteTarget] = useState<EnrichedProject | null>(null)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteBusinessTarget, setDeleteBusinessTarget] = useState<ConnectedBusinessItem | null>(null)
+  const [deleteBusinessOpen, setDeleteBusinessOpen] = useState(false)
   const [recoveringIds, setRecoveringIds] = useState<string[]>([])
   const recoveryStartedRef = useRef(false)
   const router = useRouter()
@@ -505,6 +645,11 @@ export function ProjectsWorkspace({
   function requestDelete(p: EnrichedProject) {
     setDeleteTarget(p)
     setDeleteOpen(true)
+  }
+
+  function requestBusinessDelete(business: ConnectedBusinessItem) {
+    setDeleteBusinessTarget(business)
+    setDeleteBusinessOpen(true)
   }
 
   const displayed = useMemo(() => filterPortfolio(items, { tab, search, sort }), [items, tab, search, sort])
@@ -696,7 +841,7 @@ export function ProjectsWorkspace({
       ) : view === "grid" ? (
         <div data-atai-tour="projects-list" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {displayed.map((item) => (
-            <BusinessCard key={item.id} item={item} recovering={recoveringIds.includes(item.id)} onDeleteRequest={requestDelete} />
+            <BusinessCard key={item.id} item={item} recovering={recoveringIds.includes(item.id)} onDeleteRequest={requestDelete} onDeleteBusiness={requestBusinessDelete} />
           ))}
         </div>
       ) : (
@@ -709,7 +854,7 @@ export function ProjectsWorkspace({
             <span />
           </div>
           {displayed.map((item) => (
-            <BusinessRow key={item.id} item={item} recovering={recoveringIds.includes(item.id)} onDeleteRequest={requestDelete} />
+            <BusinessRow key={item.id} item={item} recovering={recoveringIds.includes(item.id)} onDeleteRequest={requestDelete} onDeleteBusiness={requestBusinessDelete} />
           ))}
         </div>
       )}
@@ -737,6 +882,13 @@ export function ProjectsWorkspace({
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         onDeleted={() => window.location.reload()} // Simple refresh; could be improved with SWR
+      />
+
+      <DeleteConnectedBusinessDialog
+        business={deleteBusinessTarget}
+        open={deleteBusinessOpen}
+        onOpenChange={setDeleteBusinessOpen}
+        onDeleted={() => window.location.reload()}
       />
     </>
   )
