@@ -53,6 +53,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ busines
       ...(project.intake?.website?.url ? { appUrl: project.intake.website.url } : {}),
       ...(view.verifiedDomain ? { verifiedHostname: view.verifiedDomain.hostname } : {}),
       apiBaseUrl: getAppUrl(),
+      objectives: project.intake?.objectives ?? [],
     })
 
     return ok({
@@ -112,6 +113,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ busine
       ...(project.intake?.website?.url ? { appUrl: project.intake.website.url } : {}),
       ...(view.verifiedDomain ? { verifiedHostname: view.verifiedDomain.hostname } : {}),
       apiBaseUrl: getAppUrl(),
+      objectives: project.intake?.objectives ?? [],
       keySecret: created.secret,
       keyPrefix: created.keyPrefix,
     })

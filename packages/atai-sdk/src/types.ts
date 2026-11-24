@@ -519,8 +519,26 @@ export interface PaymentsListPayoutsResult {
 export interface AnalyticsEventInput {
   /** Provider-neutral event name (e.g. "page_view", "signup", "add_to_cart"). */
   name: string
+  /**
+   * What kind of interaction this is. The browser collector sends `page_view`,
+   * `click` and `page_leave`; anything the app names itself is `custom`.
+   * Omitted means `custom` (or `page_view` for a `page_view` name).
+   */
+  kind?: "page_view" | "click" | "page_leave" | "session_start" | "conversion" | "custom"
   /** Stable anonymous visitor identifier (e.g. a localStorage id), when known. */
   visitorId?: string
+  /** One visit (30-minute idle window), so pages can be counted per session. */
+  sessionId?: string
+  /** Route or full URL; grouped server-side (`/orders/123` → `/orders/:id`). */
+  path?: string
+  /** Referring page URL; only its host is kept. */
+  referrer?: string
+  /** Coarse device class; a value the server does not recognise is dropped. */
+  device?: "mobile" | "tablet" | "desktop"
+  /** Time spent on the page before leaving, for a `page_leave` event. */
+  durationMs?: number
+  /** What was pressed, for a `click` event. Never include input values. */
+  element?: { role?: string; label?: string }
   /** Bounded scalar app data attached to the event (no secrets, no nested objects). */
   properties?: Record<string, string | number | boolean>
   /** When the event occurred (epoch ms). Defaults to server time when omitted. */

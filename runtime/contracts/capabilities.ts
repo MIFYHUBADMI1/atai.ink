@@ -123,6 +123,11 @@ export const ApiKeyPublicSchema = z.object({
   /** Non-secret display prefix, e.g. "atai_production_a81f…". */
   keyPrefix: z.string(),
   scopes: ApiKeyScopesSchema,
+  /**
+   * `publishable` keys are embedded in a browser snippet and may only append
+   * analytics events. Absent means a secret key.
+   */
+  kind: z.enum(["secret", "publishable"]).optional(),
   status: ApiKeyStatusSchema,
   createdAt: z.number(),
   lastUsedAt: z.number().optional(),
@@ -155,6 +160,8 @@ export const ApiKeyCreateInputSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   environment: RuntimeEnvironmentSchema,
   scopes: ApiKeyScopesSchema,
+  /** Publishable keys are restricted to `analytics` server-side. */
+  kind: z.enum(["secret", "publishable"]).optional(),
   /** Optional absolute epoch-ms expiry. Must be in the future if present. */
   expiresAt: z.number().int().positive().optional(),
 })

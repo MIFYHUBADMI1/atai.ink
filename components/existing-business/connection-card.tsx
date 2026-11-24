@@ -28,6 +28,7 @@ export function ConnectionCard({
   connection,
   domainVerified,
   hostname,
+  runtimeLink,
   onChanged,
 }: {
   projectId: string
@@ -35,6 +36,10 @@ export function ConnectionCard({
   connection: IntakeView["connection"]
   domainVerified: boolean
   hostname?: string
+  /** Where this surface keeps its keys. The build workspace has a runtime page;
+   *  a connected business mints keys in Settings, and must never be linked to
+   *  `/project/<id>`, which redirects straight back here. */
+  runtimeLink?: { href: string; label: string }
   onChanged: () => Promise<void> | void
 }) {
   const [busy, setBusy] = useState<"guide" | "download" | "disconnect" | "check" | null>(null)
@@ -126,11 +131,11 @@ export function ConnectionCard({
           {connection.guideIssuedAt ? "Reissue key & download guide" : "Issue key & download guide"}
         </Button>
         <Link
-          href={`/project/${projectId}/runtime`}
+          href={runtimeLink?.href ?? `/project/${projectId}/runtime`}
           className="inline-flex items-center gap-1.5 text-xs font-medium text-primary underline underline-offset-2"
         >
           <KeyRound className="size-3.5" />
-          Runtime keys & usage
+          {runtimeLink?.label ?? "Runtime keys & usage"}
         </Link>
         {connection.status === "verified" || connection.status === "stale" ? (
           <Button type="button" variant="ghost" onClick={disconnect} disabled={busy !== null}>

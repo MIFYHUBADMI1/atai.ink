@@ -3,6 +3,7 @@ import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import type { IntakeView } from "@/lib/existing-business/view"
 import type { BusinessAssessment } from "@/lib/types/business-intake"
+import { businessBaseRef } from "@/lib/connected-business/surface"
 import { BusinessProfile } from "./business-profile"
 
 vi.mock("@/lib/client/api", () => ({ jsonFetcher: vi.fn(), postJson: vi.fn(), patchJson: vi.fn(), deleteJson: vi.fn() }))
@@ -93,6 +94,37 @@ describe("BusinessProfile", () => {
     expect(html).toContain("All three steps are done")
     expect(html).toContain("Ask your co-founder")
     expect(html).toContain("Where to go next")
+  })
+
+  it("links inside the operate surface when it is given the serialisable base", () => {
+    const html = renderToStaticMarkup(
+      createElement(BusinessProfile, {
+        projectId: "p1",
+        initialView: view({
+          domain: { records: [], verified: true, hostname: "bakery.example" },
+          connection: { status: "verified", label: "Connected", firstSeenAt: 1, lastSeenAt: 1 },
+        }),
+        base: businessBaseRef("biz_1"),
+      }),
+    )
+
+    expect(html).toContain('href="/business/biz_1/growth"')
+    expect(html).toContain('href="/business/biz_1/money"')
+    expect(html).toContain('href="/business/biz_1/plan"')
+    expect(html).not.toContain('href="/project/p1/market"')
+  })
+
+  it("sends the founder to its own keys, never into the build workspace", () => {
+    const html = renderToStaticMarkup(
+      createElement(BusinessProfile, {
+        projectId: "p1",
+        initialView: view({ domain: { records: [], verified: true, hostname: "bakery.example" } }),
+        base: businessBaseRef("biz_1"),
+      }),
+    )
+
+    expect(html).toContain('href="/business/biz_1/settings"')
+    expect(html).not.toContain('href="/project/p1/')
   })
 
   it("tells the founder what the connection is for, and what Atai will not do", () => {

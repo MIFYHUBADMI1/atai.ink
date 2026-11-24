@@ -1107,8 +1107,25 @@ export interface AnalyticsEventDoc {
   environment: "development" | "production"
   /** Provider-neutral event name (e.g. "page_view", "signup", "add_to_cart"). */
   name: string
+  /**
+   * What kind of interaction this is. Page views, clicks and page leaves come
+   * from the browser collector; anything the app names itself is `custom`.
+   */
+  kind?: "page_view" | "click" | "page_leave" | "session_start" | "conversion" | "custom"
   /** Stable anonymous visitor identifier supplied by the app, when present. */
   visitorId?: string
+  /** One visit (30-minute idle window), so pages can be counted per session. */
+  sessionId?: string
+  /** Route the event happened on, with id-shaped segments collapsed to `:id`. */
+  path?: string
+  /** Host of the referring page only — never the full referring URL. */
+  referrerHost?: string
+  /** Coarse device class; never a model, never a fingerprint. */
+  device?: "mobile" | "tablet" | "desktop"
+  /** Time spent on the page before leaving, when the collector reports it. */
+  durationMs?: number
+  /** What was pressed, for a click event. No input values are ever recorded. */
+  element?: { role?: string; label?: string }
   /** Bounded scalar event properties (safe app data; credential-like keys dropped). */
   properties?: Record<string, string | number | boolean>
   /** When the event occurred (epoch ms; client-supplied, clamped server-side). */

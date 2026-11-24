@@ -18,9 +18,9 @@ export declare class PaymentsCapability {
     createCheckout(input: PaymentsCreateCheckoutInput, options?: AtaiRequestOptions): Promise<PaymentsCreateCheckoutResult>;
     /** Create a recurring subscription (`payments`/`createSubscription`). Real charge — not retried. */
     createSubscription(input: PaymentsCreateSubscriptionInput, options?: AtaiRequestOptions): Promise<PaymentsCreateSubscriptionResult>;
-    /** Read the payment feed (`payments`/`listPayments`). Read-only — safe to call freely. */
+    /** Read the payment feed (`payments`/`listPayments`). Returns only payments attributed to this application's project. Read-only — safe to call freely. */
     listPayments(input?: PaymentsListPaymentsInput, options?: AtaiRequestOptions): Promise<PaymentsListPaymentsResult>;
-    /** Read account-level payout records (`payments`/`listPayouts`). Read-only. */
+    /** Platform-account settlements are not application data; runtime application keys cannot call this operation. */
     listPayouts(input?: PaymentsListPayoutsInput, options?: AtaiRequestOptions): Promise<PaymentsListPayoutsResult>;
 }
 //# sourceMappingURL=payments.d.ts.map

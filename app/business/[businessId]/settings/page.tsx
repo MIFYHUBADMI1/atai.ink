@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation"
 
 import { PageHero } from "@/components/connected-business/page-ui"
+import { AnalyticsKeyCard } from "@/components/connected-business/analytics-key-card"
+import { SdkSetupCard } from "@/components/connected-business/sdk-setup-card"
 import { BusinessWorkspace } from "@/components/connected-business/business-workspace"
 import { businessPageContext } from "@/lib/connected-business/page-context"
 import { businessSections } from "@/lib/connected-business/sections"
@@ -33,6 +35,8 @@ export default async function BusinessSettingsPage({
         showTabBar={false}
         showHeader={false}
       />
+      <AnalyticsKeyCard businessId={business.id} />
+      <SdkSetupCard businessId={business.id} />
     </div>
   )
 }

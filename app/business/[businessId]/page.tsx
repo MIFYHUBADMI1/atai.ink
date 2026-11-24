@@ -4,7 +4,7 @@ import { BadgeCheck, Globe, ScanText, ShieldQuestion } from "lucide-react"
 import { Chip, EmptyPanel, PageHero } from "@/components/connected-business/page-ui"
 import { BusinessProfile } from "@/components/existing-business/business-profile"
 import { buttonVariants } from "@/components/ui/button"
-import { businessBase } from "@/lib/connected-business/surface"
+import { businessBaseRef } from "@/lib/connected-business/surface"
 import { businessPageContext } from "@/lib/connected-business/page-context"
 import { listProjectDomains } from "@/lib/domain/service"
 import { buildIntakeView } from "@/lib/existing-business/view"
@@ -76,7 +76,7 @@ export default async function BusinessOverviewPage({
       <BusinessProfile
         projectId={anchor.projectId}
         initialView={view}
-        base={businessBase(business.id)}
+        base={businessBaseRef(business.id)}
         apiBase={`/api/businesses/${business.id}`}
         headingLevel="h2"
       />

@@ -24,6 +24,7 @@ import { formatWhen } from "./format"
 
 interface ApiKey {
   id: string
+  kind?: "secret" | "publishable"
   environment: "development" | "production"
   name?: string
   keyPrefix: string
@@ -58,17 +59,22 @@ export function RuntimeKeysClient({
   const [pendingAction, setPendingAction] = useState<ConfirmAction>(null)
   const [acting, setActing] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
-  async function createKey() {
+  async function createKey(kind: "secret" | "publishable" = "secret") {
     setCreating(true)
-    const toastId = toast.loading("Creating your API key…")
+    const toastId = toast.loading(kind === "publishable" ? "Creating your browser key…" : "Creating your API key…")
     try {
       const created = await postJson<ApiKey & { secret: string }>(
         `/api/runtime/keys?projectId=${encodeURIComponent(projectId)}`,
-        { name: name.trim() || undefined, environment },
+        { name: name.trim() || undefined, environment, ...(kind === "publishable" ? { kind } : {}) },
       )
       setSecret(created.secret)
       setName("")
-      toast.success("API key created — copy the secret now, it won't be shown again.", { id: toastId })
+      toast.success(
+        kind === "publishable"
+          ? "Browser key created — it can only record analytics. Copy it now."
+          : "API key created — copy the secret now, it won't be shown again.",
+        { id: toastId },
+      )
       await mutate()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not create key", { id: toastId })
@@ -138,6 +144,18 @@ export function RuntimeKeysClient({
   return (
     <div data-atai-tour="runtime-keys" className="flex flex-col gap-6">
       {secret ? <SecretOnceBanner secret={secret} onDismiss={() => setSecret(null)} /> : null}
+      {secret && /_pk_/.test(secret) ? (
+        <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
+          <p className="text-sm font-medium">Install it in your site</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Paste this once, in the <code>&lt;head&gt;</code> of every page. It reports page views, journeys and clicks
+            to this project&apos;s Growth page — and it can do nothing else.
+          </p>
+          <pre className="mt-3 overflow-x-auto rounded-lg bg-background p-3 text-xs">
+            <code>{`<script defer src="${typeof window === "undefined" ? "" : window.location.origin}/atai-analytics.js" data-atai-key="${secret}"></script>`}</code>
+          </pre>
+        </div>
+      ) : null}
 
       {developerPortalUrl ? (
         <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-4 py-2.5 text-sm">
@@ -179,17 +197,24 @@ export function RuntimeKeysClient({
               <option value="production">production</option>
             </select>
           </div>
-          <Button type="button" onClick={createKey} disabled={creating}>
+          <Button type="button" onClick={() => createKey("secret")} disabled={creating}>
             {creating ? (
               <>
                 <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />
                 Creating…
               </>
             ) : (
-              "Create key"
+              "Create secret key"
             )}
           </Button>
+          <Button type="button" variant="outline" onClick={() => createKey("publishable")} disabled={creating}>
+            Create browser key
+          </Button>
         </div>
+        <p className="mt-3 text-xs text-muted-foreground">
+          A browser key is embedded in a page, so it is limited to recording analytics — it cannot call a provider,
+          read data or spend a credit. Use a secret key for everything else.
+        </p>
       </section>
 
       {isLoading ? <p className="text-sm text-muted-foreground">Loading keys…</p> : null}
@@ -212,6 +237,11 @@ export function RuntimeKeysClient({
                 <td className="px-3 py-2">
                   <div className="font-mono text-xs">{key.keyPrefix}</div>
                   {key.name ? <div className="text-xs text-muted-foreground">{key.name}</div> : null}
+                  {key.kind === "publishable" ? (
+                    <span className="mt-1 inline-flex rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary">
+                      browser · analytics only
+                    </span>
+                  ) : null}
                 </td>
                 <td className="px-3 py-2 text-xs">{key.environment}</td>
                 <td className="px-3 py-2 text-xs">{key.status}</td>

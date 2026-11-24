@@ -3,6 +3,16 @@ import { z } from "zod"
 import type { ProviderExecutionResponse } from "@/runtime/contracts/router"
 import type { AnalyticsEventDoc } from "@/lib/types/db"
 import { ProviderExecutionError } from "@/lib/runtime/router/adapter"
+import {
+  MAX_LABEL_CHARS,
+  MAX_PATH_CHARS,
+  eventNameFor,
+  normaliseKind,
+  normaliseLabel,
+  normalisePath,
+  normaliseRole,
+  referrerHost,
+} from "@/lib/analytics/product/normalize"
 
 /**
  * Atai Runtime — first-party analytics request/response mapper (server-only).
@@ -31,10 +41,29 @@ const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000
 
 const CREDENTIAL_LIKE_KEY = /(api[_-]?key|token|secret|authorization|password|credential|cookie)/i
 
+const MAX_SESSION_ID_CHARS = 200
+const MAX_DURATION_MS = 24 * 60 * 60 * 1000
+
 const EventSchema = z
   .object({
     name: z.string().min(1).max(MAX_EVENT_NAME_CHARS),
+    /** page_view | click | page_leave | session_start | conversion | custom */
+    kind: z.string().max(32).optional(),
     visitorId: z.string().min(1).max(MAX_VISITOR_ID_CHARS).optional(),
+    sessionId: z.string().min(1).max(MAX_SESSION_ID_CHARS).optional(),
+    /** Path or full URL; normalised to a grouped route server-side. */
+    path: z.string().max(2_000).optional(),
+    referrer: z.string().max(2_000).optional(),
+    /** Coarse device class; a supplied value is trusted only if recognised. */
+    device: z.string().max(16).optional(),
+    durationMs: z.number().finite().min(0).max(MAX_DURATION_MS).optional(),
+    element: z
+      .object({
+        role: z.string().max(64).optional(),
+        label: z.string().max(500).optional(),
+      })
+      .strict()
+      .optional(),
     properties: z.record(z.string(), z.unknown()).optional(),
     /** Epoch ms; clamped server-side to a sane window around now. */
     timestamp: z.number().finite().optional(),
@@ -145,15 +174,32 @@ export function toAnalyticsEvents(
   }
   const expiresAt = new Date(now + ANALYTICS_RETENTION_DAYS * 24 * 60 * 60 * 1000)
   return parsed.data.events.map((event) => {
-    const name = event.name.trim()
-    if (!name) throw invalidInput("event name must not be blank")
+    const rawName = event.name.trim()
+    if (!rawName) throw invalidInput("event name must not be blank")
+    const kind = normaliseKind(event.kind)
     const visitorId = event.visitorId?.trim()
+    const sessionId = event.sessionId?.trim()
+    const path = normalisePath(event.path)
+    const referrer = referrerHost(event.referrer)
+    const device =
+      event.device === "mobile" || event.device === "tablet" || event.device === "desktop"
+        ? event.device
+        : undefined
+    const role = normaliseRole(event.element?.role)
+    const label = normaliseLabel(event.element?.label)
     const properties = sanitizeProperties(event.properties)
     return {
       projectId,
       environment,
-      name: name.slice(0, MAX_EVENT_NAME_CHARS),
+      kind,
+      name: eventNameFor(kind, rawName).slice(0, MAX_EVENT_NAME_CHARS),
       ...(visitorId ? { visitorId: visitorId.slice(0, MAX_VISITOR_ID_CHARS) } : {}),
+      ...(sessionId ? { sessionId: sessionId.slice(0, MAX_SESSION_ID_CHARS) } : {}),
+      ...(path ? { path: path.slice(0, MAX_PATH_CHARS) } : {}),
+      ...(referrer ? { referrerHost: referrer } : {}),
+      ...(device ? { device } : {}),
+      ...(event.durationMs !== undefined ? { durationMs: Math.round(event.durationMs) } : {}),
+      ...(role || label ? { element: { ...(role ? { role } : {}), ...(label ? { label: label.slice(0, MAX_LABEL_CHARS) } : {}) } } : {}),
       ...(properties ? { properties } : {}),
       timestamp: clampTimestamp(event.timestamp, now),
       recordedAt: now,

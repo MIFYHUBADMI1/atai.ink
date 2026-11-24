@@ -102,6 +102,11 @@ export const PUBLIC_API_PREFIXES = [
   // it, which sent every SDK request to the session gate for a 401 before
   // Bearer authentication ever ran (Phase 7 audit CRITICAL finding).
   "/api/runtime/v1/",
+  // Public analytics collector: the snippet installed in an app Atai does not
+  // host posts here from a visitor's browser, authenticated by a PUBLISHABLE
+  // key (analytics-only scope), never by a session cookie. It must answer a
+  // logged-out visitor on a stranger's domain, so the cookie gate cannot apply.
+  "/api/analytics/collect",
 ]
 
 export function proxy(request: NextRequest) {

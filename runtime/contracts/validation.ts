@@ -27,6 +27,8 @@ export const ApiKeyCreateBodySchema = z
     name: z.string().min(1).max(100).optional(),
     environment: z.enum(["development", "production"]),
     scopes: z.array(z.string()).max(50).optional(),
+    /** "publishable" issues a browser-safe key that can only write analytics. */
+    kind: z.enum(["secret", "publishable"]).optional(),
     expiresAt: z.number().int().positive().optional(),
     /** Explicitly forbidden — catch injection attempts with a precise error. */
     userId: z.never().optional(),

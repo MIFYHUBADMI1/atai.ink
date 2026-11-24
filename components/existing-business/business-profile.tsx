@@ -23,7 +23,7 @@ import { Button, buttonVariants } from "@/components/ui/button"
 import { jsonFetcher, postJson, type ApiError } from "@/lib/client/api"
 import { BUSINESS_CLAIM_SUPPORT_HREF } from "@/lib/domain/claim-copy"
 import type { IntakeView } from "@/lib/existing-business/view"
-import { projectBase, type WorkspaceBase } from "@/lib/connected-business/surface"
+import { projectBase, workspaceBase, type WorkspaceBase, type WorkspaceBaseRef } from "@/lib/connected-business/surface"
 import { businessSteps, type BusinessStep, type BusinessStepId } from "@/lib/existing-business/steps"
 import { intakeStatusLabel } from "@/lib/existing-business/stage-labels"
 import { cn } from "@/lib/utils"
@@ -83,8 +83,10 @@ export function BusinessProfile({
   projectId: string
   initialView: IntakeView
   /** Where this stepper's links point. Defaults to the project workspace; a
-   *  connected business passes its own base so nothing leaks into /project. */
-  base?: WorkspaceBase
+   *  connected business passes its own base so nothing leaks into /project.
+   *  A Client Component cannot receive the link builders, so this is the
+   *  serialisable reference and the builders are rebuilt here. */
+  base?: WorkspaceBaseRef
   /** Which API the stepper talks to. Defaults to the project routes; a
    *  connected business addresses the same operations by business id, so the
    *  anchor project id never appears in the browser. */
@@ -92,7 +94,7 @@ export function BusinessProfile({
   /** "h2" when the host page already owns the page title (one h1 per page). */
   headingLevel?: "h1" | "h2"
 }) {
-  const routeBase = base ?? projectBase(projectId)
+  const routeBase = base ? workspaceBase(base) : projectBase(projectId)
   const api = apiBase ?? `/api/projects/${projectId}`
   const [readingOpen, setReadingOpen] = useState(false)
   const [view, setView] = useState<IntakeView>(initialView)
@@ -374,6 +376,11 @@ export function BusinessProfile({
                   connection={view.connection}
                   domainVerified={view.domain.verified}
                   hostname={view.domain.hostname}
+                  runtimeLink={
+                    routeBase.mode === "operate"
+                      ? { href: routeBase.href("settings"), label: "Keys & usage" }
+                      : undefined
+                  }
                   onChanged={refresh}
                 />
               ) : null}

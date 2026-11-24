@@ -27,6 +27,26 @@ export type BusinessPage =
   | "money"
   | "settings"
 
+/**
+ * The serialisable half of a workspace base: just where it points and which
+ * surface it is.
+ *
+ * This exists because a Server Component cannot hand a function to a Client
+ * Component — React refuses it at render time with "Functions cannot be passed
+ * directly to Client Components", which in production is an opaque "An error
+ * occurred in the Server Components render". `BusinessProfile` is a Client
+ * Component and is given a base by the operate surface, so what crosses that
+ * boundary must be data. The `serializable` marker is what makes passing a
+ * `WorkspaceBase` (which carries `href`/`segment`) a type error rather than a
+ * 500 nobody can read.
+ */
+export interface WorkspaceBaseRef {
+  readonly mode: WorkspaceMode
+  /** `/project/<id>` or `/business/<id>`. Never anything else. */
+  readonly base: string
+  readonly serializable: true
+}
+
 export interface WorkspaceBase {
   mode: WorkspaceMode
   /** `/project/<id>` or `/business/<id>`. Never anything else. */
@@ -78,7 +98,9 @@ const BUSINESS_PAGES: Record<BusinessPage, string> = {
   applications: "applications",
   growth: "growth",
   "growth/studio": "growth/studio",
-  "growth/seo": "growth/seo",
+  // The operate surface has no SEO page of its own: the audit renders inside
+  // /growth, so a link to the audit must not point at a route that 404s.
+  "growth/seo": "growth",
   plan: "plan",
   money: "money",
   settings: "settings",
@@ -97,25 +119,32 @@ export function workspaceModeOf(
   return "build"
 }
 
-export function projectBase(projectId: string): WorkspaceBase {
-  const root = `/project/${projectId}`
-  return {
-    mode: "build",
-    base: root,
-    href(page) {
-      if (page === "collaborate") return `${root}/collaborate`
-      const segment = BUILD_PAGES[page]
-      return segment ? `${root}/${segment}` : root
-    },
-    segment(target) {
-      const trimmed = target.replace(/^\/+/, "")
-      return trimmed ? `${root}/${trimmed}` : root
-    },
-  }
+export function projectBaseRef(projectId: string): WorkspaceBaseRef {
+  return { mode: "build", base: `/project/${projectId}`, serializable: true }
 }
 
-export function businessBase(businessId: string): WorkspaceBase {
-  const root = `/business/${businessId}`
+export function businessBaseRef(businessId: string): WorkspaceBaseRef {
+  return { mode: "operate", base: `/business/${businessId}`, serializable: true }
+}
+
+/** Add the link builders to a base reference. Safe on both server and client. */
+export function workspaceBase(ref: WorkspaceBaseRef): WorkspaceBase {
+  const root = ref.base
+  if (ref.mode === "build") {
+    return {
+      mode: "build",
+      base: root,
+      href(page) {
+        if (page === "collaborate") return `${root}/collaborate`
+        const segment = BUILD_PAGES[page]
+        return segment ? `${root}/${segment}` : root
+      },
+      segment(target) {
+        const trimmed = target.replace(/^\/+/, "")
+        return trimmed ? `${root}/${trimmed}` : root
+      },
+    }
+  }
   return {
     mode: "operate",
     base: root,
@@ -133,6 +162,14 @@ export function businessBase(businessId: string): WorkspaceBase {
       return `${root}/${trimmed}`
     },
   }
+}
+
+export function projectBase(projectId: string): WorkspaceBase {
+  return workspaceBase(projectBaseRef(projectId))
+}
+
+export function businessBase(businessId: string): WorkspaceBase {
+  return workspaceBase(businessBaseRef(businessId))
 }
 
 /** True for any sub-route of a project — i.e. the build workspace. */
