@@ -20,20 +20,25 @@ vi.mock("@/lib/db/collections", async () => {
     ],
   })
   const applications = fakeCollection()
+  const domains = fakeCollection()
   return {
     ensureIndexes: async () => {},
     businessesCol: async () => businesses,
     businessMembersCol: async () => members,
     connectedApplicationsCol: async () => applications,
-    __fakes: { businesses, members, applications },
+    businessDomainsCol: async () => domains,
+    __fakes: { businesses, members, applications, domains },
   }
 })
+
+vi.mock("@/lib/domain/service", () => ({ MAX_DOMAIN_HISTORY: 20 }))
 
 vi.mock("@/lib/db/mongodb", async () => {
   const { fakeSession } = await import("@/lib/business/testing/fake-collections")
   return { getMongoClient: async () => ({ startSession: () => fakeSession() }) }
 })
 
+import type { BusinessDomainDoc } from "@/lib/types/business-intake"
 import type { BusinessDoc, BusinessMemberDoc, ConnectedApplicationDoc } from "@/lib/types/business"
 import type { FakeCollection } from "./testing/fake-collections"
 import * as db from "@/lib/db/collections"
@@ -42,6 +47,7 @@ import { systemActor, userActor } from "./permissions"
 import {
   archiveBusiness,
   createBusiness,
+  deleteBusiness,
   getBusiness,
   listBusinessesForUser,
   renameBusiness,
@@ -52,6 +58,7 @@ interface Fakes {
   businesses: FakeCollection<BusinessDoc>
   members: FakeCollection<BusinessMemberDoc>
   applications: FakeCollection<ConnectedApplicationDoc>
+  domains: FakeCollection<BusinessDomainDoc>
 }
 
 const fakes = (db as unknown as { __fakes: Fakes }).__fakes
@@ -60,6 +67,7 @@ beforeEach(() => {
   fakes.businesses.docs.length = 0
   fakes.members.docs.length = 0
   fakes.applications.docs.length = 0
+  fakes.domains.docs.length = 0
 })
 
 describe("business creation", () => {
@@ -302,5 +310,85 @@ describe("business restoration", () => {
     await expect(
       renameBusiness({ businessId: business.id, name: "New", actor: userActor("u1"), now: 500 }),
     ).rejects.toMatchObject({ code: "BUSINESS_FORBIDDEN" })
+  })
+})
+
+describe("business deletion", () => {
+  async function seeded() {
+    const business = await createBusiness({ actor: userActor("u1"), name: "Acme", now: 100 })
+    fakes.applications.docs.push({
+      id: "app_1",
+      businessId: business.id,
+      name: "Acme site",
+      kind: "marketing_site",
+      origin: "https://acme.com",
+      hostname: "acme.com",
+      basePath: "/",
+      primaryUrl: "https://acme.com",
+      hostVerified: true,
+      archivedAt: null,
+      createdAt: 100,
+      updatedAt: 100,
+      schemaVersion: 1,
+    } as unknown as ConnectedApplicationDoc)
+    fakes.domains.docs.push({
+      id: "dom_1",
+      projectId: "proj_1",
+      userId: "u1",
+      businessId: business.id,
+      hostname: "acme.com",
+      canonicalHostname: "acme.com",
+      registrableDomain: "acme.com",
+      submittedUrl: "https://acme.com",
+      status: "verified",
+      token: "secret",
+      tokenHash: "hash",
+      claimExpiresAt: 999,
+      history: [],
+    } as unknown as BusinessDomainDoc)
+    return business
+  }
+
+  it("removes the business, its people, its applications and releases its claims", async () => {
+    const business = await seeded()
+
+    const result = await deleteBusiness({ businessId: business.id, actor: userActor("u1"), now: 500 })
+
+    expect(result.releasedClaims).toBe(1)
+    expect(fakes.businesses.docs).toHaveLength(0)
+    expect(fakes.members.docs).toHaveLength(0)
+    expect(fakes.applications.docs).toHaveLength(0)
+    expect(fakes.domains.docs[0]).toMatchObject({ status: "revoked", releasedAt: 500 })
+    expect(fakes.domains.docs[0].token).toBeUndefined()
+    expect(fakes.domains.docs[0].tokenHash).toBeUndefined()
+  })
+
+  it("deletes an archived business too", async () => {
+    const business = await seeded()
+    await archiveBusiness({ businessId: business.id, actor: userActor("u1"), now: 200 })
+
+    await deleteBusiness({ businessId: business.id, actor: userActor("u1"), now: 500 })
+
+    expect(fakes.businesses.docs).toHaveLength(0)
+  })
+
+  it("refuses an admin who is not the owner", async () => {
+    const business = await seeded()
+    await addMember({ businessId: business.id, userId: "u2", actor: userActor("u1"), role: "admin", now: 200 })
+
+    await expect(deleteBusiness({ businessId: business.id, actor: userActor("u2"), now: 500 })).rejects.toMatchObject({
+      code: "BUSINESS_FORBIDDEN",
+    })
+    expect(fakes.businesses.docs).toHaveLength(1)
+    expect(fakes.applications.docs).toHaveLength(1)
+  })
+
+  it("refuses a non-member without revealing that the business exists", async () => {
+    const business = await seeded()
+
+    await expect(deleteBusiness({ businessId: business.id, actor: userActor("u9"), now: 500 })).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    })
+    expect(fakes.businesses.docs).toHaveLength(1)
   })
 })

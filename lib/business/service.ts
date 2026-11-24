@@ -1,7 +1,13 @@
 import "server-only"
 
 import { AppError } from "@/lib/errors"
-import { businessMembersCol, businessesCol } from "@/lib/db/collections"
+import {
+  businessDomainsCol,
+  businessMembersCol,
+  businessesCol,
+  connectedApplicationsCol,
+} from "@/lib/db/collections"
+import { MAX_DOMAIN_HISTORY } from "@/lib/domain/service"
 import { getMongoClient } from "@/lib/db/mongodb"
 import { cryptoId } from "@/lib/store/id"
 import {
@@ -188,6 +194,70 @@ export async function restoreBusiness(input: {
   const updated = await col.findOne({ id: input.businessId })
   if (!updated) throw new AppError("BUSINESS_NOT_FOUND")
   return updated
+}
+
+/**
+ * Permanently delete a connected business.
+ *
+ * Only the owner may delete it: an admin can run the business, but removing it
+ * destroys the owner's record and frees its website for someone else.
+ *
+ * The business row, its memberships, its applications and every domain claim it
+ * still holds are removed in one transaction. Claims are *released*, not
+ * deleted — the same rule project deletion follows — so the hostname leaves the
+ * uniqueness index and another account can connect it.
+ *
+ * The hidden anchor project is deleted by `lib/connected-business/deletion`,
+ * because this module must not import a project. Billing, refunds and audit
+ * records stay outside this operation.
+ */
+export async function deleteBusiness(input: {
+  businessId: string
+  actor: Actor
+  now?: number
+}): Promise<{ business: BusinessDoc; releasedClaims: number }> {
+  const access = await requireBusinessAccess({
+    businessId: input.businessId,
+    actor: input.actor,
+    permission: "business.manage",
+    allowArchived: true,
+  })
+  if (access.role !== "owner") {
+    throw new AppError("BUSINESS_FORBIDDEN", "Only the business owner can delete it.")
+  }
+
+  const now = input.now ?? Date.now()
+  const client = await getMongoClient()
+  const session = client.startSession()
+  let releasedClaims = 0
+  try {
+    await session.withTransaction(async () => {
+      const claims = await (await businessDomainsCol()).updateMany(
+        { businessId: input.businessId, releasedAt: { $exists: false } },
+        {
+          $set: { status: "revoked", releasedAt: now, updatedAt: now },
+          $unset: { token: "", tokenHash: "", claimExpiresAt: "" },
+          $push: {
+            history: {
+              $each: [{ status: "revoked", at: now, detail: "business deleted" }],
+              $position: 0,
+              $slice: MAX_DOMAIN_HISTORY,
+            },
+          },
+        },
+        { session },
+      )
+      releasedClaims = claims.modifiedCount ?? 0
+
+      await (await connectedApplicationsCol()).deleteMany({ businessId: input.businessId }, { session })
+      await (await businessMembersCol()).deleteMany({ businessId: input.businessId }, { session })
+      await (await businessesCol()).deleteOne({ id: input.businessId }, { session })
+    })
+  } finally {
+    await session.endSession()
+  }
+
+  return { business: access.business, releasedClaims }
 }
 
 /**

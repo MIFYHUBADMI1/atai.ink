@@ -130,6 +130,7 @@ describe("service-boundary authorization", () => {
       "getBusiness",
       "renameBusiness",
       "archiveBusiness",
+      "deleteBusiness",
     ]
     const names = serviceOperations().map((operation) => operation.name)
     for (const name of mustGate) {
