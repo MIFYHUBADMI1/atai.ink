@@ -1841,7 +1841,7 @@ export async function getTotalCreditsConsumed(userId: string): Promise<number> {
         $match: {
           userId,
           direction: "debit",
-          transactionType: { $in: ["build_finalization"] },
+          transactionType: { $in: ["build_finalization", "plan_generation", "website_scrape", "deep_crawl"] },
         },
       },
       { $group: { _id: null, total: { $sum: "$amount" } } },
@@ -1907,6 +1907,12 @@ function formatTransactionReason(type: LedgerTransactionType, metadata?: Record<
       return "Application build"
     case "build_finalization":
       return "Application build (finalized)"
+    case "plan_generation":
+      return "Plan generation"
+    case "website_scrape":
+      return "Website analysis (scrape)"
+    case "deep_crawl":
+      return "Deep crawl (full-site research)"
     case "build_release":
       return "Build refund"
     case "build_refund":

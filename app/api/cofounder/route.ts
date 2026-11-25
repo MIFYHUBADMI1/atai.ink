@@ -9,9 +9,9 @@ import {
   getCofounderConversation,
   getLatestCofounderConversation,
   createCofounderConversation,
-  appendCofounderMessages,
 } from "@/lib/cofounder/conversation"
 import { expireStalePendingActions } from "@/lib/cofounder/pending-actions"
+import { resolveCofounderScope } from "@/lib/connected-business/cofounder-scope"
 
 /**
  * POST /api/cofounder — one Co-founder conversation turn (spec section 60).
@@ -99,14 +99,33 @@ export async function GET(req: Request) {
     const user = await requireUser()
     const url = new URL(req.url)
     const id = url.searchParams.get("id")
+    const scopeKind = url.searchParams.get("scope")
+    const scopeId = url.searchParams.get("scopeId")
+
+    // Surface any pending confirmations for this conversation.
+    await expireStalePendingActions(user.id)
+
+    // A workspace tab asks for its own transcript by scope, not by id: the
+    // conversation for "this business" is derived server-side.
+    if (!id && (scopeKind === "none" || scopeKind === "project" || scopeKind === "business")) {
+      const scope =
+        scopeKind === "none"
+          ? ({ kind: "none" } as const)
+          : ({ kind: scopeKind, id: scopeId ?? "" } as const)
+      const resolved = await resolveCofounderScope(user, { scope })
+      return ok({
+        conversation: resolved.conversation,
+        scope: resolved.scope,
+        activeProjectId: resolved.activeProjectId ?? null,
+      })
+    }
+
     const conversation = id
       ? await getCofounderConversation(id, user.id)
       : await getLatestCofounderConversation(user.id)
     if (!conversation) {
       return ok({ conversation: null })
     }
-    // Surface any pending confirmations for this conversation.
-    await expireStalePendingActions(user.id)
     return ok({ conversation })
   } catch (e) {
     return handleRouteError("api.cofounder.get", e)

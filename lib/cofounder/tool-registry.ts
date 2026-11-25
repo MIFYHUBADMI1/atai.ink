@@ -164,17 +164,66 @@ function forSurface(tool: ToolDefinition, surface: ToolSurface): boolean {
 }
 
 /** Tools the model may call immediately (READ / LOW_RISK_WRITE). */
-export function immediateTools(surface: ToolSurface = "build"): ToolDefinition[] {
-  return REGISTRY.filter((t) => !t.requiresConfirmation && forSurface(t, surface))
+export function immediateTools(surface: ToolSurface = "build", settings: ToolFilterSettings = {}): ToolDefinition[] {
+  return REGISTRY.filter(
+    (t) => !t.requiresConfirmation && forSurface(t, surface) && allowedBySettings(t, settings),
+  )
 }
 
 /** Tools requiring confirmation — prepared during the loop, executed only via
  * the approval endpoint. */
-export function confirmationTools(surface: ToolSurface = "build"): ToolDefinition[] {
-  return REGISTRY.filter((t) => t.requiresConfirmation && forSurface(t, surface))
+export function confirmationTools(surface: ToolSurface = "build", settings: ToolFilterSettings = {}): ToolDefinition[] {
+  return REGISTRY.filter(
+    (t) => t.requiresConfirmation && forSurface(t, surface) && allowedBySettings(t, settings),
+  )
 }
 
 /** Risk check helper for tests and the approval path. */
 export function riskOf(name: string): ToolRisk | undefined {
   return BY_NAME.get(name)?.risk
+}
+
+// ─── Founder narrowing (settings rail) ──────────────────────────────────────
+
+/** Founder-controlled narrowing of the closed registry. Removal only: the
+ * registry stays the ceiling, so no setting can introduce a tool. */
+export interface ToolFilterSettings {
+  disabledTools?: readonly string[]
+  allowConsequential?: boolean
+}
+
+export function allowedBySettings(tool: ToolDefinition, settings: ToolFilterSettings): boolean {
+  if (settings.disabledTools?.includes(tool.name)) return false
+  if (settings.allowConsequential === false && tool.risk !== "READ") return false
+  return true
+}
+
+export function isKnownToolName(name: unknown): name is string {
+  return typeof name === "string" && BY_NAME.has(name)
+}
+
+export interface ToolCatalogEntry {
+  name: string
+  description: string
+  risk: ToolRisk
+  requiresConfirmation: boolean
+  surfaces: ToolSurface[]
+}
+
+function surfacesFor(tool: ToolDefinition): ToolSurface[] {
+  const surfaces: ToolSurface[] = []
+  if (forSurface(tool, "build")) surfaces.push("build")
+  if (forSurface(tool, "operate")) surfaces.push("operate")
+  return surfaces
+}
+
+/** Read-only view of the ceiling for the settings rail. */
+export function listToolCatalog(): ToolCatalogEntry[] {
+  return REGISTRY.map((t) => ({
+    name: t.name,
+    description: t.description,
+    risk: t.risk,
+    requiresConfirmation: t.requiresConfirmation,
+    surfaces: surfacesFor(t),
+  }))
 }

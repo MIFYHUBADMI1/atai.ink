@@ -1,5 +1,5 @@
 import "server-only"
-import { ObjectId } from "mongodb"
+import { ObjectId, type Filter } from "mongodb"
 import { cofounderConversationsCol } from "@/lib/db/collections"
 import { cryptoId } from "@/lib/store/id"
 import type { CofounderConversationDoc, CofounderConversationMessage } from "./types"
@@ -66,7 +66,46 @@ export async function createCofounderConversation(userId: string, activeProjectI
   return doc
 }
 
-/** Append messages and update the conversation's project context in one write. */
+/**
+ * The one conversation for a given scope.
+ *
+ * `activeProjectId` is normalized to `null` before comparison: a stored global
+ * conversation has `activeProjectId: null`, and `undefined === null` is false —
+ * without this the global scope would create a fresh conversation every time.
+ */
+export async function resolveCofounderConversation(
+  userId: string,
+  options: { conversationId?: string; activeProjectId?: string } = {},
+): Promise<CofounderConversationDoc> {
+  const target = options.activeProjectId ?? null
+
+  if (options.conversationId) {
+    const found = await getCofounderConversation(options.conversationId, userId)
+    if (found && (found.activeProjectId ?? null) === target) return found
+  }
+
+  const col = await cofounderConversationsCol()
+  // `$in: [null]` matches both an explicit null and a missing field, which is
+  // what a global conversation looks like after an insert.
+  const filter = (
+    target ? { userId, activeProjectId: target } : { userId, activeProjectId: { $in: [null] } }
+  ) as Filter<import("./types").CofounderConversationMongoDoc>
+  const doc = await col.find(filter).sort({ updatedAt: -1 }).limit(1).next()
+  if (doc) {
+    return {
+      id: doc.id,
+      userId: doc.userId,
+      messages: doc.messages ?? [],
+      activeProjectId: doc.activeProjectId,
+      projectContextReferences: doc.projectContextReferences ?? [],
+      createdAt: doc.createdAt,
+      updatedAt: doc.updatedAt,
+    }
+  }
+
+  return createCofounderConversation(userId, target ?? undefined)
+}
+
 export async function appendCofounderMessages(
   conversationId: string,
   userId: string,
@@ -130,9 +169,12 @@ export const MAX_HISTORY_CHARS = 12_000
  * structural prompt delimiter; the prompt layer wraps the result as untrusted
  * content. Bounds trim the OLDEST messages first, keeping recent continuity.
  */
-export function buildHistoryBlock(messages: CofounderConversationMessage[]): string {
+export function buildHistoryBlock(
+  messages: CofounderConversationMessage[],
+  limit: number = MAX_HISTORY_MESSAGES,
+): string {
   if (!messages?.length) return ""
-  const recent = messages.slice(-MAX_HISTORY_MESSAGES)
+  const recent = limit > 0 ? messages.slice(-limit) : []
   const lines: string[] = []
   let used = 0
   // Walk newest → oldest so the most recent context always survives the bound.

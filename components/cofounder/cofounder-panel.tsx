@@ -10,6 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { CofounderActionCard } from "@/components/cofounder/action-cards"
 import { CofounderWorklog, buildCofounderWorklogSteps } from "@/components/cofounder/cofounder-worklog"
+import { CofounderMarkdown } from "@/components/cofounder/markdown"
 import { jsonFetcher } from "@/lib/client/api"
 import { sendCofounderMessage } from "@/lib/client/cofounder"
 import { useVoiceDictation } from "@/lib/client/use-voice-dictation"
@@ -287,14 +288,14 @@ export function CofounderPanel() {
                         <Sparkles className="size-3 text-primary" aria-hidden />
                         Co-founder
                       </p>
-                      <p className="whitespace-pre-wrap text-sm leading-6 text-foreground">{m.content}</p>
+                      <CofounderMarkdown>{m.content}</CofounderMarkdown>
                     </div>
                   ) : (
                     <div className="max-w-[88%] text-right">
                       <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/70">
                         You
                       </p>
-                      <p className="whitespace-pre-wrap text-sm leading-6 text-foreground/80">{m.content}</p>
+                      <CofounderMarkdown variant="user">{m.content}</CofounderMarkdown>
                     </div>
                   )}
                   {m.action ? (

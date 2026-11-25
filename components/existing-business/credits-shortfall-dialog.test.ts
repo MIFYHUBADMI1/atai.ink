@@ -49,3 +49,29 @@ describe("describeShortfall", () => {
     expect(describeShortfall({ ...short, shortfall: 1 }, "Bakery").cta).toBe("Add 1 credit")
   })
 })
+
+describe("describeShortfall — co-founder message", () => {
+  const message = { readCost: 0, assessmentCost: 5, required: 5, available: 2, shortfall: 3 }
+
+  it("prices the message, not a journey", () => {
+    const copy = describeShortfall(message, "", "message")
+    expect(copy.headline).toBe("You are 3 credits short of your next message")
+    expect(copy.lead).toContain("A message costs 5 credits")
+    expect(copy.lead).not.toContain("Connecting")
+    expect(copy.rows.map((r) => [r.label, r.value])).toEqual([
+      ["Your next message", 5],
+      ["Your balance", 2],
+      ["Still needed", 3],
+    ])
+    expect(copy.cta).toBe("Add 3 credits")
+  })
+
+  it("never shows a site-read row", () => {
+    const copy = describeShortfall(message, "Bakery", "message")
+    expect(copy.rows.some((r) => r.label.includes("live site"))).toBe(false)
+  })
+
+  it("defaults to the connect journey", () => {
+    expect(describeShortfall(short, "Bakery").headline).toContain("finishing Bakery")
+  })
+})

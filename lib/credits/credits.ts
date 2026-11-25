@@ -6,7 +6,7 @@ import {
   getMirrorPipelineCosts,
   DEFAULT_MIRROR_PIPELINE_COSTS,
 } from "@/lib/billing/runtime-config"
-import { getAvailableCredits } from "@/lib/billing/credit-service"
+import { getAvailableCredits, grantCredits } from "@/lib/billing/credit-service"
 
 /**
  * Atai Credit system (spec sections 22 & 23). Atai bills users in
@@ -144,6 +144,7 @@ export async function chargeScrapeCredits(userId: string, projectId: string, pip
     type: "consume",
     amount: -cost,
     reason: `Website scrape (${modeLabel})`,
+    ledgerTransactionType: "website_scrape",
     // Trusted server-derived project context — persisted on the ledger entry
     // (first-class projectId), not just logged (Phase 1 attribution).
     metadata: { projectId },
@@ -183,6 +184,7 @@ export async function chargeDeepCrawlCredits(userId: string, projectId: string, 
     type: "consume",
     amount: -cost,
     reason: `Deep crawl — full-site research (${modeLabel})`,
+    ledgerTransactionType: "deep_crawl",
     // Trusted server-derived project context — persisted on the ledger entry.
     metadata: { projectId },
     createdAt: Date.now(),
@@ -190,21 +192,76 @@ export async function chargeDeepCrawlCredits(userId: string, projectId: string, 
   logger.info("credits.deepCrawl", "charged", { userId, projectId, amount: cost, mode: pipelineMode ?? "legacy" })
 }
 
-/** Charge a user for a successful plan/specification generation. */
-export async function chargePlanCredits(userId: string, projectId: string, pipelineMode?: "legacy" | "heavy") {
+/** A plan charge that can be refunded if generation fails after it was taken. */
+export interface PlanCreditCharge {
+  amount: number
+  /** The ledger idempotency key — the refund derives its own key from it. */
+  idempotencyKey: string
+}
+
+/**
+ * Charge a user for plan/specification generation.
+ *
+ * Called BEFORE the model runs so an account that cannot afford the plan never
+ * receives one. A zero-cost configuration returns null (nothing was charged).
+ * Returns the charge so the caller can refund it if generation fails.
+ */
+export async function chargePlanCredits(
+  userId: string,
+  projectId: string,
+  pipelineMode?: "legacy" | "heavy",
+): Promise<PlanCreditCharge | null> {
   const cost = await getPlanCost(pipelineMode)
+  if (cost <= 0) {
+    logger.info("credits.plan", "charge skipped (zero cost configured)", { userId, projectId })
+    return null
+  }
   const modeLabel = pipelineMode === "heavy" ? "Heavy mode" : "Legacy mode"
+  const idempotencyKey = `plan_${projectId}_${cryptoId()}`
   await store.addTransaction({
-    id: cryptoId(),
+    id: idempotencyKey,
     userId,
     type: "consume",
     amount: -cost,
     reason: `Plan generation (${modeLabel})`,
+    ledgerTransactionType: "plan_generation",
     // Trusted server-derived project context — persisted on the ledger entry.
     metadata: { projectId },
     createdAt: Date.now(),
   })
   logger.info("credits.plan", "charged", { userId, projectId, amount: cost, mode: pipelineMode ?? "legacy" })
+  return { amount: cost, idempotencyKey }
+}
+
+/** Best-effort refund of a plan charge when generation failed. Never throws —
+ * a failed refund must not mask the original error. The refund key derives
+ * from the charge key so a retry can never refund twice. */
+export async function refundPlanCredits(
+  userId: string,
+  projectId: string,
+  charge: PlanCreditCharge | null | undefined,
+): Promise<void> {
+  if (!charge || charge.amount <= 0) return
+  try {
+    await grantCredits({
+      userId,
+      creditType: "permanent",
+      amount: charge.amount,
+      transactionType: "other_reversal",
+      idempotencyKey: `${charge.idempotencyKey}_refund`,
+      projectId,
+      referenceType: "project",
+      referenceId: projectId,
+      metadata: { reason: "Plan generation failed — automatic refund", feature: "plan_generation" },
+    })
+    logger.info("credits.plan", "refunded after failed generation", { userId, projectId, amount: charge.amount })
+  } catch (e) {
+    logger.warn("credits.plan", "refund failed", {
+      userId,
+      projectId,
+      message: e instanceof Error ? e.message : String(e),
+    })
+  }
 }
 
 export async function getBalance(userId: string) {

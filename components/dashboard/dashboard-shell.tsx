@@ -43,6 +43,7 @@ import { cn } from "@/lib/utils"
 
 const NAV = [
   { href: "/dashboard", label: "Home", icon: Home, tour: "nav-dashboard" },
+  { href: "/cofounder", label: "Co-founder", icon: Sparkles, tour: "nav-cofounder" },
   { href: "/projects", label: "All businesses", icon: Building2, tour: "nav-businesses" },
   { href: "/finances", label: "Finances", icon: Wallet, tour: "nav-finances", requires: "built" },
   { href: "/notifications", label: "Notifications", icon: Bell, tour: "nav-notifications" },

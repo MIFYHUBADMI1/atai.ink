@@ -12,6 +12,8 @@ interface Props {
   currentTierId: string | null
   /** Operator-forced tier via COFOUNDER_MODEL_TIER env, if set. */
   envTierId: string | null
+  /** Called after a successful save, so a host surface can update its own view. */
+  onSelected?: (tier: CofounderModelTier) => void
 }
 
 function costLabel(tier: CofounderModelTier): string {
@@ -23,7 +25,7 @@ function costLabel(tier: CofounderModelTier): string {
  * OpenRouter id is shown small for transparency, so founders see what powers
  * each mode without being invited to comparison-shop model names.
  */
-export function AiModelPicker({ tiers, currentTierId, envTierId }: Props) {
+export function AiModelPicker({ tiers, currentTierId, envTierId, onSelected }: Props) {
   const fallbackId = tiers[0]?.id ?? ""
   const [selected, setSelected] = useState(currentTierId ?? fallbackId)
   const [pending, setPending] = useState(false)
@@ -43,6 +45,7 @@ export function AiModelPicker({ tiers, currentTierId, envTierId }: Props) {
     try {
       await patchJson("/api/settings/ai-model", { tier: tier.id })
       setSaved(true)
+      onSelected?.(tier)
     } catch (e) {
       setSelected(previous)
       const err = e as ApiError

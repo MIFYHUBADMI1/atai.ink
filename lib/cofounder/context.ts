@@ -104,12 +104,15 @@ export async function buildWorkspaceOverview(userId: string): Promise<{
 /** Bounded existing-business digest for the prompt block. Reads the same
  * intake record the profile page shows; domain truth comes from the domain
  * records (the intake projection is only written at registration). */
-async function buildExistingBusinessBrief(project: {
-  id: string
-  startingPoint?: string
-  intake?: import("@/lib/types/business-intake").BusinessIntake
-  connection?: import("@/lib/types/business-intake").BusinessConnection
-}): Promise<CofounderExistingBusinessBrief> {
+async function buildExistingBusinessBrief(
+  project: {
+    id: string
+    startingPoint?: string
+    intake?: import("@/lib/types/business-intake").BusinessIntake
+    connection?: import("@/lib/types/business-intake").BusinessConnection
+  },
+  options: { includeAssessment?: boolean } = {},
+): Promise<CofounderExistingBusinessBrief> {
   const intake = project.intake
   const domains = await listProjectDomains(project.id).catch(() => [])
   const result = intake?.assessment?.result
@@ -139,17 +142,24 @@ async function buildExistingBusinessBrief(project: {
       ...(project.connection?.lastSeenAt ? { lastSeenAt: project.connection.lastSeenAt } : {}),
     },
     domainVerified,
-    assessment: {
-      status: intake?.assessment?.status ?? "pending",
-      ...(result?.understanding ? { understanding: result.understanding.slice(0, 700) } : {}),
-      ...(result?.currentPosition ? { currentPosition: result.currentPosition.slice(0, 700) } : {}),
-      priorities: (result?.priorities ?? []).slice(0, 6).map((p) => ({
-        title: p.title,
-        priority: p.priority,
-        ...(p.route ? { route: p.route } : {}),
-      })),
-      openQuestions: (result?.openQuestions ?? []).slice(0, 5),
-    },
+    assessment:
+      options.includeAssessment === false
+        ? {
+            status: "excluded by the founder's context settings",
+            priorities: [],
+            openQuestions: [],
+          }
+        : {
+            status: intake?.assessment?.status ?? "pending",
+            ...(result?.understanding ? { understanding: result.understanding.slice(0, 700) } : {}),
+            ...(result?.currentPosition ? { currentPosition: result.currentPosition.slice(0, 700) } : {}),
+            priorities: (result?.priorities ?? []).slice(0, 6).map((p) => ({
+              title: p.title,
+              priority: p.priority,
+              ...(p.route ? { route: p.route } : {}),
+            })),
+            openQuestions: (result?.openQuestions ?? []).slice(0, 5),
+          },
   }
 }
 
@@ -157,7 +167,12 @@ async function buildExistingBusinessBrief(project: {
 export async function buildActiveProjectBrief(
   projectId: string,
   userId: string,
-  options: { operate?: boolean } = {},
+  options: {
+    operate?: boolean
+    includePlanBrief?: boolean
+    includeAnalytics?: boolean
+    includeBusinessAssessment?: boolean
+  } = {},
 ): Promise<{
   id: string
   name: string
@@ -184,7 +199,9 @@ export async function buildActiveProjectBrief(
   const spec = project.specification
   const existingBusiness =
     businessStartingPointOf(project) === "existing_business"
-      ? await buildExistingBusinessBrief(project)
+      ? await buildExistingBusinessBrief(project, {
+          includeAssessment: options.includeBusinessAssessment !== false,
+        })
       : undefined
   if (options.operate) {
     // A connected business has no plan, build or deployment. Shipping those
@@ -203,12 +220,15 @@ export async function buildActiveProjectBrief(
     mode: project.mode,
     state: project.state,
     ...(project.idea ? { idea: project.idea.slice(0, 300) } : {}),
-    ...(spec ? { planHealthPercent: computePlanHealth(spec).percent } : {}),
-    ...(spec ? { planBrief: buildPlanBrief(spec) } : {}),
+    ...(options.includePlanBrief === false || !spec
+      ? {}
+      : { planHealthPercent: computePlanHealth(spec).percent, planBrief: buildPlanBrief(spec) }),
     ...(planIsLocked(project.state) ? { hasBuiltApp: true } : {}),
     ...(project.state === "building" || project.state === "deploying" ? { buildState: project.state } : {}),
     ...(project.deployment?.productionUrl ? { deployedUrl: project.deployment.productionUrl } : {}),
-    analyticsConsentEnabled: project.analyticsConsent?.enabled === true,
+    ...(options.includeAnalytics === false
+      ? {}
+      : { analyticsConsentEnabled: project.analyticsConsent?.enabled === true }),
     ...(existingBusiness ? { existingBusiness } : {}),
   }
 }

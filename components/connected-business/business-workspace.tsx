@@ -148,7 +148,7 @@ export function BusinessWorkspace({
           name={name}
           onNameChange={setName}
           onRenamed={() => refresh()}
-          onArchived={() => router.push("/business")}
+          onArchived={() => router.push("/projects")}
           onRestored={() => router.refresh()}
         />
       ) : null}

@@ -206,6 +206,16 @@ export function ConnectedBusinessesCard() {
   const { businesses, isLoading } = useBusinesses()
   if (!enabled) return null
 
+  // "Open workspace" must open a workspace. With one business that is that
+  // business; with several there is no single workspace, so the action is the
+  // portfolio it actually leads to. With none, the empty state owns the CTA.
+  const single = !isLoading && businesses.length === 1 ? businesses[0] : null
+  const headerAction = single
+    ? { href: `/business/${single.id}`, label: "Open workspace" }
+    : !isLoading && businesses.length > 1
+      ? { href: "/projects", label: "All businesses" }
+      : null
+
   return (
     <section
       data-atai-tour="dashboard-connected-business"
@@ -220,10 +230,15 @@ export function ConnectedBusinessesCard() {
             The businesses you already run. Atai reads them and connects their apps — nothing is rebuilt or moved.
           </p>
         </div>
-        <Link href="/business" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "shrink-0")}>
-          <Building2 className="size-3.5" />
-          Open workspace
-        </Link>
+        {headerAction ? (
+          <Link
+            href={headerAction.href}
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "shrink-0")}
+          >
+            <Building2 className="size-3.5" />
+            {headerAction.label}
+          </Link>
+        ) : null}
       </div>
 
       {isLoading ? (
@@ -234,7 +249,7 @@ export function ConnectedBusinessesCard() {
       ) : businesses.length === 0 ? (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-border px-4 py-3">
           <p className="text-sm text-muted-foreground">No connected businesses yet.</p>
-          <Link href="/business" className={cn(buttonVariants({ size: "sm" }))}>
+          <Link href="/new/existing" className={cn(buttonVariants({ size: "sm" }))}>
             <Sparkles className="size-3.5" />
             Connect a business
           </Link>

@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm"
 import { useMemo } from "react"
 import type { Components } from "react-markdown"
 import { normalizeMarkdown } from "@/lib/client/speech-text"
+import { cn } from "@/lib/utils"
 
 const components: Components = {
   h1: ({ children }) => (
@@ -80,13 +81,25 @@ const components: Components = {
   td: ({ children }) => <td className="px-3 py-2.5 text-sm leading-6 text-foreground/90">{children}</td>,
 }
 
-export function CofounderMarkdown({ children }: { children: string }) {
+export function CofounderMarkdown({
+  children,
+  variant = "assistant",
+}: {
+  children: string
+  variant?: "assistant" | "user"
+}) {
   // Models emit `##Title` and `### Plan ###`, which CommonMark renders as raw
   // text; normalizing once per content change keeps headings rendered as
   // headings instead of leaking hash marks into the reply.
   const markdown = useMemo(() => normalizeMarkdown(children), [children])
   return (
-    <div className="cofounder-md">
+    <div
+      className={cn(
+        "cofounder-md",
+        variant === "user" &&
+          "text-right [&_p]:text-right [&_ul]:text-left [&_ol]:text-left [&_pre]:text-left [&_blockquote]:text-left",
+      )}
+    >
       <Markdown remarkPlugins={[remarkGfm]} components={components}>
         {markdown}
       </Markdown>
