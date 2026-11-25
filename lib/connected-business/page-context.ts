@@ -10,6 +10,7 @@ import { store } from "@/lib/store/store"
 import type { BusinessDoc } from "@/lib/types/business"
 import type { MirrorProject } from "@/lib/types/project"
 import { resolveBusinessAnchor, type BusinessAnchor } from "./anchor"
+import { withoutMongoId } from "./client-docs"
 
 /**
  * The one preamble every business page shares: session, surface, permission,
@@ -36,7 +37,9 @@ export async function businessPageContext(
   let business: BusinessDoc
   try {
     const access = await requireBusinessAccess({ businessId, actor, permission })
-    business = access.business
+    // Pages hand this document to Client Components (BusinessWorkspace). The
+    // Mongo `_id` is an ObjectId and cannot cross that boundary.
+    business = withoutMongoId(access.business)
   } catch (error) {
     if (error instanceof AppError) notFound()
     throw error

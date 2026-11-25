@@ -107,6 +107,11 @@ export const PUBLIC_API_PREFIXES = [
   // key (analytics-only scope), never by a session cookie. It must answer a
   // logged-out visitor on a stranger's domain, so the cookie gate cannot apply.
   "/api/analytics/collect",
+  // Client error reporter: an error boundary can fire before (or without) a
+  // session — a root-layout failure renders `global-error`. The route is
+  // anonymous, rate-limited per IP and stores nothing personal, so the cookie
+  // gate must not turn a report into a 401.
+  "/api/client-errors",
 ]
 
 export function proxy(request: NextRequest) {

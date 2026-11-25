@@ -4,6 +4,7 @@ import Link from "next/link"
 import { ArrowRight, Coins, Cpu, Globe, Sparkles } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import { formatNumber } from "@/lib/client/format"
 import { cn } from "@/lib/utils"
 
 export interface JourneyCost {
@@ -20,7 +21,7 @@ export interface JourneyCost {
 
 export const TOP_UP_HREF = "/billing/top-up"
 
-const credits = (n: number) => `${n.toLocaleString()} credit${n === 1 ? "" : "s"}`
+const credits = (n: number) => `${formatNumber(n)} credit${n === 1 ? "" : "s"}`
 
 export interface ShortfallRow {
   label: string
@@ -127,7 +128,7 @@ export function CreditsShortfallDialog({
                   {row.icon === "engine" ? <Cpu className="size-3.5" /> : null}
                   {row.label}
                 </dt>
-                <dd className="font-mono tabular-nums">{row.value.toLocaleString()}</dd>
+                <dd className="font-mono tabular-nums">{formatNumber(row.value)}</dd>
               </div>
             ))}
           </dl>

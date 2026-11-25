@@ -36,6 +36,20 @@ describe("AssessmentReport", () => {
     expect(html).not.toContain('title="See what was read"')
   })
 
+  it("accepts a partial stored assessment without throwing", () => {
+    // An older parser could have stored a result missing most sections.
+    const html = renderToStaticMarkup(
+      createElement(AssessmentReport, {
+        assessment: { understanding: "Only this survived" } as unknown as BusinessAssessment,
+      }),
+    )
+
+    expect(html).toContain("Only this survived")
+    expect(html).toContain("Your site · not read")
+    // A missing `generatedAt` must not print "Jan 1, 1970".
+    expect(html).not.toContain("1970")
+  })
+
   it("never offers a preview for a site that was not read", () => {
     const html = renderToStaticMarkup(
       createElement(AssessmentReport, {

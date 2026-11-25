@@ -19,7 +19,7 @@ import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { patchJson, postJson } from "@/lib/client/api"
-import { relativeDeadline, relativeTime } from "@/lib/client/format"
+import { formatTimestamp, relativeDeadline, relativeTime } from "@/lib/client/format"
 import { trackConnectVerified } from "@/lib/analytics/connect-funnel"
 import { hostnameOfUrl, isSameSiteHost } from "@/lib/domain/host"
 import { unresolvedDomainClaims } from "@/lib/existing-business/steps"
@@ -60,7 +60,7 @@ export function methodFor(
 
 function formatDate(at: number | null | undefined): string {
   if (!at) return "—"
-  return new Date(at).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })
+  return formatTimestamp(at)
 }
 
 export function DomainVerification({
@@ -428,12 +428,15 @@ export function DomainVerification({
                   {domain.registrableDomain !== domain.hostname ? `Part of ${domain.registrableDomain} · ` : ""}
                   Added {formatDate(domain.createdAt)}
                 </p>
-                <p className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <p className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground" suppressHydrationWarning>
                   <Clock className="size-3 shrink-0" />
                   {domain.lastCheckedAt ? `Last checked ${relativeTime(domain.lastCheckedAt)}` : "Not checked yet"}
                 </p>
                 {domain.claimExpiresAt && domain.status !== "verified" ? (
-                  <p className="mt-1 flex items-center gap-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+                  <p
+                    className="mt-1 flex items-center gap-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-400"
+                    suppressHydrationWarning
+                  >
                     <TriangleAlert className="size-3 shrink-0" />
                     Reserved for your account {relativeDeadline(domain.claimExpiresAt)} — after that another account can
                     connect it
@@ -470,7 +473,7 @@ export function DomainVerification({
               <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-700 dark:text-amber-400">
                 <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
                 <div className="min-w-0">
-                  <p>
+                  <p suppressHydrationWarning>
                     The re-check {domain.lastFailure ? relativeTime(domain.lastFailure.at) : "just now"} could not find
                     your tag or file. Your domain stays verified for now — restore it and re-check. After repeated
                     failures the verification expires and you can generate a new challenge.
@@ -483,7 +486,9 @@ export function DomainVerification({
             {domain.lastFailure && domain.status !== "verified" ? (
               <div className="mt-3 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs leading-relaxed text-destructive">
                 <p className="break-words">{domain.lastFailure.message}</p>
-                <p className="mt-1 opacity-80">Checked {relativeTime(domain.lastFailure.at)}.</p>
+                <p className="mt-1 opacity-80" suppressHydrationWarning>
+                  Checked {relativeTime(domain.lastFailure.at)}.
+                </p>
                 {/* A redirect that leaves the site is not a dead end: the address
                     that answered is the one worth proving. */}
                 {domain.lastFailure.hostname ? (

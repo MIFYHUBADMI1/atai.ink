@@ -75,14 +75,14 @@ export function businessPriorities(input: { project: MirrorProject; businessId: 
   const priorities = input.project.intake?.assessment?.result?.priorities ?? []
 
   return priorities.map((priority) => ({
-    title: priority.title,
-    explanation: priority.explanation,
-    whyItMatters: priority.whyItMatters,
-    expectedOutcome: priority.expectedOutcome,
+    title: priority.title ?? "",
+    explanation: priority.explanation ?? "",
+    whyItMatters: priority.whyItMatters ?? "",
+    expectedOutcome: priority.expectedOutcome ?? "",
     priority: horizonOf(priority.priority),
-    ataiSection: priority.ataiSection,
+    ataiSection: priority.ataiSection ?? "",
     href: priority.route ? base.segment(segmentOf(priority.route, input.project.id)) : "",
-    executableNow: priority.executableNow,
+    executableNow: priority.executableNow === true,
     needs: priority.needs,
   }))
 }

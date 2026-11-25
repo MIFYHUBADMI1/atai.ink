@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
+import { formatTimestamp } from "@/lib/client/format"
 import { sendJson } from "./api-client"
 import {
   APPLICATION_KINDS,
@@ -199,8 +200,8 @@ function Overview({
         <CardContent className="grid gap-2 text-sm sm:grid-cols-2">
           <Row label="Business id" value={business.id} />
           <Row label="Owner" value={business.ownerId} />
-          <Row label="Created" value={new Date(business.createdAt).toLocaleString()} />
-          <Row label="Updated" value={new Date(business.updatedAt).toLocaleString()} />
+          <Row label="Created" value={formatTimestamp(business.createdAt)} />
+          <Row label="Updated" value={formatTimestamp(business.updatedAt)} />
         </CardContent>
       </Card>
     </div>
@@ -462,7 +463,9 @@ function People({
                   <div className="min-w-0">
                     <p className="truncate font-mono text-sm">{member.userId}</p>
                     <p className="text-xs text-muted-foreground">
-                      {member.scope.kind === "all" ? "Whole business" : `${member.scope.applicationIds.length} application(s)`}
+                      {!member.scope || member.scope.kind === "all"
+                        ? "Whole business"
+                        : `${member.scope.applicationIds?.length ?? 0} application(s)`}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">

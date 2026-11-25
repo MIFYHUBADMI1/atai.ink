@@ -36,6 +36,32 @@ export function relativeTimeShort(value: string | number | Date): string {
   return new Date(then).toLocaleDateString("en-US", { month: "short", day: "numeric" })
 }
 
+/**
+ * Deterministic number formatting. `toLocaleString()` with no arguments reads
+ * the runtime locale, so the server (often `en-US`) and a `de-DE` browser
+ * disagree on separators and hydration fails. Every number on a server-rendered
+ * surface goes through this.
+ */
+export function formatNumber(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "—"
+  return new Intl.NumberFormat("en-US").format(value)
+}
+
+/**
+ * Deterministic timestamp formatting, pinned to `en-US` + `UTC` so the server
+ * HTML and the first client pass are byte-identical. A founder who wants local
+ * time gets it from `<Timestamp>`/relative helpers after mount, not here.
+ */
+export function formatTimestamp(
+  value: string | number | Date | null | undefined,
+  options: Intl.DateTimeFormatOptions = { dateStyle: "medium", timeStyle: "short" },
+): string {
+  if (value === null || value === undefined) return ""
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return ""
+  return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", ...options }).format(date)
+}
+
 /** How long until a deadline still in the future: "for 41 more hours".
  * Mirrors `relativeTime`'s thresholds so a card can say how long is left. */
 export function relativeDeadline(value: string | number | Date): string {
