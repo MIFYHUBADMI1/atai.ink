@@ -70,6 +70,8 @@ import type { ProviderCostStatus } from "./cost-status"
  *  - build_finalization                  — LEGACY path debit (mongo-store
  *      addTransaction era); a single build writes one or the other, never
  *      both (finalizeBuildAuthorization writes no ledger row)
+ *  - plan_generation / website_scrape / deep_crawl — research charges that
+ *      used to be folded into build_finalization
  *  - ai_collaboration                    — collaborate / studio / seo /
  *      resources feature charges
  *  - infrastructure_purchase             — explicit infra credit purchases */
@@ -78,6 +80,9 @@ export const PROJECT_CREDIT_CONSUMPTION_TYPES = [
   "runtime_reservation",
   "build_reservation",
   "build_finalization",
+  "plan_generation",
+  "website_scrape",
+  "deep_crawl",
   "ai_collaboration",
   "infrastructure_purchase",
 ] as const

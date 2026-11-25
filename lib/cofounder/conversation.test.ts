@@ -6,9 +6,11 @@ vi.mock("@/lib/store/id", () => ({ cryptoId: () => "id" }))
 
 import {
   buildHistoryBlock,
+  resolveCofounderConversation,
   MAX_HISTORY_MESSAGES,
   MAX_HISTORY_CHARS,
 } from "./conversation"
+import { cofounderConversationsCol } from "@/lib/db/collections"
 import type { CofounderConversationMessage } from "./types"
 
 /**
@@ -83,5 +85,81 @@ describe("buildHistoryBlock — character bound", () => {
     const lines = out.split("\n")
     expect(lines).toHaveLength(1)
     expect(lines[0]).toBe(`You: ${huge}`)
+  })
+})
+describe("resolveCofounderConversation — scope normalization", () => {
+  type Row = {
+    id: string
+    userId: string
+    messages?: CofounderConversationMessage[]
+    activeProjectId?: string | null
+    projectContextReferences?: string[]
+    createdAt: number
+    updatedAt: number
+  }
+
+  function fakeCol(rows: Row[]) {
+    return {
+      findOne: async (filter: { id: string; userId: string }) =>
+        rows.find((row) => row.id === filter.id && row.userId === filter.userId) ?? null,
+      find: (filter: { userId: string; activeProjectId?: unknown }) => {
+        const matched = rows.filter((row) => {
+          if (row.userId !== filter.userId) return false
+          const wanted = filter.activeProjectId
+          if (wanted && typeof wanted === "object" && "$in" in (wanted as object)) {
+            return row.activeProjectId == null
+          }
+          return row.activeProjectId === wanted
+        })
+        return {
+          sort: () => ({
+            limit: () => ({
+              next: async () => [...matched].sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null,
+            }),
+          }),
+        }
+      },
+      insertOne: async (doc: Row) => {
+        rows.push(doc)
+        return { acknowledged: true }
+      },
+    }
+  }
+
+  it("reuses a stored global conversation whose activeProjectId is null", async () => {
+    const rows: Row[] = [
+      { id: "cc_global", userId: "u1", messages: [], activeProjectId: null, createdAt: 1, updatedAt: 5 },
+    ]
+    vi.mocked(cofounderConversationsCol).mockResolvedValue(fakeCol(rows) as never)
+
+    const conversation = await resolveCofounderConversation("u1")
+    expect(conversation.id).toBe("cc_global")
+    expect(rows).toHaveLength(1)
+  })
+
+  it("reuses the conversation for the matching project", async () => {
+    const rows: Row[] = [
+      { id: "cc_global", userId: "u1", messages: [], activeProjectId: null, createdAt: 1, updatedAt: 5 },
+      { id: "cc_p1", userId: "u1", messages: [], activeProjectId: "p1", createdAt: 2, updatedAt: 9 },
+    ]
+    vi.mocked(cofounderConversationsCol).mockResolvedValue(fakeCol(rows) as never)
+
+    const conversation = await resolveCofounderConversation("u1", { activeProjectId: "p1" })
+    expect(conversation.id).toBe("cc_p1")
+  })
+
+  it("ignores a conversationId that belongs to a different scope", async () => {
+    const rows: Row[] = [
+      { id: "cc_p1", userId: "u1", messages: [], activeProjectId: "p1", createdAt: 2, updatedAt: 9 },
+    ]
+    vi.mocked(cofounderConversationsCol).mockResolvedValue(fakeCol(rows) as never)
+
+    const conversation = await resolveCofounderConversation("u1", {
+      conversationId: "cc_p1",
+      activeProjectId: "p2",
+    })
+    expect(conversation.id).not.toBe("cc_p1")
+    expect(conversation.activeProjectId).toBe("p2")
+    expect(rows).toHaveLength(2)
   })
 })

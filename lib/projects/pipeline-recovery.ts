@@ -1,7 +1,7 @@
 import "server-only"
 import { store, cryptoId } from "@/lib/store/store"
 import { logger } from "@/lib/logging/logger"
-import { classifyComplexity, chargePlanCredits } from "@/lib/credits/credits"
+import { classifyComplexity, chargePlanCredits, refundPlanCredits, type PlanCreditCharge } from "@/lib/credits/credits"
 import { startProjectBuild, startProjectDeploy } from "@/lib/projects/project-actions"
 import { markPipelineFailure, runDeepCrawlAnalysis, runScratchAnalysis, runWebsiteAnalysis } from "@/lib/analysis/pipeline"
 import { runGitHubAnalysis } from "@/lib/analysis/github-pipeline"
@@ -118,11 +118,18 @@ async function regeneratePlan(project: MirrorProject): Promise<void> {
     await dispatchFullPipeline(project)
     return
   }
+  let planCharge: PlanCreditCharge | null = null
   try {
     const attachmentContext = await getProjectAttachmentContext(project.id).catch(() => "")
     const understanding = attachmentContext && !project.understanding.founderContext
       ? { ...project.understanding, founderContext: attachmentContext }
       : project.understanding
+    // Charge before drafting so an underfunded retry cannot produce a free
+    // plan. Deep crawls pay for planning upfront with the crawl; the refund
+    // below covers a failed draft.
+    if (project.crawlMode !== "deep") {
+      planCharge = await chargePlanCredits(project.userId, project.id, project.pipelineMode)
+    }
     const specification = await generateSpecificationFromUnderstanding(
       understanding,
       project.userId,
@@ -137,24 +144,13 @@ async function regeneratePlan(project: MirrorProject): Promise<void> {
       error: undefined,
       pipelineRecovery: undefined,
     })
-    // Deep crawls pay for planning upfront with the crawl; everything else is
-    // charged when the plan is actually produced, exactly like the pipeline.
-    if (project.crawlMode !== "deep") {
-      try {
-        await chargePlanCredits(project.userId, project.id, project.pipelineMode)
-      } catch (e) {
-        logger.error("pipeline.recovery", "plan credit charge failed", {
-          projectId: project.id,
-          error: (e as Error).message,
-        })
-      }
-    }
     await store.appendEvent(project.id, event("plan", "✨ Your plan is ready. Review it before building."))
   } catch (e) {
     logger.error("pipeline.recovery", "plan regeneration failed", {
       projectId: project.id,
       error: (e as Error).message,
     })
+    if (planCharge) await refundPlanCredits(project.userId, project.id, planCharge)
     await markPipelineFailure(project.id, "plan", "The plan could not be completed.", "We couldn't finish the plan.")
   }
 }

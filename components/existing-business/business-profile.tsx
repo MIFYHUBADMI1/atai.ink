@@ -21,6 +21,8 @@ import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { jsonFetcher, postJson, type ApiError } from "@/lib/client/api"
+import { formatNumber, formatTimestamp } from "@/lib/client/format"
+import { completeIntakeView } from "@/lib/existing-business/intake-view"
 import { BUSINESS_CLAIM_SUPPORT_HREF } from "@/lib/domain/claim-copy"
 import type { IntakeView } from "@/lib/existing-business/view"
 import { projectBase, workspaceBase, type WorkspaceBase, type WorkspaceBaseRef } from "@/lib/connected-business/surface"
@@ -97,7 +99,10 @@ export function BusinessProfile({
   const routeBase = base ? workspaceBase(base) : projectBase(projectId)
   const api = apiBase ?? `/api/projects/${projectId}`
   const [readingOpen, setReadingOpen] = useState(false)
-  const [view, setView] = useState<IntakeView>(initialView)
+  // Every view this component holds goes through `completeIntakeView`: a poll
+  // or start response must never replace a full view with a partial one and
+  // crash the page on the next render.
+  const [view, setView] = useState<IntakeView>(() => completeIntakeView(initialView))
   const [busy, setBusy] = useState<"retry" | "reassess" | null>(null)
   // A refusal to start for want of credits carries its numbers; it is not a
   // red error line, it is a decision the founder can act on.
@@ -113,7 +118,7 @@ export function BusinessProfile({
   const refresh = useCallback(async () => {
     try {
       const next = await jsonFetcher<IntakeView>(api)
-      setView(next)
+      setView(completeIntakeView(next))
     } catch {
       // A failed poll is not a failed intake — keep the last honest state.
     }
@@ -187,7 +192,7 @@ export function BusinessProfile({
         api,
         action ? { action } : {},
       )
-      setView(data.view)
+      setView(completeIntakeView(data.view))
       if (data.started) {
         watchStartedAt.current = Date.now()
         watchDeadline.current = Date.now() + 180_000
@@ -621,7 +626,7 @@ function AssessmentStep({
             Write it again
           </Button>
           {assessment.generatedAt ? (
-            <p className="text-[11px] text-muted-foreground">Written {new Date(assessment.generatedAt).toLocaleString()}.</p>
+            <p className="text-[11px] text-muted-foreground">Written {formatTimestamp(assessment.generatedAt)}.</p>
           ) : null}
         </div>
         {error ? <Alert>{error}</Alert> : null}
@@ -666,15 +671,15 @@ function AssessmentStep({
       {cost && cost.required > 0 ? (
         <p className="text-xs leading-relaxed text-muted-foreground">
           {cost.readCost > 0 && !website.analyzed
-            ? `${cost.readCost.toLocaleString()} credits to read your live site, then `
+            ? `${formatNumber(cost.readCost)} credits to read your live site, then `
             : ""}
-          {cost.assessmentCost.toLocaleString()} credits for the read
+          {formatNumber(cost.assessmentCost)} credits for the read
           {(cost.engineCost ?? 0) > 0
-            ? `, plus ${cost.engineCost?.toLocaleString()} for ${cost.engineName ?? "your engine"}`
+            ? `, plus ${formatNumber(cost.engineCost)} for ${cost.engineName ?? "your engine"}`
             : ""}
-          . You have {cost.available.toLocaleString()}
+          . You have {formatNumber(cost.available)}
           {cost.shortfall > 0
-            ? ` — ${cost.shortfall.toLocaleString()} short of finishing.`
+            ? ` — ${formatNumber(cost.shortfall)} short of finishing.`
             : " — enough to finish."}
         </p>
       ) : null}

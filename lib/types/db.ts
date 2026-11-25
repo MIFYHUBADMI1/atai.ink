@@ -129,6 +129,31 @@ export interface UserDoc {
   }
   /** Picked AI co-founder engine tier id (see lib/cofounder/models.ts). */
   cofounderModelTier?: string
+  /** Founder-defined co-founder identity and tone (see lib/cofounder/persona.ts). */
+  cofounderProfile?: {
+    name?: string
+    archetype?: string
+    detail?: number
+    directness?: number
+    instructions?: string
+    updatedAt?: number
+  }
+  /** What the co-founder is allowed to see in its context block. */
+  cofounderContext?: {
+    historyDepth?: number
+    includePlanBrief?: boolean
+    includeAnalytics?: boolean
+    includeRecentProjects?: boolean
+    includeBusinessAssessment?: boolean
+    notes?: string
+    updatedAt?: number
+  }
+  /** Founder narrowing of the closed tool registry — removal only. */
+  cofounderTools?: {
+    disabledTools?: string[]
+    allowConsequential?: boolean
+    updatedAt?: number
+  }
   suspended?: boolean
   suspendedAt?: number
   suspendedReason?: string

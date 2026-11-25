@@ -57,13 +57,15 @@ vi.mock("@/lib/infrastructure/plans", () => ({
 }))
 vi.mock("@/lib/credits/credits", () => ({
   chargeScrapeCredits: vi.fn(),
-  chargePlanCredits: vi.fn(),
+  chargePlanCredits: vi.fn(async () => null),
+  refundPlanCredits: vi.fn(),
   chargeDeepCrawlCredits: vi.fn(),
   reserveCredits: mocks.reserveCredits,
   refundReservation: mocks.refundReservation,
   getTierCost: mocks.getTierCost.mockResolvedValue(1000),
   classifyComplexity: mocks.classifyComplexity.mockReturnValue("medium"),
   hasSufficientCredits: mocks.hasSufficientCredits,
+  getPlanCost: vi.fn(async () => 5),
   getScrapeCost: vi.fn(),
   getDeepCrawlCost: vi.fn(),
 }))

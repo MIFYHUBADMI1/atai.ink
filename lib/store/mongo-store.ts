@@ -96,7 +96,7 @@ export class MongoStore implements DataStore {
         userId: tx.userId,
         amount: absoluteAmount,
         creditType: 'permanent', // Default for legacy addTransaction calls
-        transactionType: tx.type === 'grant' ? 'promotional_grant' : 'admin_adjustment',
+        transactionType: tx.ledgerTransactionType ?? (tx.type === 'grant' ? 'promotional_grant' : 'admin_adjustment'),
         idempotencyKey: tx.id, // Use transaction ID as idempotency key
         // First-class project attribution (Phase 1) — only when the caller
         // supplied trusted server-side project context.
@@ -113,7 +113,7 @@ export class MongoStore implements DataStore {
       const result = await consumeCredits({
         userId: tx.userId,
         amount: absoluteAmount,
-        transactionType: tx.type === 'consume' ? 'build_finalization' : 'admin_adjustment',
+        transactionType: tx.ledgerTransactionType ?? (tx.type === 'consume' ? 'build_finalization' : 'admin_adjustment'),
         idempotencyKey: tx.id,
         // First-class project attribution (Phase 1) — only when the caller
         // supplied trusted server-side project context.
@@ -645,7 +645,12 @@ function mapLedgerToLegacyTransaction(entry: CreditLedgerEntry): CreditTransacti
   let legacyType: CreditTransaction['type'] = 'grant'
   if (entry.transactionType === 'build_reservation') {
     legacyType = 'reserve'
-  } else if (entry.transactionType === 'build_finalization') {
+  } else if (
+    entry.transactionType === 'build_finalization' ||
+    entry.transactionType === 'plan_generation' ||
+    entry.transactionType === 'website_scrape' ||
+    entry.transactionType === 'deep_crawl'
+  ) {
     legacyType = 'consume'
   } else if (entry.transactionType === 'build_release' || entry.transactionType === 'build_refund') {
     legacyType = 'refund'
@@ -661,6 +666,7 @@ function mapLedgerToLegacyTransaction(entry: CreditLedgerEntry): CreditTransacti
     reason: (entry.metadata?.reason as string) || entry.transactionType,
     buildRunId: entry.referenceType === 'build' ? entry.referenceId : undefined,
     createdAt: entry.createdAt,
+    ledgerTransactionType: entry.transactionType,
     metadata: entry.metadata
   }
 }

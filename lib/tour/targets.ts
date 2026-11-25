@@ -30,6 +30,7 @@ export interface TourTarget {
 export const TOUR_TARGETS = {
   // ── Workspace shell ───────────────────────────────────────────────────────
   "nav-dashboard": { label: "Dashboard", shell: "workspace", risk: "none" },
+  "nav-cofounder": { label: "Co-founder", shell: "workspace", risk: "none" },
   "nav-businesses": { label: "Your businesses", shell: "workspace", risk: "none" },
   "nav-business-overview": { label: "Business overview", shell: "workspace", risk: "none" },
   "nav-business-applications": { label: "Applications", shell: "workspace", risk: "none" },

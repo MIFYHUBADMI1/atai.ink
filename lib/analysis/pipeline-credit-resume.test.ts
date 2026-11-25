@@ -45,8 +45,10 @@ vi.mock("@/lib/credits/credits", () => ({
   reserveCredits: mocks.reserveCredits,
   refundReservation: mocks.refundReservation,
   chargeScrapeCredits: vi.fn(),
-  chargePlanCredits: vi.fn(),
+  chargePlanCredits: vi.fn(async () => null),
+  refundPlanCredits: vi.fn(),
   chargeDeepCrawlCredits: vi.fn(),
+  getPlanCost: vi.fn(async () => 5),
   getScrapeCost: vi.fn(),
   getDeepCrawlCost: vi.fn(),
 }))

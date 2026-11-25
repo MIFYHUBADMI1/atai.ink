@@ -48,6 +48,17 @@ function render(v: IntakeView) {
  * lists every step, so a step title proves nothing about what is open.
  */
 describe("BusinessProfile", () => {
+  it("completes a partial view instead of crashing on it", () => {
+    // A poll or start response that lost a section used to replace the view and
+    // take the page down on the next render. The component must complete it.
+    const html = renderToStaticMarkup(
+      createElement(BusinessProfile, { projectId: "p1", initialView: {} as unknown as IntakeView }),
+    )
+
+    expect(html).toContain("Your existing business")
+    expect(html).toContain("Step 1 of 3")
+  })
+
   it("opens the domain step, and only that panel, once the first read exists", () => {
     const html = render(view())
 

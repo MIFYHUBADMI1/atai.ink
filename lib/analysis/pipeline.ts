@@ -7,7 +7,7 @@ import { TotalumError } from "@/lib/integrations/totalum/errors"
 import type { LaunchProjectResponse } from "@/lib/integrations/totalum/types"
 import { initializeProjectInfrastructure } from "@/lib/infrastructure/service"
 import { getInfrastructurePlan } from "@/lib/infrastructure/plans"
-import { chargeScrapeCredits, chargePlanCredits, chargeDeepCrawlCredits, reserveCredits, refundReservation, getTierCost, classifyComplexity, hasSufficientCredits, getScrapeCost, getDeepCrawlCost } from "@/lib/credits/credits"
+import { chargeScrapeCredits, chargePlanCredits, refundPlanCredits, chargeDeepCrawlCredits, reserveCredits, refundReservation, getTierCost, classifyComplexity, hasSufficientCredits, getScrapeCost, getDeepCrawlCost, getPlanCost, type PlanCreditCharge } from "@/lib/credits/credits"
 import { buildInitialBuildPrompt } from "./prompt-builder"
 import { analyzeWebsite } from "./understanding"
 import { generateSpecificationFromUnderstanding, generateSpecificationFromIdea } from "./specification"
@@ -16,6 +16,7 @@ import { recordAIArtifacts } from "@/lib/projects/ai-artifacts"
 import { getProjectAttachmentContext } from "@/lib/projects/attachments"
 import { recordCreditBlock } from "@/lib/credits/credit-block"
 import { authorizeProductionWork } from "@/lib/billing/entitlements/require"
+import { AppError } from "@/lib/errors"
 import { makeAIArtifact, rawTextFromError, stageFromError, type NewAIArtifact } from "@/lib/types/ai-artifacts"
 
 function event(stage: string, message: string, level: ProjectEvent["level"] = "info"): ProjectEvent {
@@ -72,6 +73,44 @@ export async function markPipelineFailure(
     },
   })
   await store.appendEvent(projectId, event(phase === "understand" ? "analyze" : "specify", logMessage, "error"))
+}
+
+/**
+ * Charge the plan before the model runs, so an account that cannot afford it
+ * never receives a free plan. On refusal the step is failed with a credit
+ * block the workspace can act on. The returned charge is refunded by the
+ * caller if generation then fails.
+ */
+async function chargePlanBeforeGeneration(
+  projectId: string,
+  userId: string,
+  pipelineMode?: "legacy" | "heavy",
+): Promise<{ ok: true; charge: PlanCreditCharge | null } | { ok: false }> {
+  const required = await getPlanCost(pipelineMode)
+  const refuse = async () => {
+    await recordCreditBlock(projectId, userId, { required, action: "the plan", resume: "analysis" })
+    await markPipelineFailure(
+      projectId,
+      "plan",
+      "💳 Not enough credits to write your plan. Top up and retry — everything we learned is kept.",
+      "Not enough credits to generate the plan.",
+    )
+  }
+
+  if (!(await hasSufficientCredits(userId, required))) {
+    await refuse()
+    return { ok: false }
+  }
+  try {
+    return { ok: true, charge: await chargePlanCredits(userId, projectId, pipelineMode) }
+  } catch (e) {
+    // The balance moved between the check and the debit. Same refusal.
+    if (e instanceof AppError && e.code === "INSUFFICIENT_CREDITS") {
+      await refuse()
+      return { ok: false }
+    }
+    throw e
+  }
 }
 
 /**
@@ -257,6 +296,7 @@ export async function runWebsiteAnalysis(projectId: string, pipelineMode?: "lega
   }
 
   let phase: "understand" | "plan" = "understand"
+  let planCharge: PlanCreditCharge | null = null
   try {
     await store.updateProject(projectId, { state: "analyzing" })
     await store.appendEvent(projectId, event("analyze", `🔍 Putting on detective hat... Time to stalk ${project.sourceUrl} (legally!)`))
@@ -350,6 +390,11 @@ export async function runWebsiteAnalysis(projectId: string, pipelineMode?: "lega
     phase = "plan"
     await store.appendEvent(projectId, event("specify", `📝 Time to write the master plan... Think of this as your app's blueprint, but cooler!`))
     console.log("[v0] pipeline.website: step 3/3 generateSpecificationFromUnderstanding starting", { projectId, pipelineMode })
+    // Charge before generating: an underfunded account must never receive a
+    // plan it did not pay for. Refunded below if generation fails.
+    const planGate = await chargePlanBeforeGeneration(projectId, project.userId, pipelineMode)
+    if (!planGate.ok) return
+    planCharge = planGate.charge
     const specification = await generateSpecificationFromUnderstanding(understanding, project.userId, projectId, pipelineMode)
     // Classify complexity for customer-facing tier pricing.
     specification.complexity = classifyComplexity(specification)
@@ -379,14 +424,9 @@ export async function runWebsiteAnalysis(projectId: string, pipelineMode?: "lega
     }
     await store.appendEvent(projectId, event("specify", `🎯 Blueprint complete! Your app is classified as ${specification.complexity.toUpperCase()} tier. Review your plan and start the build when ready!`))
 
-    // Charge credits for the plan generation.
-    try {
-      await chargePlanCredits(project.userId, projectId, pipelineMode)
+    if (planCharge) {
       const modeLabel = pipelineMode === "heavy" ? "Heavy mode" : "Legacy"
       await store.appendEvent(projectId, event("specify", `💸 Plan credits charged (${modeLabel}). Review your plan and refine it before starting the build.`))
-    } catch (e) {
-      console.log("[v0] pipeline.website: plan credit charge failed", { projectId, message: (e as Error).message })
-      logger.error("pipeline.plan", "credit charge failed", { projectId, message: (e as Error).message })
     }
 
     await store.appendEvent(projectId, event("plan", `✨ Your app plan is ready! Taking you to the Collaborate page to review and refine before building.`))
@@ -400,6 +440,7 @@ export async function runWebsiteAnalysis(projectId: string, pipelineMode?: "lega
       stack: (e as Error).stack,
     })
     logger.error("pipeline.website", "analysis failed", { projectId, phase, message: (e as Error).message })
+    if (planCharge) await refundPlanCredits(project.userId, projectId, planCharge)
     await captureFailureArtifact(projectId, e)
     await markPipelineFailure(
       projectId,
@@ -420,11 +461,17 @@ export async function runScratchAnalysis(projectId: string, pipelineMode?: "lega
     console.log("[v0] pipeline.scratch: aborting, no project or idea", { projectId, hasProject: Boolean(project) })
     return
   }
+  let planCharge: PlanCreditCharge | null = null
   try {
     await store.updateProject(projectId, { state: "analyzing" })
     await store.appendEvent(projectId, event("specify", "💡 Your idea is brilliant! Let's turn those brain waves into code..."))
     console.log("[v0] pipeline.scratch: state -> analyzing, calling generateSpecificationFromIdea", { projectId, pipelineMode })
     await store.appendEvent(projectId, event("specify", "🤖 AI is brainstorming... Imagine a room full of engineers, but faster!"))
+    // Charge before generating: an underfunded account must never receive a
+    // plan it did not pay for. Refunded below if generation fails.
+    const planGate = await chargePlanBeforeGeneration(projectId, project.userId, pipelineMode)
+    if (!planGate.ok) return
+    planCharge = planGate.charge
     const specification = await generateSpecificationFromIdea(
       attachmentAwareIdea(project.idea, await getProjectAttachmentContext(projectId)),
       project.userId,
@@ -459,14 +506,9 @@ export async function runScratchAnalysis(projectId: string, pipelineMode?: "lega
     }
     await store.appendEvent(projectId, event("specify", `🎨 Ta-da! Your app blueprint is ready. Complexity level: ${specification.complexity.toUpperCase()}. Review and refine it before building!`))
 
-    // Charge credits for the plan generation.
-    try {
-      await chargePlanCredits(project.userId, projectId, pipelineMode)
+    if (planCharge) {
       const modeLabel = pipelineMode === "heavy" ? "Heavy mode" : "Legacy"
       await store.appendEvent(projectId, event("specify", `💳 Plan credits charged (${modeLabel}). Your app plan is ready — taking you there now.`))
-    } catch (e) {
-      console.log("[v0] pipeline.scratch: plan credit charge failed", { projectId, message: (e as Error).message })
-      logger.error("pipeline.plan", "credit charge failed", { projectId, message: (e as Error).message })
     }
 
     await store.appendEvent(projectId, event("plan", "✨ Your app plan is ready! Taking you to the Collaborate page now."))
@@ -478,6 +520,7 @@ export async function runScratchAnalysis(projectId: string, pipelineMode?: "lega
       stack: (e as Error).stack,
     })
     logger.error("pipeline.scratch", "failed", { projectId, message: (e as Error).message })
+    if (planCharge) await refundPlanCredits(project.userId, projectId, planCharge)
     await captureFailureArtifact(projectId, e)
     await markPipelineFailure(
       projectId,

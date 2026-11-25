@@ -48,7 +48,24 @@ vi.mock("@/lib/api/ai-context", () => ({ aiSignal: () => undefined }))
 vi.mock("@/lib/api/upstream-error", () => ({ isAbortTimeoutError: () => false }))
 vi.mock("./prompts", () => ({
   buildAgentContextBlock: () => "CONTEXT_BLOCK",
+  buildCofounderSystemPrompt: () => "SYSTEM",
   COFOUNDER_AGENT_SYSTEM: "SYSTEM",
+}))
+vi.mock("./profile", () => ({
+  readCofounderSettings: vi.fn(() =>
+    Promise.resolve({
+      profile: { name: "Co-founder", archetype: "strategic", detail: 3, directness: 3, instructions: "" },
+      context: {
+        historyDepth: 12,
+        includePlanBrief: true,
+        includeAnalytics: true,
+        includeRecentProjects: true,
+        includeBusinessAssessment: true,
+        notes: "",
+      },
+      tools: { disabledTools: [], allowConsequential: true },
+    }),
+  ),
 }))
 vi.mock("./context", () => ({ buildActiveProjectBrief: vi.fn(() => Promise.resolve(null)) }))
 vi.mock("./tool-registry", () => ({ immediateTools: () => [], confirmationTools: () => [], getTool: vi.fn() }))

@@ -23,6 +23,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { jsonFetcher, postJson } from "@/lib/client/api"
+import { formatNumber } from "@/lib/client/format"
 import { INTAKE_SOURCE_ERROR, parseIntakeWebsite } from "@/lib/existing-business/source-rule"
 import { BUSINESS_ALREADY_CONNECTED_MESSAGE, BUSINESS_CLAIM_SUPPORT_HREF } from "@/lib/domain/claim-copy"
 import { beginConnectFlow, trackConnectClaimBlocked, trackConnectSubmitted } from "@/lib/analytics/connect-funnel"
@@ -523,9 +524,9 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
 
                 <p className="text-xs leading-relaxed text-muted-foreground">
                   {journeyCost
-                    ? `Connecting costs ${journeyCost.required.toLocaleString()} credits — ${journeyCost.readCost.toLocaleString()} to read your live site and ${journeyCost.assessmentCost.toLocaleString()} for your co-founder's first read${
+                    ? `Connecting costs ${formatNumber(journeyCost.required)} credits — ${formatNumber(journeyCost.readCost)} to read your live site and ${formatNumber(journeyCost.assessmentCost)} for your co-founder's first read${
                         (journeyCost.engineCost ?? 0) > 0
-                          ? `, plus ${journeyCost.engineCost?.toLocaleString()} for your engine (${journeyCost.engineName ?? "the one you picked"})`
+                          ? `, plus ${formatNumber(journeyCost.engineCost)} for your engine (${journeyCost.engineName ?? "the one you picked"})`
                           : ""
                       }. A failed read is refunded in full, and a page Atai read in the last 7 days is never charged twice.`
                     : "Connecting uses Atai credits: one read of your live site, then your co-founder's first read — plus whatever engine you picked costs. A failed read is refunded in full."}
@@ -537,9 +538,9 @@ export function ExistingBusinessWizard({ objectives }: { objectives: WizardObjec
                     className="flex flex-col gap-2 rounded-xl border border-primary/30 bg-primary/5 p-4 text-xs leading-relaxed sm:flex-row sm:items-center sm:justify-between"
                   >
                     <p className="text-foreground">
-                      Your balance covers {journeyCost.available.toLocaleString()} of the{" "}
-                      {journeyCost.required.toLocaleString()} credits. Add{" "}
-                      {journeyCost.shortfall.toLocaleString()} to connect without stopping halfway.
+                      Your balance covers {formatNumber(journeyCost.available)} of the{" "}
+                      {formatNumber(journeyCost.required)} credits. Add{" "}
+                      {formatNumber(journeyCost.shortfall)} to connect without stopping halfway.
                     </p>
                     <Button variant="outline" size="sm" className="shrink-0" render={<Link href={TOP_UP_HREF} />}>
                       Add credits

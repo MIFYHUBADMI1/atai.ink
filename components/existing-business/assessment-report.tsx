@@ -4,6 +4,8 @@ import Link from "next/link"
 import { ArrowRight, ListChecks, Sparkles } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import type { AssessmentFinding, BusinessAssessment } from "@/lib/types/business-intake"
+import { formatTimestamp } from "@/lib/client/format"
+import { completeAssessmentResult } from "@/lib/existing-business/intake-view"
 import { cn } from "@/lib/utils"
 
 const BASIS_LABEL: Record<AssessmentFinding["basis"], string> = {
@@ -70,13 +72,17 @@ function FindingList({ findings }: { findings: AssessmentFinding[] }) {
 }
 
 export function AssessmentReport({
-  assessment,
+  assessment: stored,
   onShowReading,
 }: {
   assessment: BusinessAssessment
   /** Opens the read itself. Omitted where there is nothing to open. */
   onShowReading?: () => void
 }) {
+  // A row written by an older parser can be missing a section. Fill the shape
+  // rather than trusting storage — `evidence.websiteAnalysed` on `undefined`
+  // used to take the whole page down.
+  const assessment = completeAssessmentResult(stored) ?? stored
   const evidence = assessment.evidence
   const opportunities = [
     ...assessment.growthOpportunities,
@@ -226,8 +232,9 @@ export function AssessmentReport({
 
       <p className="flex items-center gap-2 border-t border-border/70 pt-4 text-[11px] text-muted-foreground">
         <ListChecks className="size-3.5 text-primary" />
-        Generated {new Date(assessment.generatedAt).toLocaleString()} — written from the evidence above, not from
-        guesswork about your numbers.
+        {assessment.generatedAt > 0
+          ? `Generated ${formatTimestamp(assessment.generatedAt)} — written from the evidence above, not from guesswork about your numbers.`
+          : "Written from the evidence above, not from guesswork about your numbers."}
       </p>
     </div>
   )

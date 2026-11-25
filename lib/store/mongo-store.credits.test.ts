@@ -177,5 +177,42 @@ describe("MongoStore credit enforcement", () => {
       expect(grantCreditsMock).toHaveBeenCalledTimes(1)
       expect(consumeCreditsMock).not.toHaveBeenCalled()
     })
+
+    it("records the caller's ledger classification instead of build_finalization", async () => {
+      consumeCreditsMock.mockResolvedValue({ success: true, subscriptionConsumed: 5, permanentConsumed: 0 })
+      const store = new MongoStore()
+
+      await store.addTransaction({
+        id: "tx7",
+        userId: "u1",
+        type: "consume",
+        amount: -5,
+        reason: "Plan generation (Legacy mode)",
+        ledgerTransactionType: "plan_generation",
+        createdAt: Date.now(),
+      })
+
+      expect(consumeCreditsMock.mock.calls[0][0]).toMatchObject({
+        transactionType: "plan_generation",
+      })
+    })
+
+    it("falls back to build_finalization when no ledger type is supplied", async () => {
+      consumeCreditsMock.mockResolvedValue({ success: true, subscriptionConsumed: 5, permanentConsumed: 0 })
+      const store = new MongoStore()
+
+      await store.addTransaction({
+        id: "tx8",
+        userId: "u1",
+        type: "consume",
+        amount: -5,
+        reason: "Legacy charge",
+        createdAt: Date.now(),
+      })
+
+      expect(consumeCreditsMock.mock.calls[0][0]).toMatchObject({
+        transactionType: "build_finalization",
+      })
+    })
   })
 })

@@ -4,6 +4,7 @@ import type { PlanAnalysis } from "./plan-analysis"
 import type { AIArtifact } from "./ai-artifacts"
 import type { RuntimeProvisioningMap } from "@/lib/runtime/provisioning/types"
 import type { BusinessConnection, BusinessIntake, BusinessStartingPoint } from "./business-intake"
+import type { LedgerTransactionType } from "@/lib/billing/config"
 
 /** Explicit Atai project lifecycle (spec section 30). State is always
  * persisted server-side and never inferred from frontend state alone. */
@@ -100,6 +101,10 @@ export interface CreditTransaction {
   reason: string
   buildRunId?: string
   createdAt: number
+  /** Ledger classification for this movement. Without it a consume is recorded
+   * as `build_finalization`, which makes plan/scrape/crawl charges look like
+   * builds in the credit history. */
+  ledgerTransactionType?: LedgerTransactionType
   /** Optional metadata for webhook tracking, payment IDs, etc. */
   metadata?: Record<string, unknown>
 }

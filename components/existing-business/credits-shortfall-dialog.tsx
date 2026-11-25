@@ -4,6 +4,7 @@ import Link from "next/link"
 import { ArrowRight, Coins, Cpu, Globe, Sparkles } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import { formatNumber } from "@/lib/client/format"
 import { cn } from "@/lib/utils"
 
 export interface JourneyCost {
@@ -20,7 +21,7 @@ export interface JourneyCost {
 
 export const TOP_UP_HREF = "/billing/top-up"
 
-const credits = (n: number) => `${n.toLocaleString()} credit${n === 1 ? "" : "s"}`
+const credits = (n: number) => `${formatNumber(n)} credit${n === 1 ? "" : "s"}`
 
 export interface ShortfallRow {
   label: string
@@ -38,14 +39,49 @@ export interface ShortfallCopy {
   cta: string
 }
 
+export type ShortfallVariant = "connect" | "message"
+
 /**
  * The words and numbers of the refusal, kept apart from the markup so the
  * thing the founder actually reads — the gap, what it buys, what they hold —
  * can be asserted without a DOM.
+ *
+ * `message` is the same refusal for a single co-founder turn: no site read, no
+ * journey, just the price of the message and the balance that cannot cover it.
  */
-export function describeShortfall(cost: JourneyCost, businessName: string): ShortfallCopy {
-  const name = businessName.trim() || "your business"
+export function describeShortfall(
+  cost: JourneyCost,
+  businessName: string,
+  variant: ShortfallVariant = "connect",
+): ShortfallCopy {
   const coveredPct = Math.min(100, Math.round((cost.available / Math.max(1, cost.required)) * 100))
+
+  if (variant === "message") {
+    return {
+      headline: `You are ${credits(cost.shortfall)} short of your next message`,
+      lead: `A message costs ${credits(cost.required)}. You have ${credits(cost.available)} today. Nothing has been taken from your balance.`,
+      rows: [
+        { label: "Your next message", value: cost.required, icon: "cofounder", tone: "plain" },
+        ...((cost.engineCost ?? 0) > 0
+          ? [
+              {
+                label: cost.engineName ? `Your engine — ${cost.engineName}` : "Your engine",
+                value: cost.engineCost ?? 0,
+                icon: "engine" as const,
+                tone: "plain" as const,
+              },
+            ]
+          : []),
+        { label: "Your balance", value: cost.available, icon: null, tone: "balance" },
+        { label: "Still needed", value: cost.shortfall, icon: null, tone: "gap" },
+      ],
+      coveredPct,
+      coveredLine: `${coveredPct}% of the way covered by your balance.`,
+      cta: `Add ${credits(cost.shortfall)}`,
+    }
+  }
+
+  const name = businessName.trim() || "your business"
   return {
     headline: `You are ${credits(cost.shortfall)} short of finishing ${name}`,
     lead: `Connecting ${name} costs ${credits(cost.required)}. You have ${credits(cost.available)} today. Nothing has been taken from your balance, and every answer you have given is saved.`,
@@ -85,6 +121,7 @@ export function CreditsShortfallDialog({
   businessName,
   stepLabel,
   stepHint,
+  variant = "connect",
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -92,10 +129,11 @@ export function CreditsShortfallDialog({
   businessName: string
   stepLabel: string
   stepHint: string
+  variant?: ShortfallVariant
 }) {
   if (!cost) return null
 
-  const copy = describeShortfall(cost, businessName)
+  const copy = describeShortfall(cost, businessName, variant)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -127,7 +165,7 @@ export function CreditsShortfallDialog({
                   {row.icon === "engine" ? <Cpu className="size-3.5" /> : null}
                   {row.label}
                 </dt>
-                <dd className="font-mono tabular-nums">{row.value.toLocaleString()}</dd>
+                <dd className="font-mono tabular-nums">{formatNumber(row.value)}</dd>
               </div>
             ))}
           </dl>
@@ -154,8 +192,9 @@ export function CreditsShortfallDialog({
           </div>
 
           <p className="text-[11px] leading-relaxed text-muted-foreground">
-            Credits are taken when each step actually runs, and a failed co-founder read is refunded in full. Nothing
-            is charged for a page Atai already read in the last 7 days.
+            {variant === "message"
+              ? "Credits are taken when the message is answered, and a failed reply is refunded in full. Your draft stays on the page until you send it."
+              : "Credits are taken when each step actually runs, and a failed co-founder read is refunded in full. Nothing is charged for a page Atai already read in the last 7 days."}
           </p>
         </div>
       </DialogContent>

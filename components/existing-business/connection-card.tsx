@@ -6,6 +6,7 @@ import { Check, Copy, Download, KeyRound, Loader2, RefreshCw, ShieldCheck } from
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { deleteJson, postJson } from "@/lib/client/api"
+import { formatTimestamp } from "@/lib/client/format"
 import type { IntakeView } from "@/lib/existing-business/view"
 import { cn } from "@/lib/utils"
 
@@ -120,7 +121,7 @@ export function ConnectionCard({
         <Badge variant={connected ? "default" : "secondary"}>{connection.label}</Badge>
         <p className="text-xs text-muted-foreground">
           {connected
-            ? `Your app last called Atai ${connection.lastSeenAt ? new Date(connection.lastSeenAt).toLocaleString() : "recently"}.`
+            ? `Your app last called Atai ${connection.lastSeenAt ? formatTimestamp(connection.lastSeenAt) : "recently"}.`
             : "A connection is only counted once your own application has authenticated — a typed address is not a connection."}
         </p>
       </div>
@@ -184,8 +185,8 @@ export function ConnectionCard({
           {checkedAt !== null ? (
             <p role="status" className="text-[11px] leading-relaxed text-muted-foreground">
               {needsApp
-                ? `Checked ${new Date(checkedAt).toLocaleTimeString()} — no authenticated call from your app has reached Atai yet.`
-                : `Checked ${new Date(checkedAt).toLocaleTimeString()} — the call is recorded.`}
+                ? `Checked ${formatTimestamp(checkedAt, { timeStyle: "medium" })} — no authenticated call from your app has reached Atai yet.`
+                : `Checked ${formatTimestamp(checkedAt, { timeStyle: "medium" })} — the call is recorded.`}
             </p>
           ) : null}
         </div>

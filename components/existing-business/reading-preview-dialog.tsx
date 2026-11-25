@@ -5,7 +5,7 @@ import { ArrowRight, FileText, Globe, Loader2, ShieldCheck } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { jsonFetcher } from "@/lib/client/api"
-import { relativeTime } from "@/lib/client/format"
+import { formatNumber, relativeTime } from "@/lib/client/format"
 import { readingPreviewState } from "@/lib/existing-business/reading-preview-state"
 import type { IntakeWebsiteReading } from "@/lib/types/business-intake"
 
@@ -83,9 +83,9 @@ export function ReadingPreviewDialog({
         <DialogHeader className="flex-shrink-0">
           <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-primary">What was read</p>
           <DialogTitle className="text-xl font-semibold">{host}</DialogTitle>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground" suppressHydrationWarning>
             {reading
-              ? `${reading.pagesRead} page${reading.pagesRead === 1 ? "" : "s"} · ${reading.charsRead.toLocaleString()} characters of text · read ${relativeTime(reading.capturedAt)}${payload?.fromCache ? " (cached)" : ""}`
+              ? `${reading.pagesRead} page${reading.pagesRead === 1 ? "" : "s"} · ${formatNumber(reading.charsRead)} characters of text · read ${relativeTime(reading.capturedAt)}${payload?.fromCache ? " (cached)" : ""}`
               : awaitingFirstAnswer
                 ? "Fetching the copy Atai kept of this read…"
                 : "Public pages only. Nothing was copied into your application."}
@@ -153,7 +153,7 @@ export function ReadingPreviewDialog({
                         {page.title ? <p className="mt-0.5 truncate text-sm font-medium">{page.title}</p> : null}
                       </div>
                       <span className="shrink-0 text-[11px] text-muted-foreground">
-                        {page.chars.toLocaleString()} chars
+                        {formatNumber(page.chars)} chars
                       </span>
                     </div>
                     {page.headings.length ? (
@@ -179,7 +179,7 @@ export function ReadingPreviewDialog({
                         </p>
                         {page.chars > page.excerpt.length ? (
                           <p className="mt-1 text-[10px] text-muted-foreground">
-                            Showing the first {page.excerpt.length.toLocaleString()} of {page.chars.toLocaleString()}{" "}
+                            Showing the first {formatNumber(page.excerpt.length)} of {formatNumber(page.chars)}{" "}
                             characters.
                           </p>
                         ) : null}

@@ -63,14 +63,19 @@ const initialSummary: SummaryStats = {
 const TRANSACTION_TYPE_OPTIONS = [
   { value: 'signup_bonus', label: 'Signup Bonus' },
   { value: 'referral_bonus', label: 'Referral Bonus' },
+  { value: 'credit_purchase', label: 'Credit Purchase' },
   { value: 'subscription_grant', label: 'Subscription Grant' },
   { value: 'subscription_expiration', label: 'Subscription Expiration' },
   { value: 'build_reservation', label: 'Build Reservation' },
-  { value: 'build_consumption', label: 'Build Consumption' },
+  { value: 'build_finalization', label: 'Build Finalization' },
   { value: 'build_release', label: 'Build Release' },
-  { value: 'topup_grant', label: 'Topup Grant' },
+  { value: 'build_refund', label: 'Build Refund' },
+  { value: 'plan_generation', label: 'Plan Generation' },
+  { value: 'website_scrape', label: 'Website Scrape' },
+  { value: 'deep_crawl', label: 'Deep Crawl' },
+  { value: 'ai_collaboration', label: 'AI Collaboration' },
   { value: 'admin_adjustment', label: 'Admin Adjustment' },
-  { value: 'refund', label: 'Refund' },
+  { value: 'other_reversal', label: 'Refund / Reversal' },
 ]
 
 function FilterPanel({
